@@ -1,6 +1,8 @@
 """Custom AstroAI widgets."""
 
 from astroai.ui.widgets.activation_dialog import ActivationDialog
+from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
+from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.license_badge import LicenseBadge
@@ -13,6 +15,8 @@ from astroai.ui.widgets.workflow_graph import WorkflowGraph
 
 __all__ = [
     "ActivationDialog",
+    "ChannelCombinerPanel",
+    "DeconvolutionPanel",
     "HistogramWidget",
     "ImageViewer",
     "LicenseBadge",

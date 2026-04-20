@@ -33,6 +33,8 @@ class PipelineModel(QObject):
     progress_changed = Signal(str, float)  # (step_key, 0.0-1.0)
     pipeline_reset = Signal()
     starless_config_changed = Signal()
+    deconvolution_config_changed = Signal()
+    channel_combine_config_changed = Signal()
 
     DEFAULT_STEPS = [
         ("calibrate", "Kalibrierung", False),
@@ -40,6 +42,7 @@ class PipelineModel(QObject):
         ("stack", "Stacking", False),
         ("stretch", "Stretching", False),
         ("denoise", "Entrauschen", False),
+        ("deconvolution", "Deconvolution", True),
         ("starless", "Starless", True),
         ("export", "Export", False),
     ]
@@ -53,7 +56,14 @@ class PipelineModel(QObject):
         self._starless_strength: float = 1.0
         self._starless_format: str = "xisf"
         self._save_star_mask: bool = True
+        self._deconvolution_enabled: bool = False
+        self._deconvolution_iterations: int = 10
+        self._deconvolution_psf_sigma: float = 1.0
+        self._channel_combine_enabled: bool = False
+        self._channel_combine_mode: str = "lrgb"
+        self._channel_combine_palette: str = "SHO"
         self._update_starless_step_state()
+        self._update_deconvolution_step_state()
 
     # -- starless config properties --
 
@@ -114,6 +124,90 @@ class PipelineModel(QObject):
             step.state = StepState.PENDING
             self.step_changed.emit("starless", StepState.PENDING.value)
 
+    # -- deconvolution config properties -------------------------------------
+
+    @property
+    def deconvolution_enabled(self) -> bool:
+        return self._deconvolution_enabled
+
+    @deconvolution_enabled.setter
+    def deconvolution_enabled(self, value: bool) -> None:
+        if self._deconvolution_enabled == value:
+            return
+        self._deconvolution_enabled = value
+        self._update_deconvolution_step_state()
+        self.deconvolution_config_changed.emit()
+
+    @property
+    def deconvolution_iterations(self) -> int:
+        return self._deconvolution_iterations
+
+    @deconvolution_iterations.setter
+    def deconvolution_iterations(self, value: int) -> None:
+        value = max(1, min(100, value))
+        if self._deconvolution_iterations == value:
+            return
+        self._deconvolution_iterations = value
+        self.deconvolution_config_changed.emit()
+
+    @property
+    def deconvolution_psf_sigma(self) -> float:
+        return self._deconvolution_psf_sigma
+
+    @deconvolution_psf_sigma.setter
+    def deconvolution_psf_sigma(self, value: float) -> None:
+        value = max(0.1, min(10.0, value))
+        if self._deconvolution_psf_sigma == value:
+            return
+        self._deconvolution_psf_sigma = value
+        self.deconvolution_config_changed.emit()
+
+    def _update_deconvolution_step_state(self) -> None:
+        step = self.step_by_key("deconvolution")
+        if step is None:
+            return
+        if not self._deconvolution_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("deconvolution", StepState.DISABLED.value)
+        elif self._deconvolution_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("deconvolution", StepState.PENDING.value)
+
+    # -- channel combine config properties -----------------------------------
+
+    @property
+    def channel_combine_enabled(self) -> bool:
+        return self._channel_combine_enabled
+
+    @channel_combine_enabled.setter
+    def channel_combine_enabled(self, value: bool) -> None:
+        if self._channel_combine_enabled == value:
+            return
+        self._channel_combine_enabled = value
+        self.channel_combine_config_changed.emit()
+
+    @property
+    def channel_combine_mode(self) -> str:
+        return self._channel_combine_mode
+
+    @channel_combine_mode.setter
+    def channel_combine_mode(self, value: str) -> None:
+        if self._channel_combine_mode == value:
+            return
+        self._channel_combine_mode = value
+        self.channel_combine_config_changed.emit()
+
+    @property
+    def channel_combine_palette(self) -> str:
+        return self._channel_combine_palette
+
+    @channel_combine_palette.setter
+    def channel_combine_palette(self, value: str) -> None:
+        if self._channel_combine_palette == value:
+            return
+        self._channel_combine_palette = value
+        self.channel_combine_config_changed.emit()
+
     # -- export config bridge --
 
     def export_config(self) -> dict[str, Any]:
@@ -151,8 +245,12 @@ class PipelineModel(QObject):
         self.progress_changed.emit(key, step.progress)
 
     def reset(self) -> None:
+        optional_enabled = {
+            "starless": self._starless_enabled,
+            "deconvolution": self._deconvolution_enabled,
+        }
         for step in self._steps:
-            if step.optional and not self._starless_enabled:
+            if step.optional and not optional_enabled.get(step.key, False):
                 step.state = StepState.DISABLED
             else:
                 step.state = StepState.PENDING

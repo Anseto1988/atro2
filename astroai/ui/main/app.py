@@ -33,6 +33,8 @@ from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.log_widget import LogWidget
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
+from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
+from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.licensing.models import LicenseTier
@@ -116,6 +118,14 @@ class MainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, wf_dock)
 
+        self._deconvolution_panel = DeconvolutionPanel(self._pipeline)
+        deconv_dock = QDockWidget("Deconvolution", self)
+        deconv_dock.setWidget(self._deconvolution_panel)
+        deconv_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, deconv_dock)
+
         self._starless_panel = StarlessPanel(self._pipeline)
         starless_dock = QDockWidget("Starless", self)
         starless_dock.setWidget(self._starless_panel)
@@ -123,6 +133,14 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, starless_dock)
+
+        self._channel_panel = ChannelCombinerPanel(self._pipeline)
+        channel_dock = QDockWidget("Channel Combiner", self)
+        channel_dock.setWidget(self._channel_panel)
+        channel_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, channel_dock)
 
         self._progress = ProgressWidget()
         prog_dock = QDockWidget("Fortschritt", self)
