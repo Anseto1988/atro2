@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import Stripe from "stripe";
 import type { Env, LicenseRecord, LicenseTier } from "../types";
-import { findLicenseByStripeSubId, putLicenseRecord } from "../lib/kv";
+import { findLicenseByStripeSubId, putLicenseRecord, putSubIndex, generateLicenseKey } from "../lib/kv";
 
 const webhook = new Hono<{ Bindings: Env }>();
 
@@ -56,7 +56,7 @@ webhook.post("/stripe", async (c) => {
         existing.record.tier = tier;
         await putLicenseRecord(existing.key, existing.record, c.env.LICENSE_KV);
       } else if (status === "active" && customerEmail) {
-        const licenseKey = `ASTRO-${crypto.randomUUID().slice(0, 4).toUpperCase()}-${crypto.randomUUID().slice(0, 4).toUpperCase()}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+        const licenseKey = generateLicenseKey();
         const tier = stripePriceToTier(priceNickname, interval);
         const seatsMax = tier === "founding_member" ? 2 : 1;
         const record: LicenseRecord = {
@@ -69,6 +69,7 @@ webhook.post("/stripe", async (c) => {
           created_at: new Date().toISOString(),
         };
         await putLicenseRecord(licenseKey, record, c.env.LICENSE_KV);
+        await putSubIndex(subId, licenseKey, c.env.LICENSE_KV);
       }
       break;
     }

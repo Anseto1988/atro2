@@ -1,6 +1,8 @@
 import type { LicenseRecord } from "../types";
 
 const KEY_PREFIX = "license:";
+const SUB_INDEX_PREFIX = "sub_id:";
+const MACHINE_INDEX_PREFIX = "machine:";
 
 export async function getLicenseRecord(
   key: string,
@@ -19,23 +21,35 @@ export async function putLicenseRecord(
   await kv.put(`${KEY_PREFIX}${key}`, JSON.stringify(record));
 }
 
+export async function putSubIndex(subId: string, licenseKey: string, kv: KVNamespace): Promise<void> {
+  await kv.put(`${SUB_INDEX_PREFIX}${subId}`, licenseKey);
+}
+
+export async function putMachineIndex(machineId: string, licenseKey: string, kv: KVNamespace): Promise<void> {
+  await kv.put(`${MACHINE_INDEX_PREFIX}${machineId}`, licenseKey);
+}
+
+export async function removeMachineIndex(machineId: string, kv: KVNamespace): Promise<void> {
+  await kv.delete(`${MACHINE_INDEX_PREFIX}${machineId}`);
+}
+
+export async function getKeyByMachineId(machineId: string, kv: KVNamespace): Promise<string | null> {
+  return kv.get(`${MACHINE_INDEX_PREFIX}${machineId}`);
+}
+
 export async function findLicenseByStripeSubId(
   subId: string,
   kv: KVNamespace,
 ): Promise<{ key: string; record: LicenseRecord } | null> {
-  let cursor: string | undefined;
-  do {
-    const result = await kv.list({ prefix: KEY_PREFIX, cursor });
-    for (const entry of result.keys) {
-      const raw = await kv.get(entry.name);
-      if (!raw) continue;
-      const record = JSON.parse(raw) as LicenseRecord;
-      if (record.stripe_sub_id === subId) {
-        return { key: entry.name.slice(KEY_PREFIX.length), record };
-      }
-    }
-    if (!result.list_complete) cursor = result.cursor;
-    else break;
-  } while (true);
+  const licenseKey = await kv.get(`${SUB_INDEX_PREFIX}${subId}`);
+  if (licenseKey) {
+    const record = await getLicenseRecord(licenseKey, kv);
+    if (record) return { key: licenseKey, record };
+  }
   return null;
+}
+
+export function generateLicenseKey(): string {
+  const seg = () => crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+  return `ASTRO-${seg()}-${seg()}-${seg()}`;
 }

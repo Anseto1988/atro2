@@ -19,6 +19,7 @@ preview_bucket_name = "astroai-models-preview"
 # Secrets (set via `wrangler secret put`):
 # JWT_PRIVATE_KEY   — PEM-encoded RSA-2048 private key
 # JWT_PUBLIC_KEY    — PEM-encoded RSA-2048 public key
+# STRIPE_SECRET_KEY — Stripe API secret key
 # STRIPE_WEBHOOK_SECRET — Stripe webhook signing secret
 # R2_ACCESS_KEY_ID  — R2 S3-compatible access key
 # R2_SECRET_ACCESS_KEY — R2 S3-compatible secret key
