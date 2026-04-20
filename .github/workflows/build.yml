@@ -20,8 +20,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install Poetry
         run: pip install poetry
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry/virtualenvs
+            ~/.local/share/pypoetry/virtualenvs
+            ~/AppData/Local/pypoetry/Cache/virtualenvs
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
       - name: Install dependencies
-        run: poetry install --with dev
+        run: poetry install --with dev --sync
       - name: Lint
         run: poetry run ruff check astroai/
       - name: Type check
@@ -54,8 +63,17 @@ jobs:
           python-version: "3.12"
       - name: Install Poetry
         run: pip install poetry
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry/virtualenvs
+            ~/.local/share/pypoetry/virtualenvs
+            ~/AppData/Local/pypoetry/Cache/virtualenvs
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
       - name: Install dependencies (with PyInstaller)
-        run: poetry install --with dev
+        run: poetry install --with dev --sync
       - name: Bundle with PyInstaller
         run: poetry run pyinstaller scripts/astroai.spec --noconfirm
       - name: Package artifact (Windows)
