@@ -109,6 +109,41 @@ class TestModelDownloader:
         dl.load_onnx_session("nafnet_denoise", fallback_to_dummy=True)
 
 
+class TestHttpsEnforcement:
+    def test_rejects_http_url(self, downloader, models_dir):
+        entry = ModelManifestEntry(
+            name="http_model",
+            url="http://example.com/model.onnx",
+            sha256="a" * 64,
+            filename="model.onnx",
+        )
+        models_dir.mkdir(parents=True, exist_ok=True)
+        target = models_dir / "model.onnx"
+
+        with pytest.raises(ValueError, match="non-HTTPS URL"):
+            downloader._download(entry, target)
+
+    def test_rejects_ftp_url(self, downloader, models_dir):
+        entry = ModelManifestEntry(
+            name="ftp_model",
+            url="ftp://example.com/model.onnx",
+            sha256="a" * 64,
+            filename="model.onnx",
+        )
+        models_dir.mkdir(parents=True, exist_ok=True)
+        target = models_dir / "model.onnx"
+
+        with pytest.raises(ValueError, match="non-HTTPS URL"):
+            downloader._download(entry, target)
+
+    def test_accepts_https_url(self, downloader):
+        ModelDownloader._require_https("https://example.com/model.onnx")
+
+    def test_rejects_empty_scheme(self, downloader):
+        with pytest.raises(ValueError, match="non-HTTPS URL"):
+            ModelDownloader._require_https("//example.com/model.onnx")
+
+
 class TestDummyOnnxSession:
     def test_get_inputs(self):
         session = _DummyOnnxSession()

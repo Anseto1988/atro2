@@ -127,7 +127,20 @@ class ModelDownloader:
                 return _DummyOnnxSession()
             raise
 
+    @staticmethod
+    def _require_https(url: str) -> None:
+        """Reject non-HTTPS download URLs."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        if parsed.scheme.lower() != "https":
+            raise ValueError(
+                f"Refusing download from non-HTTPS URL: {url!r}. "
+                "Only HTTPS is allowed for model downloads."
+            )
+
     def _download(self, entry: ModelManifestEntry, target: Path) -> None:
+        self._require_https(entry.url)
         self._report_progress("Downloading model: " + entry.name, 0, 100)
         target.parent.mkdir(parents=True, exist_ok=True)
 

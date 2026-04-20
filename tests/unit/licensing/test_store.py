@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -31,9 +32,11 @@ class TestLicenseStore:
         result = store.load()
 
         assert result is not None
-        loaded_token, loaded_ts = result
+        loaded_token, loaded_ts, loaded_att, loaded_counter = result
         assert loaded_token == token
         assert loaded_ts == ts
+        assert loaded_att is None
+        assert loaded_counter == 0
 
     def test_empty_store_returns_none(self, store: LicenseStore) -> None:
         """Load on empty store returns None."""
@@ -66,3 +69,17 @@ class TestLicenseStore:
 
         s1.save("token_a", datetime.now(timezone.utc))
         assert s2.load() is None
+
+
+class TestKeyProtectionFallback:
+    def test_fallback_creates_key_file(self, store_dir: Path) -> None:
+        """Without DPAPI/keyring, falls back to plain file."""
+        store = LicenseStore(base_dir=store_dir)
+        key_path = store_dir / "license.key"
+        assert key_path.exists()
+
+    def test_key_file_reused_on_second_init(self, store_dir: Path) -> None:
+        """Key file is reused, not regenerated."""
+        s1 = LicenseStore(base_dir=store_dir)
+        s2 = LicenseStore(base_dir=store_dir)
+        assert s1._key == s2._key

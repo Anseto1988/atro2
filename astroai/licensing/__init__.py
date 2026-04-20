@@ -67,7 +67,7 @@ class LicenseManager:
         if stored is None:
             raise NotActivated("No license found — please activate first")
 
-        raw_jwt, last_online_at = stored
+        raw_jwt, last_online_at, *_ = stored
         now = datetime.now(timezone.utc)
 
         # Attempt online refresh
@@ -103,7 +103,7 @@ class LicenseManager:
         """Deactivate license on this machine and clear local store."""
         stored = self._store.load()
         if stored is not None:
-            raw_jwt, _ = stored
+            raw_jwt, *_ = stored
             try:
                 self._client.deactivate(raw_jwt)
             except LicenseError:
@@ -117,7 +117,7 @@ class LicenseManager:
         if stored is None:
             return LicenseStatus()
 
-        raw_jwt, last_online_at = stored
+        raw_jwt, last_online_at, *_ = stored
         try:
             token = decode_token(raw_jwt, self._public_key)
         except LicenseError:

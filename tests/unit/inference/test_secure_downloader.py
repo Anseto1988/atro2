@@ -24,7 +24,7 @@ def models_dir(tmp_path: Path) -> Path:
 @pytest.fixture()
 def mock_store() -> MagicMock:
     store = MagicMock(spec=LicenseStore)
-    store.load.return_value = ("fake.jwt.token", datetime(2026, 1, 1, tzinfo=timezone.utc))
+    store.load.return_value = ("fake.jwt.token", datetime(2026, 1, 1, tzinfo=timezone.utc), None, 0)
     return store
 
 
@@ -171,17 +171,56 @@ class TestSecureModelDownloaderTierBlocking:
             dl.ensure_model("nafnet_denoise")
 
 
-class TestSecureModelDownloaderNoSha:
-    def test_skips_checksum_when_sha_empty(self, downloader: SecureModelDownloader, mock_client: MagicMock, models_dir: Path) -> None:
+class TestSecureModelDownloaderSha256Mandatory:
+    def test_rejects_empty_sha256(self, downloader: SecureModelDownloader, mock_client: MagicMock) -> None:
         mock_client.get_model_manifest.return_value = [
             {"name": "nosha", "filename": "nosha.onnx", "sha256": "", "description": ""},
         ]
-        mock_client.get_download_url.return_value = "https://r2.example.com/nosha.onnx?signed=1"
+        downloader.invalidate_manifest_cache()
+
+        with pytest.raises(ValueError, match="no SHA-256 checksum"):
+            downloader.ensure_model("nosha")
+
+    def test_rejects_missing_sha256(self, downloader: SecureModelDownloader, mock_client: MagicMock) -> None:
+        mock_client.get_model_manifest.return_value = [
+            {"name": "nosha2", "filename": "nosha2.onnx", "description": ""},
+        ]
+        downloader.invalidate_manifest_cache()
+
+        with pytest.raises(ValueError, match="no SHA-256 checksum"):
+            downloader.ensure_model("nosha2")
+
+
+class TestSecureModelDownloaderPathTraversal:
+    def test_rejects_path_traversal_in_filename(self, downloader: SecureModelDownloader, mock_client: MagicMock) -> None:
+        mock_client.get_model_manifest.return_value = [
+            {"name": "evil", "filename": "../../etc/passwd", "sha256": "a" * 64, "description": ""},
+        ]
+        downloader.invalidate_manifest_cache()
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            downloader.ensure_model("evil")
+
+    def test_rejects_subdirectory_in_filename(self, downloader: SecureModelDownloader, mock_client: MagicMock) -> None:
+        mock_client.get_model_manifest.return_value = [
+            {"name": "subdir", "filename": "subdir/model.onnx", "sha256": "b" * 64, "description": ""},
+        ]
+        downloader.invalidate_manifest_cache()
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            downloader.ensure_model("subdir")
+
+    def test_accepts_plain_filename(self, downloader: SecureModelDownloader, mock_client: MagicMock, models_dir: Path) -> None:
+        content = b"safe model"
+        sha = hashlib.sha256(content).hexdigest()
+        mock_client.get_model_manifest.return_value = [
+            {"name": "safe", "filename": "safe_model.onnx", "sha256": sha, "description": ""},
+        ]
+        mock_client.get_download_url.return_value = "https://r2.example.com/safe.onnx?signed=1"
         downloader.invalidate_manifest_cache()
 
         with patch.object(downloader, "_download") as mock_dl:
-            mock_dl.side_effect = lambda entry, target: target.write_bytes(b"data")
-            path = downloader.ensure_model("nosha")
+            mock_dl.side_effect = lambda entry, target: target.write_bytes(content)
+            path = downloader.ensure_model("safe")
 
-        assert path == models_dir / "nosha.onnx"
-        assert path.exists()
+        assert path == models_dir / "safe_model.onnx"

@@ -41,7 +41,7 @@ class SecureModelDownloader(ModelDownloader):
         stored = self._license_store.load()
         if stored is None:
             raise NotActivated("No license found — please activate first")
-        raw_jwt, _ = stored
+        raw_jwt, *_ = stored
         return raw_jwt
 
     def get_manifest(self) -> dict[str, ModelManifestEntry]:
@@ -79,9 +79,22 @@ class SecureModelDownloader(ModelDownloader):
             raise KeyError(f"Unknown model: {name}")
 
         entry = manifest[name]
-        target = self._models_dir / entry.filename
 
-        if target.exists() and entry.sha256 and self._verify_checksum(target, entry.sha256):
+        if not entry.sha256:
+            raise ValueError(
+                f"Model '{name}' has no SHA-256 checksum. "
+                "Refusing download — integrity cannot be verified."
+            )
+
+        safe_filename = Path(entry.filename).name
+        if safe_filename != entry.filename:
+            raise ValueError(
+                f"Path traversal detected in filename '{entry.filename}'. "
+                "Only plain filenames are accepted."
+            )
+        target = self._models_dir / safe_filename
+
+        if target.exists() and self._verify_checksum(target, entry.sha256):
             logger.info("Model '%s' already cached at %s", name, target)
             return target
 
@@ -90,7 +103,7 @@ class SecureModelDownloader(ModelDownloader):
             name=entry.name,
             url=presigned_url,
             sha256=entry.sha256,
-            filename=entry.filename,
+            filename=safe_filename,
             description=entry.description,
         )
 
@@ -100,7 +113,7 @@ class SecureModelDownloader(ModelDownloader):
             logger.warning("Download failed for '%s': %s", name, exc)
             raise
 
-        if entry.sha256 and not self._verify_checksum(target, entry.sha256):
+        if not self._verify_checksum(target, entry.sha256):
             target.unlink(missing_ok=True)
             raise RuntimeError(
                 f"Checksum mismatch for '{name}'. File deleted. "
