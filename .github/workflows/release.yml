@@ -37,6 +37,10 @@ jobs:
           restore-keys: ${{ runner.os }}-poetry-
       - name: Install dependencies
         run: poetry install --with dev --sync
+      - name: Download ASTAP binary
+        run: poetry run python scripts/download_astap.py
+      - name: Verify ASTAP binary
+        run: poetry run python -c "from astroai.engine.platesolving.astap_binary import get_astap_path; print('ASTAP:', get_astap_path())"
       - name: Bundle with PyInstaller
         run: poetry run pyinstaller scripts/astroai.spec --noconfirm
       - name: Package artifact (Windows)
@@ -60,6 +64,8 @@ jobs:
             - **E4** LRGB/Narrowband Multi-Kanal-Workflow — ChannelCombiner, NarrowbandMapper
             - **E5** Starless — StarRemovalStep, StarlessPanel
             - **E6** Deconvolution, DenoiseStep, StretchStep
+            - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay
+            - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback)
             - Cloudflare Workers Licensing API
             - Security Hardening S-01 bis S-04
 
