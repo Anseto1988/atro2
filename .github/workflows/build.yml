@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -50,9 +50,6 @@ jobs:
           - os: ubuntu-latest
             target: linux
             archive_ext: tar.gz
-          - os: macos-latest
-            target: macos
-            archive_ext: tar.gz
     runs-on: ${{ matrix.os }}
     env:
       VERSION: "0.1.0-alpha"
@@ -83,9 +80,6 @@ jobs:
       - name: Package artifact (Linux)
         if: matrix.target == 'linux'
         run: tar -czf "astroai-${{ env.VERSION }}-linux.tar.gz" -C dist AstroAI
-      - name: Package artifact (macOS)
-        if: matrix.target == 'macos'
-        run: tar -czf "astroai-${{ env.VERSION }}-macos.tar.gz" -C dist AstroAI.app
       - uses: actions/upload-artifact@v4
         with:
           name: astroai-${{ env.VERSION }}-${{ matrix.target }}
