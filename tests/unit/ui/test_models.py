@@ -22,7 +22,7 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 7
+        assert len(steps) == 8
         assert steps[0].key == "calibrate"
         assert steps[-1].key == "export"
 

@@ -687,9 +687,11 @@ class TestLicenseStore:
         loaded = store.load()
 
         assert loaded is not None
-        loaded_jwt, loaded_time = loaded
+        loaded_jwt, loaded_time, loaded_attestation, loaded_counter = loaded
         assert loaded_jwt == raw_jwt
         assert abs((loaded_time - now).total_seconds()) < 2
+        assert loaded_attestation is None
+        assert loaded_counter == 0
 
     def test_store_empty_returns_none(self, tmp_path: Path) -> None:
         store = LicenseStore(base_dir=tmp_path / "empty_store")

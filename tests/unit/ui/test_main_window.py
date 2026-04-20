@@ -59,7 +59,7 @@ class TestMainWindowInit:
 
     def test_pipeline_model(self, win: MainWindow) -> None:
         assert win._pipeline is not None
-        assert len(win._pipeline.steps) == 7
+        assert len(win._pipeline.steps) == 8
 
     def test_statusbar_message(self, win: MainWindow) -> None:
         assert win.statusBar().currentMessage() == "Bereit"
