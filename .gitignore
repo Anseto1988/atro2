@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# AI model weights (download separately)
+models/*.pth
+models/*.onnx
+models/*.pt
+
+# Large image data
+*.fits
+*.xisf
+*.cr2
+*.nef
+*.arw
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

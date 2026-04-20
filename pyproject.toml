@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "astroai-suite"
+version = "0.1.0"
+description = "AI-powered astrophotography processing suite"
+authors = []
+readme = "README.md"
+packages = [{include = "astroai"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+PySide6 = "^6.7"
+torch = {version = "^2.3", extras = ["cuda121"]}
+torchvision = "^0.18"
+numpy = "^1.26"
+astropy = "^6.1"
+rawpy = "^0.21"
+Pillow = "^10.3"
+scipy = "^1.13"
+tqdm = "^4.66"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
+pytest-qt = "^4.4"
+ruff = "^0.4"
+mypy = "^1.10"
+
+[tool.poetry.scripts]
+astroai = "astroai.ui.main.app:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
