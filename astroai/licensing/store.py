@@ -32,9 +32,9 @@ def _get_store_dir(base_dir: Path | None = None) -> Path:
 
 def _protect_key_dpapi(raw_key: bytes) -> bytes:
     """Encrypt raw key bytes with Windows DPAPI (current-user scope)."""
-    import win32crypt  # type: ignore[import-untyped]
+    import win32crypt
 
-    encrypted = win32crypt.CryptProtectData(
+    encrypted: bytes = win32crypt.CryptProtectData(
         raw_key, "astroai-fernet-key", None, None, None, 0
     )
     return encrypted
@@ -42,9 +42,10 @@ def _protect_key_dpapi(raw_key: bytes) -> bytes:
 
 def _unprotect_key_dpapi(protected: bytes) -> bytes:
     """Decrypt DPAPI-protected key bytes."""
-    import win32crypt  # type: ignore[import-untyped]
+    import win32crypt
 
-    _, decrypted = win32crypt.CryptUnprotectData(protected, None, None, None, 0)
+    _, decrypted_raw = win32crypt.CryptUnprotectData(protected, None, None, None, 0)
+    decrypted: bytes = decrypted_raw
     return decrypted
 
 

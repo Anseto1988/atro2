@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from typing import cast
 from pathlib import Path
 
 from PySide6.QtCore import QFile, Qt, QTextStream, Slot
@@ -161,7 +162,7 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("&Datei")
 
         new_proj_act = QAction("&Neues Projekt", self)
-        new_proj_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_N))
+        new_proj_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_N))  # type: ignore[operator]
         new_proj_act.triggered.connect(self._on_new_project)
         file_menu.addAction(new_proj_act)
 
@@ -182,20 +183,20 @@ class MainWindow(QMainWindow):
         file_menu.addAction(save_proj_act)
 
         save_as_act = QAction("Projekt speichern &unter...", self)
-        save_as_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_S))
+        save_as_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_S))  # type: ignore[operator]
         save_as_act.triggered.connect(self._on_save_project_as)
         file_menu.addAction(save_as_act)
 
         file_menu.addSeparator()
 
         open_img_act = QAction("&Bild oeffnen...", self)
-        open_img_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_O))
+        open_img_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_O))  # type: ignore[operator]
         open_img_act.triggered.connect(self._on_open_image)
         file_menu.addAction(open_img_act)
 
         file_menu.addSeparator()
         quit_act = QAction("&Beenden", self)
-        quit_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Q))
+        quit_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Q))  # type: ignore[operator]
         quit_act.triggered.connect(self.close)
         file_menu.addAction(quit_act)
 
@@ -245,7 +246,7 @@ class MainWindow(QMainWindow):
     def _on_image_loaded(self, data: object, name: str) -> None:
         import numpy as np
 
-        img = data  # type: ignore[assignment]
+        img = data
         assert isinstance(img, np.ndarray)
         self._viewer.set_image_data(img)
         self._histogram.set_image_data(img)
@@ -375,7 +376,7 @@ class MainWindow(QMainWindow):
 
 
 def main() -> None:
-    app = QApplication.instance() or QApplication(sys.argv)
+    app = cast(QApplication, QApplication.instance() or QApplication(sys.argv))
     app.setApplicationName("AstroAI Suite")
     app.setApplicationVersion(__version__)
     app.setStyleSheet(_load_stylesheet())

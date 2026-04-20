@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
@@ -59,7 +59,7 @@ class QLicenseAdapter(QObject):
         base_url: str | None = None,
     ) -> None:
         super().__init__(parent)
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if store_dir is not None:
             kwargs["store_dir"] = store_dir
         if base_url is not None:

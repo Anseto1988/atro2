@@ -48,7 +48,7 @@ class LicenseManager:
 
     def activate(self, license_key: str, app_version: str) -> LicenseToken:
         """Activate a license key on this machine."""
-        raw_jwt = self._client.activate(license_key, app_version)
+        raw_jwt, _attestation = self._client.activate(license_key, app_version)
         token = decode_token(raw_jwt, self._public_key)
         now = datetime.now(timezone.utc)
         self._store.save(raw_jwt, now)
@@ -72,7 +72,7 @@ class LicenseManager:
 
         # Attempt online refresh
         try:
-            new_jwt = self._client.refresh(raw_jwt)
+            new_jwt, _attestation = self._client.refresh(raw_jwt)
             token = decode_token(new_jwt, self._public_key)
             self._store.save(new_jwt, now)
             logger.debug("License refreshed online")

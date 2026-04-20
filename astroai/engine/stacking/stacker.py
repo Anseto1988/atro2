@@ -1,5 +1,7 @@
 """Frame stacking engine for astrophotography."""
 
+from typing import Any, Callable, cast
+
 import numpy as np
 
 __all__ = ["FrameStacker"]
@@ -22,11 +24,11 @@ class FrameStacker:
 
     def stack_mean(self, frames: list[np.ndarray]) -> np.ndarray:
         cube = self._validate(frames)
-        return np.mean(cube, axis=0)
+        return cast(np.ndarray, np.mean(cube, axis=0))
 
     def stack_median(self, frames: list[np.ndarray]) -> np.ndarray:
         cube = self._validate(frames)
-        return np.median(cube, axis=0)
+        return cast(np.ndarray, np.median(cube, axis=0))
 
     def stack_sigma_clip(
         self,
@@ -51,9 +53,9 @@ class FrameStacker:
         self,
         frames: list[np.ndarray],
         method: str = "sigma_clip",
-        **kwargs,
+        **kwargs: Any,
     ) -> np.ndarray:
-        methods = {
+        methods: dict[str, Callable[..., np.ndarray]] = {
             "mean": self.stack_mean,
             "median": self.stack_median,
             "sigma_clip": self.stack_sigma_clip,

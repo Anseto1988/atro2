@@ -21,7 +21,6 @@ _DTYPE_MAP: dict[str, np.dtype[Any]] = {
 
 
 def _parse_xisf_metadata(root: ET.Element) -> ImageMetadata:
-    ns = {"xisf": "http://www.pixinsight.com/xisf"}
     extra: dict[str, Any] = {}
     exposure: float | None = None
     gain_iso: int | None = None

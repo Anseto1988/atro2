@@ -1,6 +1,8 @@
 """Visual pipeline workflow graph showing processing stages."""
 from __future__ import annotations
 
+from typing import Any
+
 from PySide6.QtCore import QRectF, QSize, Qt, Slot
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
@@ -53,7 +55,7 @@ class WorkflowGraph(QWidget):
         ]
         self.setToolTip("Verarbeitungs-Pipeline: " + " \u2192 ".join(labels))
 
-    def _visible_steps(self) -> list:
+    def _visible_steps(self) -> list[Any]:
         return self._model.steps
 
     def _total_width(self) -> float:

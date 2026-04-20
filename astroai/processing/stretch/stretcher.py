@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -93,7 +93,7 @@ class IntelligentStretcher:
         rng = vmax - vmin
         if rng < 1e-10:
             return np.zeros_like(img)
-        return (img - vmin) / rng
+        return cast(NDArray[np.floating[Any]], (img - vmin) / rng)
 
     @staticmethod
     def _normalize_1d(ch: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
@@ -102,7 +102,7 @@ class IntelligentStretcher:
         rng = vmax - vmin
         if rng < 1e-10:
             return np.zeros_like(ch)
-        return (ch - vmin) / rng
+        return cast(NDArray[np.floating[Any]], (ch - vmin) / rng)
 
     @staticmethod
     def _background_stats(
@@ -128,7 +128,7 @@ class IntelligentStretcher:
             return 0.5
 
         midtone = self._mtf_balance(bg_normalized, target)
-        return np.clip(midtone, 0.01, 0.99)
+        return float(np.clip(midtone, 0.01, 0.99))
 
     @staticmethod
     def _mtf_balance(bg: float, target: float) -> float:

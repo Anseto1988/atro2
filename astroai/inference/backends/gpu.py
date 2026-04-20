@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
 __all__ = ["DeviceManager"]
@@ -9,6 +11,7 @@ class DeviceManager:
     """Singleton GPU/accelerator abstraction for device selection."""
 
     _instance: DeviceManager | None = None
+    _device: torch.device
 
     def __new__(cls) -> DeviceManager:
         if cls._instance is None:
@@ -27,8 +30,8 @@ class DeviceManager:
     def get_device(self) -> torch.device:
         return self._device
 
-    def device_info(self) -> dict:
-        info: dict = {
+    def device_info(self) -> dict[str, Any]:
+        info: dict[str, Any] = {
             "type": self._device.type,
             "name": self._device.type,
             "cuda_available": torch.cuda.is_available(),

@@ -1,7 +1,7 @@
 """LRGB channel combiner for astrophotography compositing."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -56,4 +56,4 @@ class ChannelCombiner:
         # Scale colour channels so their luminance matches L
         scale = lum_f / (lum_rgb + _EPS)
         result = np.clip(rgb * scale[..., np.newaxis], 0.0, 1.0)
-        return result.astype(np.float32)
+        return cast(NDArray[np.float32], result.astype(np.float32))

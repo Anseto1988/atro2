@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 from scipy.ndimage import shift as ndimage_shift
 
@@ -44,7 +46,7 @@ class FrameAligner:
         f_ref = np.fft.fft2(ref)
         f_tgt = np.fft.fft2(target)
         cross_power = f_ref * np.conj(f_tgt)
-        eps = np.finfo(cross_power.dtype).eps
+        eps = np.finfo(np.float64).eps
         cross_power /= np.abs(cross_power) + eps
         correlation = np.fft.ifft2(cross_power).real
 
@@ -103,7 +105,7 @@ class FrameAligner:
         )
 
         cross_power = f_ref * np.conj(f_tgt)
-        eps = np.finfo(cross_power.dtype).eps
+        eps = np.finfo(np.float64).eps
         cross_power /= np.abs(cross_power) + eps
 
         upsampled = (row_kern.conj().T @ cross_power @ col_kern).real
@@ -120,17 +122,14 @@ class FrameAligner:
         dy: float,
         dx: float,
     ) -> np.ndarray:
-        if image.ndim == 3:
-            shift_vec = (-dy, -dx, 0)
-        else:
-            shift_vec = (-dy, -dx)
-        return ndimage_shift(
+        shift_vec: tuple[float, ...] = (-dy, -dx, 0.0) if image.ndim == 3 else (-dy, -dx)
+        return cast(np.ndarray, ndimage_shift(
             image, shift_vec, order=3, mode="constant", cval=0.0
-        )
+        ))
 
     @staticmethod
     def _to_grayscale(frame: np.ndarray) -> np.ndarray:
         if frame.ndim == 2:
             return frame.astype(np.float64)
         weights = np.array([0.2989, 0.5870, 0.1140])
-        return np.dot(frame[..., :3], weights).astype(np.float64)
+        return cast(np.ndarray, np.dot(frame[..., :3], weights).astype(np.float64))

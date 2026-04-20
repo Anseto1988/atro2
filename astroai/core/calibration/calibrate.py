@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from astroai.core.calibration.matcher import (
-    CalibrationFrame,
     CalibrationLibrary,
     find_best_dark,
     find_best_flat,
@@ -21,7 +20,7 @@ def apply_dark(
     light: NDArray[np.floating[Any]],
     dark: NDArray[np.floating[Any]],
 ) -> NDArray[np.floating[Any]]:
-    return np.clip(light - dark, 0.0, None).astype(np.float32)
+    return cast(NDArray[np.floating[Any]], np.clip(light - dark, 0.0, None).astype(np.float32))
 
 
 def apply_flat(
@@ -29,7 +28,7 @@ def apply_flat(
     flat: NDArray[np.floating[Any]],
 ) -> NDArray[np.floating[Any]]:
     flat_norm = flat / np.maximum(np.median(flat), 1e-7)
-    return (light / np.maximum(flat_norm, 1e-7)).astype(np.float32)
+    return cast(NDArray[np.floating[Any]], (light / np.maximum(flat_norm, 1e-7)).astype(np.float32))
 
 
 def calibrate_frame(

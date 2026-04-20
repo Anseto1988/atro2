@@ -1,7 +1,7 @@
 """Progress display with cancel button for long-running operations."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,

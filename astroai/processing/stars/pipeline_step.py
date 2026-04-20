@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -163,4 +163,4 @@ class StarRemovalStep(PipelineStep):
         if diff.ndim == 3:
             diff = diff.mean(axis=-1)
         threshold = diff.mean() + 2.0 * diff.std()
-        return (diff > threshold).astype(np.float32)
+        return cast(NDArray[np.floating[Any]], (diff > threshold).astype(np.float32))

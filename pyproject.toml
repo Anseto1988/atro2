@@ -48,3 +48,15 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+  "onnxruntime",
+  "scipy.*",
+  "astropy.*",
+  "rawpy",
+  "win32crypt",
+  "PIL.*",
+  "tqdm.*",
+]
+ignore_missing_imports = true

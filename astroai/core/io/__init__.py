@@ -1,3 +1,5 @@
+from typing import Any
+
 from astroai.core.io.fits_io import ImageMetadata, read_fits, write_fits
 from astroai.core.io.tiff_io import read_tiff, write_tiff32
 from astroai.core.io.xisf_io import read_xisf, write_xisf
@@ -14,7 +16,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "read_raw":
         from astroai.core.io.raw_io import read_raw
         return read_raw

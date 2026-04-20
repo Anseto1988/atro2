@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from astroai.processing.background.extractor import BackgroundExtractor, ModelMethod
+from astroai.processing.background.extractor import BackgroundExtractor
 
 __all__ = ["GradientRemover"]
 

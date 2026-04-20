@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from astroai.core.pipeline.base import ProgressCallback
 from astroai.inference.models.downloader import ModelDownloader, ModelManifestEntry
 from astroai.licensing.client import LicenseClient
-from astroai.licensing.exceptions import LicenseError, NotActivated, TierInsufficientError
+from astroai.licensing.exceptions import LicenseError, NotActivated
 from astroai.licensing.store import LicenseStore
 
 __all__ = ["SecureModelDownloader"]

@@ -172,5 +172,5 @@ class BackgroundExtractor:
             xx.ravel().astype(np.float64) / max(w - 1, 1),
         ])
 
-        result = interp(grid).reshape(h, w)
+        result: NDArray[np.floating[Any]] = interp(grid).reshape(h, w)
         return result

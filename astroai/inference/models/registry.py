@@ -9,7 +9,7 @@ import torch
 try:
     import onnxruntime as ort
 except ImportError:
-    ort = None  # type: ignore[assignment]
+    ort = None
 
 __all__ = ["ModelRegistry"]
 

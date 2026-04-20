@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -19,7 +19,7 @@ def gaussian_psf(size: int = 5, sigma: float = 1.0) -> NDArray[np.float64]:
     k = np.arange(-half, half + 1, dtype=np.float64)
     kernel_1d = np.exp(-0.5 * (k / sigma) ** 2)
     kernel_2d = np.outer(kernel_1d, kernel_1d)
-    return kernel_2d / kernel_2d.sum()
+    return cast(NDArray[np.float64], kernel_2d / kernel_2d.sum())
 
 
 class Deconvolver:

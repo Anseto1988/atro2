@@ -16,7 +16,7 @@ import numpy as np
 try:
     import onnxruntime as ort
 except ImportError:
-    ort = None  # type: ignore[assignment]
+    ort = None
 
 from astroai.core.pipeline.base import PipelineProgress, PipelineStage, ProgressCallback
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path.home() / ".astroai" / "models"
 
-_NAFNET_MANIFEST = {
+_NAFNET_MANIFEST: dict[str, dict[str, Any]] = {
     "nafnet_denoise": {
         "url": "https://github.com/AstroAI-Suite/models/releases/download/v0.1.0/nafnet_denoise.onnx",
         "sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
@@ -35,7 +35,7 @@ _NAFNET_MANIFEST = {
     },
 }
 
-_STARNET_MANIFEST = {
+_STARNET_MANIFEST: dict[str, dict[str, Any]] = {
     "starnet_plus_plus": {
         "url": "https://github.com/AstroAI-Suite/models/releases/download/v0.1.0/starnet_plus_plus.onnx",
         "sha256": "placeholder_no_public_url_available",

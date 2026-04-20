@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -146,4 +146,4 @@ class DeconvolutionStep(PipelineStep):
         if is_rgb and out.ndim == 3 and out.shape[0] == 3:
             out = out.transpose(1, 2, 0)
 
-        return np.clip(out.astype(frame.dtype), 0.0, None)
+        return cast(NDArray[np.floating[Any]], np.clip(out.astype(frame.dtype), 0.0, None))

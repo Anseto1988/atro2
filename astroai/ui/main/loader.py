@@ -25,7 +25,7 @@ class _LoadWorker(QObject):
                 from astropy.io import fits
 
                 with fits.open(str(path)) as hdul:
-                    data = hdul[0].data  # type: ignore[index]
+                    data = hdul[0].data
                     if data is None:
                         self.error.emit(f"Keine Bilddaten in {path.name}")
                         return
@@ -40,8 +40,8 @@ class _LoadWorker(QObject):
             else:
                 from PIL import Image
 
-                pil_img = Image.open(path).convert("L")
-                img = np.array(pil_img, dtype=np.float32)
+                pil_img_conv = Image.open(path).convert("L")
+                img = np.array(pil_img_conv, dtype=np.float32)
 
             self.finished.emit(img, path.name)
         except Exception as exc:

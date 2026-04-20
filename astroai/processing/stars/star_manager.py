@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -131,11 +131,11 @@ class StarManager:
     def _to_grayscale(frame: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         if frame.ndim == 2:
             return frame.astype(np.float64)
-        return (
+        return cast(NDArray[np.floating[Any]], (
             0.2989 * frame[..., 0]
             + 0.5870 * frame[..., 1]
             + 0.1140 * frame[..., 2]
-        ).astype(np.float64)
+        ).astype(np.float64))
 
     @staticmethod
     def _expand_mask(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -33,7 +33,7 @@ class _DoubleConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.conv(x)
+        return cast(torch.Tensor, self.conv(x))
 
 
 class SimpleUNet(nn.Module):
@@ -61,7 +61,7 @@ class SimpleUNet(nn.Module):
         d3 = self.dec3(torch.cat([self._match_and_cat(self.up3(b), e3)], dim=0).unsqueeze(0).squeeze(0))
         d2 = self.dec2(torch.cat([self._match_and_cat(self.up2(d3), e2)], dim=0).unsqueeze(0).squeeze(0))
         d1 = self.dec1(torch.cat([self._match_and_cat(self.up1(d2), e1)], dim=0).unsqueeze(0).squeeze(0))
-        return self.out_conv(d1)
+        return cast(torch.Tensor, self.out_conv(d1))
 
     @staticmethod
     def _match_and_cat(up: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
@@ -115,7 +115,7 @@ class Denoiser:
             result = self._denoise_single(img)
 
         blended = img + self._strength * (result - img)
-        return blended.astype(original_dtype)
+        return cast(NDArray[np.floating[Any]], blended.astype(original_dtype))
 
     def denoise_batch(
         self, frames: list[NDArray[np.floating[Any]]]
@@ -156,7 +156,7 @@ class Denoiser:
                     tile = np.pad(tile, ((0, ph), (0, pw)), mode="reflect")
 
                 tensor = torch.from_numpy(tile).float().unsqueeze(0).unsqueeze(0)
-                tensor = self._dm.to_device(tensor)
+                tensor = cast(torch.Tensor, self._dm.to_device(tensor))
 
                 with torch.no_grad():
                     out = self._model(tensor)  # type: ignore[misc]
@@ -168,9 +168,10 @@ class Denoiser:
 
         weight_map = np.maximum(weight_map, 1.0)
         result /= weight_map
-        return np.clip(result * rng + vmin, vmin, vmax)
+        return cast(NDArray[np.floating[Any]], np.clip(result * rng + vmin, vmin, vmax))
 
     def _denoise_onnx(self, channel: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
+        assert self._onnx is not None
         vmin, vmax = float(channel.min()), float(channel.max())
         rng = vmax - vmin if vmax > vmin else 1.0
         normalized = ((channel - vmin) / rng).astype(np.float32)
@@ -178,7 +179,7 @@ class Denoiser:
         input_name = self._onnx.get_inputs()[0].name
         out = self._onnx.run(None, {input_name: inp})[0]
         result = out.squeeze()
-        return np.clip(result.astype(np.float64) * rng + vmin, vmin, vmax)
+        return cast(NDArray[np.floating[Any]], np.clip(result.astype(np.float64) * rng + vmin, vmin, vmax))
 
     @staticmethod
     def _denoise_statistical(
@@ -215,7 +216,7 @@ class Denoiser:
         laplacian = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float64)
         filtered = convolve(channel, laplacian)
         mad = float(np.median(np.abs(filtered - np.median(filtered))))
-        return mad * 1.4826 / np.sqrt(20.0)
+        return float(mad * 1.4826 / np.sqrt(20.0))
 
 
 class NAFNetDenoiser:
@@ -257,7 +258,7 @@ class NAFNetDenoiser:
             result = self._denoise_channel(img)
 
         blended = img + self._strength * (result - img)
-        return blended.astype(original_dtype)
+        return cast(NDArray[np.floating[Any]], blended.astype(original_dtype))
 
     def _denoise_channel(self, channel: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         session = self._get_session()
@@ -294,4 +295,4 @@ class NAFNetDenoiser:
 
         weight_map = np.maximum(weight_map, 1.0)
         result /= weight_map
-        return np.clip(result * rng + vmin, vmin, vmax)
+        return cast(NDArray[np.floating[Any]], np.clip(result * rng + vmin, vmin, vmax))
