@@ -19,13 +19,14 @@ jobs:
             target: macos
             archive_ext: tar.gz
     runs-on: ${{ matrix.os }}
-    env:
-      VERSION: "0.1.0-alpha"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set version from tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
       - name: Install Poetry
         run: pip install poetry
       - name: Install dependencies
@@ -45,4 +46,23 @@ jobs:
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
+          body: |
+            ## AstroAI Suite v${{ env.VERSION }}
+
+            ### Neue Features seit v0.1.0-alpha
+
+            - **E3** Background-Extraktion — Gradient-Removal & Pipeline-Integration
+            - **E4+E1** Projekt-Persistenz, TIFF I/O, XISF-Write, Export-Step, LogWidget
+            - **E4** LRGB/Narrowband Multi-Kanal-Workflow — ChannelCombiner, NarrowbandMapper
+            - **E5** Starless — StarRemovalStep, StarlessPanel
+            - **E6** Deconvolution, DenoiseStep, StretchStep
+            - Cloudflare Workers Licensing API
+            - Security Hardening S-01 bis S-04
+
+            ### Breaking Changes
+            Keine.
+
+            ### Installation
+            Lade das passende Artifact für dein Betriebssystem herunter und entpacke es.
           files: astroai-${{ env.VERSION }}-${{ matrix.target }}.${{ matrix.archive_ext }}
