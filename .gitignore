@@ -30,6 +30,10 @@ models/*.pt
 scripts/*.json
 ver*_analysis.md
 
+# PyInstaller
+*.manifest
+*.spec.bak
+
 # OS
 .DS_Store
 Thumbs.db

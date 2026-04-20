@@ -308,3 +308,92 @@ QFrame#workflowNodeError {
     border-radius: 6px;
     padding: 8px;
 }
+
+/* License badge — statusbar tier indicator */
+QLabel#licenseBadgeFree {
+    background-color: #3a2e1e;
+    color: #a89478;
+    border: 1px solid #4a3a24;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QLabel#licenseBadgePro {
+    background-color: #2a3a18;
+    color: #a8c878;
+    border: 1px solid #4a6a30;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QLabel#licenseBadgeFounding {
+    background-color: #3a2a10;
+    color: #c8a860;
+    border: 1px solid #8a6a30;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Offline warning banner */
+QWidget#offlineBanner {
+    background-color: #3a2a10;
+    border-bottom: 2px solid #8a6a30;
+}
+
+QLabel#offlineBannerIcon {
+    font-size: 16px;
+    color: #c8a860;
+    padding-right: 4px;
+}
+
+QLabel#offlineBannerText {
+    color: #c8a860;
+    font-size: 12px;
+}
+
+/* Activation dialog */
+QLabel#activationHint {
+    color: #6a5a44;
+    font-size: 11px;
+}
+
+QLabel#activationError {
+    color: #c85040;
+    font-size: 12px;
+}
+
+QLabel#activationSuccess {
+    color: #6aa840;
+    font-size: 12px;
+}
+
+QPushButton#deactivateButton {
+    background-color: #4a2020;
+    border-color: #6a3030;
+}
+
+QPushButton#deactivateButton:hover {
+    background-color: #5a2828;
+}
+
+/* Upgrade dialog */
+QLabel#upgradeBody {
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+QPushButton#upgradeButton {
+    background-color: #3a2a10;
+    border-color: #8a6a30;
+    color: #c8a860;
+}
+
+QPushButton#upgradeButton:hover {
+    background-color: #4a3a18;
+}

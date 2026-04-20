@@ -37,23 +37,38 @@ jobs:
         include:
           - os: windows-latest
             target: win
+            archive_ext: zip
           - os: ubuntu-latest
             target: linux
+            archive_ext: tar.gz
           - os: macos-latest
             target: macos
+            archive_ext: tar.gz
     runs-on: ${{ matrix.os }}
+    env:
+      VERSION: "0.1.0-alpha"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Poetry + PyInstaller
-        run: pip install poetry pyinstaller
-      - name: Install dependencies
-        run: poetry install --without dev
-      - name: Bundle
-        run: poetry run pyinstaller scripts/astroai.spec
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install dependencies (with PyInstaller)
+        run: poetry install --with dev
+      - name: Bundle with PyInstaller
+        run: poetry run pyinstaller scripts/astroai.spec --noconfirm
+      - name: Package artifact (Windows)
+        if: matrix.target == 'win'
+        shell: pwsh
+        run: Compress-Archive -Path dist/AstroAI -DestinationPath "astroai-${{ env.VERSION }}-win.zip"
+      - name: Package artifact (Linux)
+        if: matrix.target == 'linux'
+        run: tar -czf "astroai-${{ env.VERSION }}-linux.tar.gz" -C dist AstroAI
+      - name: Package artifact (macOS)
+        if: matrix.target == 'macos'
+        run: tar -czf "astroai-${{ env.VERSION }}-macos.tar.gz" -C dist AstroAI.app
       - uses: actions/upload-artifact@v4
         with:
-          name: astroai-${{ matrix.target }}
-          path: dist/
+          name: astroai-${{ env.VERSION }}-${{ matrix.target }}
+          path: astroai-${{ env.VERSION }}-${{ matrix.target }}.${{ matrix.archive_ext }}

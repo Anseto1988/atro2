@@ -15,16 +15,28 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from astroai import __version__
+from astroai.ui.license_adapter import QLicenseAdapter
 from astroai.ui.main.loader import FileLoader
 from astroai.ui.models import PipelineModel
+from astroai.ui.widgets.activation_dialog import ActivationDialog
 from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
+from astroai.ui.widgets.license_badge import LicenseBadge
+from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.progress_widget import ProgressWidget
+from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
+from astroai.licensing.models import LicenseTier
 
 __all__ = ["MainWindow", "main"]
 
-_RESOURCES = Path(__file__).resolve().parent.parent / "resources"
+def _resources_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "astroai" / "ui" / "resources"  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parent.parent / "resources"
+
+_RESOURCES = _resources_dir()
 
 
 def _load_stylesheet() -> str:
@@ -43,11 +55,12 @@ def _load_stylesheet() -> str:
 class MainWindow(QMainWindow):
     """Primary application window with dock-based layout."""
 
-    def __init__(self) -> None:
+    def __init__(self, license_adapter: QLicenseAdapter | None = None) -> None:
         super().__init__()
         self.setWindowTitle("AstroAI Suite")
         self.setMinimumSize(960, 640)
 
+        self._license = license_adapter or QLicenseAdapter(self)
         self._pipeline = PipelineModel(self)
         self._file_loader = FileLoader(self)
         self._setup_central()
@@ -55,10 +68,21 @@ class MainWindow(QMainWindow):
         self._setup_menus()
         self._setup_statusbar()
         self._connect_signals()
+        self._license.verify()
 
     def _setup_central(self) -> None:
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+
+        self._offline_banner = OfflineBanner()
+        central_layout.addWidget(self._offline_banner)
+
         self._viewer = ImageViewer()
-        self.setCentralWidget(self._viewer)
+        central_layout.addWidget(self._viewer, stretch=1)
+
+        self.setCentralWidget(central)
 
     def _setup_docks(self) -> None:
         self._histogram = HistogramWidget()
@@ -108,9 +132,16 @@ class MainWindow(QMainWindow):
         fit_act.triggered.connect(self._viewer.fit_to_view)
         view_menu.addAction(fit_act)
 
+        help_menu = menu_bar.addMenu("&Hilfe")
+        license_act = QAction("&Lizenz verwalten...", self)
+        license_act.triggered.connect(self._on_manage_license)
+        help_menu.addAction(license_act)
+
     def _setup_statusbar(self) -> None:
         self._status_bar = self.statusBar()
         self._status_bar.showMessage("Bereit")
+        self._license_badge = LicenseBadge()
+        self._status_bar.addPermanentWidget(self._license_badge)
 
     def _connect_signals(self) -> None:
         self._viewer.zoom_changed.connect(self._on_zoom_changed)
@@ -118,6 +149,8 @@ class MainWindow(QMainWindow):
         self._file_loader.image_loaded.connect(self._on_image_loaded)
         self._file_loader.load_error.connect(self._on_load_error)
         self._file_loader.load_status.connect(self._on_load_status)
+        self._license.status_changed.connect(self._license_badge.on_status_changed)
+        self._license.status_changed.connect(self._offline_banner.on_status_changed)
 
     @Slot()
     def _on_open_image(self) -> None:
@@ -168,11 +201,28 @@ class MainWindow(QMainWindow):
             f"{msg} | ({x}, {y}) = {value:.2f}"
         )
 
+    @Slot()
+    def _on_manage_license(self) -> None:
+        dlg = ActivationDialog(self._license, self)
+        dlg.exec()
+
+    def require_tier(self, feature_name: str, required: LicenseTier) -> bool:
+        """Check tier access; shows UpgradeDialog if insufficient. Returns True if allowed."""
+        current = self._license.tier
+        tier_order = [LicenseTier.FREE, LicenseTier.PRO_MONTHLY, LicenseTier.PRO_ANNUAL, LicenseTier.FOUNDING_MEMBER]
+        if tier_order.index(current) >= tier_order.index(required):
+            return True
+
+        dlg = UpgradeDialog(feature_name, required, current, self)
+        dlg.activate_requested.connect(self._on_manage_license)
+        dlg.exec()
+        return False
+
 
 def main() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("AstroAI Suite")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion(__version__)
     app.setStyleSheet(_load_stylesheet())
 
     window = MainWindow()

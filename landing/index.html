@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AstroAI Suite – Founding Member</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --gold: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --border: #1e2d45;
+      --green: #10b981;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+    }
+
+    /* NAV */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(10, 14, 26, 0.95);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+    .logo { font-weight: 700; font-size: 1.1rem; color: var(--accent2); }
+    .logo span { color: var(--gold); }
+    .nav-cta {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.5rem 1.2rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--accent2); }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 5rem 2rem 3rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--gold);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 0.3rem 1rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 1.2rem;
+      background: linear-gradient(135deg, #e2e8f0 0%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 2.5rem;
+    }
+
+    /* SPOTS */
+    .spots-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      max-width: 460px;
+      margin: 0 auto 2rem;
+    }
+    .spots-label {
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .spots-count {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 0.8rem;
+    }
+    .progress-bar {
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), var(--accent));
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .spots-sub { font-size: 0.8rem; color: var(--muted); }
+
+    /* COUNTDOWN */
+    .countdown {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin: 1.5rem auto 2.5rem;
+    }
+    .countdown-unit {
+      text-align: center;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.8rem 1.2rem;
+      min-width: 64px;
+    }
+    .countdown-num {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--accent2);
+      display: block;
+      font-variant-numeric: tabular-nums;
+    }
+    .countdown-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* CTA */
+    .cta-primary {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      padding: 1rem 2.5rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.35);
+      transition: transform 0.15s, box-shadow 0.15s;
+      margin-bottom: 0.8rem;
+    }
+    .cta-primary:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(99, 102, 241, 0.5); }
+    .cta-note { font-size: 0.82rem; color: var(--muted); }
+    .cta-secondary { display: block; margin-top: 0.8rem; color: var(--muted); font-size: 0.9rem; text-decoration: underline; }
+    .cta-secondary:hover { color: var(--text); }
+
+    /* PRICING TABLE */
+    section { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    h2 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+    .section-sub { text-align: center; color: var(--muted); margin-bottom: 2rem; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    tr:last-child td { border-bottom: none; }
+    .col-founding { color: var(--gold); font-weight: 600; }
+    .check { color: var(--green); }
+    .cross { color: #475569; }
+
+    /* WHY */
+    .why-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+    .why-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem;
+    }
+    .why-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .why-title { font-weight: 700; margin-bottom: 0.3rem; }
+    .why-text { font-size: 0.9rem; color: var(--muted); }
+
+    /* GALLERY */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .gallery-item {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      aspect-ratio: 16/10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      overflow: hidden;
+    }
+    .gallery-item .placeholder-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.6; }
+    .gallery-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; text-align: center; }
+
+    /* FAQ */
+    details {
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 0;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    summary::after { content: '+'; color: var(--accent2); font-size: 1.2rem; }
+    details[open] summary::after { content: '−'; }
+    .faq-answer { color: var(--muted); margin-top: 0.6rem; font-size: 0.95rem; padding-left: 0.5rem; }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+
+    @media (max-width: 600px) {
+      .countdown { gap: 0.5rem; }
+      .countdown-unit { padding: 0.6rem 0.8rem; min-width: 52px; }
+      .countdown-num { font-size: 1.4rem; }
+      th, td { padding: 0.6rem 0.5rem; font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Astro<span>AI</span> Suite</div>
+  <a href="#cta" class="nav-cta">Founding Member – EUR 49</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="badge">⭐ Founding Member Program</div>
+  <h1>Sichere dir AstroAI Pro –<br>für immer. Nur 200 Plätze.</h1>
+  <p class="subtitle">
+    Die erste AI-native Astrophotographie-Software. Kein Abo. Keine Kompromisse.
+    Werde einer von 200 Founding Members für einmalig EUR 49.
+  </p>
+
+  <!-- Spots counter -->
+  <div class="spots-box">
+    <div class="spots-label">Verfügbare Plätze</div>
+    <div class="spots-count" id="spotsText">Noch <span id="spotsLeft">187</span> von 200 Plätzen frei</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" style="width: 6.5%"></div>
+    </div>
+    <div class="spots-sub">Programm endet bei Vollbelegung oder am Launch-Datum</div>
+  </div>
+
+  <!-- Countdown -->
+  <div class="countdown">
+    <div class="countdown-unit"><span class="countdown-num" id="cd-days">--</span><span class="countdown-label">Tage</span></div>
+    <div class="countdown-unit"><span class="countdown-num" id="cd-hours">--</span><span class="countdown-label">Std</span></div>
+    <div class="countdown-unit"><span class="countdown-num" id="cd-min">--</span><span class="countdown-label">Min</span></div>
+    <div class="countdown-unit"><span class="countdown-num" id="cd-sec">--</span><span class="countdown-label">Sek</span></div>
+  </div>
+
+  <div id="cta">
+    <a href="#payment" class="cta-primary">Jetzt Founding Member werden – EUR 49</a>
+    <div class="cta-note">Einmalige Zahlung &nbsp;·&nbsp; Kein Abo &nbsp;·&nbsp; 30 Tage Geld-zurück</div>
+    <a href="#free" class="cta-secondary">Kostenlos testen – ohne Kreditkarte</a>
+  </div>
+</div>
+
+<!-- WHAT'S INCLUDED -->
+<section>
+  <h2>Was ist enthalten?</h2>
+  <p class="section-sub">Regulärer Preis ab Launch: <strong>EUR 79/Jahr</strong> – du zahlst einmalig EUR 49.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Free</th>
+        <th class="col-founding">Founding Member (Lifetime AI Pro)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Stack & Kalibrierung</td><td class="check">✓</td><td class="check col-founding">✓</td></tr>
+      <tr><td>Basic Stretch</td><td class="check">✓</td><td class="check col-founding">✓</td></tr>
+      <tr><td><strong>DenoiseAI</strong></td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+      <tr><td><strong>StarNet AI</strong> (Sterne entfernen)</td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+      <tr><td><strong>AutoStretch AI</strong></td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+      <tr><td><strong>Comet Alignment AI</strong></td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+      <tr><td>Priorität-Support</td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+      <tr><td>Early Access zu neuen Features</td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+      <tr><td>Founding Member Badge</td><td class="cross">–</td><td class="check col-founding">✓</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- WHY NOW -->
+<section>
+  <h2>Warum jetzt?</h2>
+  <p class="section-sub">Das einzige Astrophotographie-Tool mit nativer AI-Integration.</p>
+  <div class="why-grid">
+    <div class="why-card">
+      <div class="why-icon">🤖</div>
+      <div class="why-title">Einzigartig am Markt</div>
+      <div class="why-text">Kein PixInsight-Plugin, keine Cloud-Abhängigkeit – AI läuft lokal auf deiner Hardware.</div>
+    </div>
+    <div class="why-card">
+      <div class="why-icon">♾️</div>
+      <div class="why-title">Lifetime-Lizenz</div>
+      <div class="why-text">Einmal kaufen, für immer nutzen – inklusive aller zukünftigen AI-Features.</div>
+    </div>
+    <div class="why-card">
+      <div class="why-icon">🗺️</div>
+      <div class="why-title">Roadmap mitgestalten</div>
+      <div class="why-text">Direkter Zugang zum Entwicklerteam. Dein Feedback formt die nächsten Features.</div>
+    </div>
+    <div class="why-card">
+      <div class="why-icon">🔒</div>
+      <div class="why-title">Nur 200 Plätze</div>
+      <div class="why-text">Nach Vollbelegung gibt es keine Lifetime-Lizenzen mehr – nur noch Jahresabo.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOT GALLERY -->
+<section>
+  <h2>AstroAI in Aktion</h2>
+  <p class="section-sub">Vorher/Nachher – was AI-gestützte Bildverarbeitung möglich macht.</p>
+  <div class="gallery-grid">
+    <div class="gallery-item">
+      <div class="placeholder-icon">🌌</div>
+      <span>DenoiseAI – Vorher/Nachher</span>
+      <span class="gallery-label">Screenshot folgt</span>
+    </div>
+    <div class="gallery-item">
+      <div class="placeholder-icon">⭐</div>
+      <span>StarNet AI – Sterne entfernt</span>
+      <span class="gallery-label">Screenshot folgt</span>
+    </div>
+    <div class="gallery-item">
+      <div class="placeholder-icon">☄️</div>
+      <span>Comet Alignment AI</span>
+      <span class="gallery-label">Screenshot folgt</span>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section>
+  <h2>Häufige Fragen</h2>
+  <p class="section-sub">&nbsp;</p>
+
+  <details>
+    <summary>Was passiert nach den 200 Plätzen?</summary>
+    <p class="faq-answer">Das Founding Member Programm endet. Neue Nutzer können AstroAI Pro danach nur noch per Jahresabo (EUR 79/Jahr) nutzen.</p>
+  </details>
+  <details>
+    <summary>Läuft die Lizenz auf mehreren Geräten?</summary>
+    <p class="faq-answer">Ja – eine Founding Member Lizenz gilt für alle deine Geräte (Windows jetzt, macOS/Linux folgen Q3 2026).</p>
+  </details>
+  <details>
+    <summary>Gibt es Updates inklusive?</summary>
+    <p class="faq-answer">Ja – als Founding Member erhältst du alle zukünftigen AI-Features kostenlos, solange das Projekt aktiv ist.</p>
+  </details>
+  <details>
+    <summary>Kann ich refunden?</summary>
+    <p class="faq-answer">30-Tage Geld-zurück-Garantie ohne Fragen. Einfach per E-Mail melden.</p>
+  </details>
+  <details>
+    <summary>Welche Betriebssysteme werden unterstützt?</summary>
+    <p class="faq-answer">Windows ist aktuell verfügbar. macOS und Linux folgen in Q3 2026.</p>
+  </details>
+</section>
+
+<!-- PAYMENT ANCHOR -->
+<section id="payment" style="text-align:center; padding: 2rem 2rem 4rem;">
+  <h2>Jetzt sichern</h2>
+  <p class="section-sub">Einmalig EUR 49 – Lifetime AI Pro für immer.</p>
+  <a href="#" class="cta-primary" style="font-size:1.3rem; padding: 1.2rem 3rem;">
+    Founding Member werden – EUR 49
+  </a>
+  <div class="cta-note" style="margin-top:1rem;">
+    Stripe &nbsp;·&nbsp; Sicher &nbsp;·&nbsp; 30 Tage Geld-zurück-Garantie
+  </div>
+</section>
+
+<footer>
+  <p>AstroAI Suite &copy; 2026 &nbsp;·&nbsp; Open-Source Kern &nbsp;·&nbsp;
+  <a href="https://github.com" style="color:var(--muted)">GitHub</a></p>
+</footer>
+
+<script>
+  // --- CONFIG ---
+  const TOTAL_SPOTS = 200;
+  const TAKEN_SPOTS = 13; // update this value
+  const LAUNCH_DATE = new Date('2026-05-20T00:00:00Z');
+
+  // Spots counter
+  const left = TOTAL_SPOTS - TAKEN_SPOTS;
+  const pct = (TAKEN_SPOTS / TOTAL_SPOTS * 100).toFixed(1);
+  document.getElementById('spotsLeft').textContent = left;
+  document.getElementById('progressFill').style.width = pct + '%';
+  if (left <= 20) {
+    document.getElementById('spotsText').style.color = '#ef4444';
+  }
+
+  // Countdown
+  function updateCountdown() {
+    const now = new Date();
+    const diff = LAUNCH_DATE - now;
+    if (diff <= 0) {
+      document.querySelector('.countdown').innerHTML = '<p style="color:var(--gold);font-weight:700">Programm beendet</p>';
+      return;
+    }
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    document.getElementById('cd-days').textContent  = String(d).padStart(2,'0');
+    document.getElementById('cd-hours').textContent = String(h).padStart(2,'0');
+    document.getElementById('cd-min').textContent   = String(m).padStart(2,'0');
+    document.getElementById('cd-sec').textContent   = String(s).padStart(2,'0');
+  }
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+</script>
+</body>
+</html>
