@@ -3,6 +3,7 @@ from astroai.core.calibration.calibrate import (
     apply_flat,
     calibrate_frame,
 )
+from astroai.core.calibration.gpu_engine import GPUCalibrationEngine
 from astroai.core.calibration.matcher import (
     CalibrationFrame,
     CalibrationLibrary,
@@ -13,6 +14,7 @@ from astroai.core.calibration.matcher import (
 __all__ = [
     "CalibrationFrame",
     "CalibrationLibrary",
+    "GPUCalibrationEngine",
     "apply_dark",
     "apply_flat",
     "calibrate_frame",

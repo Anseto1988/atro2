@@ -395,6 +395,98 @@ class TestFallbackLogic:
         mock_astrometry.assert_called_once()
 
 
+# --- astrometry.net Client Tests ---
+
+
+class TestAstrometryNetClient:
+    @patch("httpx.post")
+    def test_astrometry_net_success(
+        self, mock_post: MagicMock, tmp_fits: Path
+    ) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "status": "success",
+            "wcs_header": {
+                "CTYPE1": "RA---TAN",
+                "CTYPE2": "DEC--TAN",
+                "CRVAL1": 180.0,
+                "CRVAL2": 45.0,
+                "CRPIX1": 512.0,
+                "CRPIX2": 512.0,
+                "CDELT1": -0.000277,
+                "CDELT2": 0.000277,
+            },
+            "field_width": 1.0,
+            "field_height": 1.0,
+            "orientation": 5.0,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        solver = PlateSolver(
+            astap_path=Path("/mock/astap"),
+            astrometry_api_key="test-api-key",
+        )
+        result = solver._solve_astrometry_net(tmp_fits, 180.0, 45.0)
+
+        assert result.solver_used == "astrometry.net"
+        assert result.ra_center == pytest.approx(180.0)
+        assert result.dec_center == pytest.approx(45.0)
+        assert result.field_width_deg == 1.0
+        assert result.rotation_deg == 5.0
+        mock_post.assert_called_once()
+
+    @patch("httpx.post")
+    def test_astrometry_net_error_response(
+        self, mock_post: MagicMock, tmp_fits: Path
+    ) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"status": "error", "message": "bad request"}
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        solver = PlateSolver(
+            astap_path=Path("/mock/astap"),
+            astrometry_api_key="test-key",
+        )
+        with pytest.raises(SolveError, match="astrometry.net failed"):
+            solver._solve_astrometry_net(tmp_fits, 180.0, 45.0)
+
+    @patch("httpx.post")
+    def test_astrometry_net_without_hints(
+        self, mock_post: MagicMock, tmp_fits: Path
+    ) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "wcs_header": {
+                "CTYPE1": "RA---TAN",
+                "CTYPE2": "DEC--TAN",
+                "CRVAL1": 100.0,
+                "CRVAL2": -20.0,
+                "CRPIX1": 512.0,
+                "CRPIX2": 512.0,
+                "CDELT1": -0.0003,
+                "CDELT2": 0.0003,
+            },
+            "field_width": 2.0,
+            "field_height": 2.0,
+            "orientation": 0.0,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        solver = PlateSolver(
+            astap_path=Path("/mock/astap"),
+            astrometry_api_key="key",
+        )
+        result = solver._solve_astrometry_net(tmp_fits, None, None)
+        assert result.ra_center == pytest.approx(100.0)
+        assert result.dec_center == pytest.approx(-20.0)
+
+
 # --- SolveResult Tests ---
 
 

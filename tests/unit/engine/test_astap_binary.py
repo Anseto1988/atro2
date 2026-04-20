@@ -130,3 +130,139 @@ class TestVerifyAstap:
         monkeypatch.delenv("ASTAP_BINARY_PATH", raising=False)
         with patch("shutil.which", return_value=None):
             assert verify_astap() is None
+
+    def test_returns_version_on_success(self, tmp_path: Path) -> None:
+        binary = tmp_path / "astap"
+        binary.write_bytes(b"fake")
+        if platform.system() != "Windows":
+            binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+        import subprocess
+        with patch(
+            "astroai.engine.platesolving.astap_binary.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="ASTAP v0.2.1\n", stderr=""
+            ),
+        ):
+            result = verify_astap(binary)
+            assert result == "ASTAP v0.2.1"
+
+    def test_returns_none_on_timeout(self, tmp_path: Path) -> None:
+        binary = tmp_path / "astap"
+        binary.write_bytes(b"fake")
+        import subprocess
+        with patch(
+            "astroai.engine.platesolving.astap_binary.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("astap", 10),
+        ):
+            assert verify_astap(binary) is None
+
+    def test_returns_none_on_empty_output(self, tmp_path: Path) -> None:
+        binary = tmp_path / "astap"
+        binary.write_bytes(b"fake")
+        import subprocess
+        with patch(
+            "astroai.engine.platesolving.astap_binary.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr=""
+            ),
+        ):
+            assert verify_astap(binary) is None
+
+
+class TestEnsureAstap:
+    def test_returns_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        key = _detect_platform_key()
+        ext = ".exe" if platform.system() == "Windows" else ""
+        binary_dir = tmp_path / key
+        binary_dir.mkdir(parents=True)
+        binary = binary_dir / f"astap{ext}"
+        binary.write_bytes(b"fake binary")
+        if platform.system() != "Windows":
+            binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+
+        monkeypatch.setattr(
+            "astroai.engine.platesolving.astap_binary._BUNDLED_DIR", tmp_path
+        )
+        monkeypatch.delenv("ASTAP_BINARY_PATH", raising=False)
+
+        from astroai.engine.platesolving.astap_binary import ensure_astap
+        result = ensure_astap()
+        assert result == binary
+
+    @patch("astroai.engine.platesolving.astap_binary.download_astap")
+    def test_downloads_on_not_found(
+        self, mock_download: object, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock
+        mock_dl = MagicMock(return_value=tmp_path / "downloaded_astap")
+        with patch("astroai.engine.platesolving.astap_binary.download_astap", mock_dl):
+            monkeypatch.setattr(
+                "astroai.engine.platesolving.astap_binary._BUNDLED_DIR", tmp_path / "e1"
+            )
+            monkeypatch.setattr(
+                "astroai.engine.platesolving.astap_binary._USER_DIR", tmp_path / "e2"
+            )
+            monkeypatch.delenv("ASTAP_BINARY_PATH", raising=False)
+            with patch("shutil.which", return_value=None):
+                from astroai.engine.platesolving.astap_binary import ensure_astap
+                result = ensure_astap()
+                assert result == tmp_path / "downloaded_astap"
+                mock_dl.assert_called_once()
+
+
+class TestSHA256Verify:
+    def test_placeholder_always_passes(self, tmp_path: Path) -> None:
+        from astroai.engine.platesolving.astap_binary import _verify_sha256
+        f = tmp_path / "file.bin"
+        f.write_bytes(b"any content")
+        assert _verify_sha256(f, "placeholder_linux_x86_64") is True
+
+    def test_correct_hash_passes(self, tmp_path: Path) -> None:
+        import hashlib
+        from astroai.engine.platesolving.astap_binary import _verify_sha256
+        data = b"test data for hashing"
+        f = tmp_path / "file.bin"
+        f.write_bytes(data)
+        expected = hashlib.sha256(data).hexdigest()
+        assert _verify_sha256(f, expected) is True
+
+    def test_wrong_hash_fails(self, tmp_path: Path) -> None:
+        from astroai.engine.platesolving.astap_binary import _verify_sha256
+        f = tmp_path / "file.bin"
+        f.write_bytes(b"real content")
+        assert _verify_sha256(f, "a" * 64) is False
+
+
+class TestMakeExecutable:
+    def test_sets_execute_bit(self, tmp_path: Path) -> None:
+        from astroai.engine.platesolving.astap_binary import _make_executable
+        f = tmp_path / "binary"
+        f.write_bytes(b"\x00")
+        _make_executable(f)
+        if platform.system() != "Windows":
+            assert os.access(f, os.X_OK)
+
+
+class TestGetSpec:
+    def test_returns_spec_for_current_platform(self) -> None:
+        from astroai.engine.platesolving.astap_binary import _get_spec
+        spec = _get_spec()
+        assert spec.binary_name in ("astap", "astap.exe")
+        assert spec.url.startswith("https://")
+
+
+class TestFindInPath:
+    @patch("astroai.engine.platesolving.astap_binary.shutil.which")
+    def test_finds_binary_in_system_path(self, mock_which: object) -> None:
+        from unittest.mock import MagicMock
+        mock_w = MagicMock(return_value="/usr/bin/astap")
+        with patch("astroai.engine.platesolving.astap_binary.shutil.which", mock_w):
+            from astroai.engine.platesolving.astap_binary import _find_in_path
+            result = _find_in_path()
+            assert result == Path("/usr/bin/astap")
+
+    def test_returns_none_when_not_in_path(self) -> None:
+        with patch("astroai.engine.platesolving.astap_binary.shutil.which", return_value=None):
+            from astroai.engine.platesolving.astap_binary import _find_in_path
+            result = _find_in_path()
+            assert result is None

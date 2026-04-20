@@ -36,7 +36,17 @@ def calibrate_frame(
     light_meta: ImageMetadata,
     library: CalibrationLibrary,
     load_data: LoadDataFn | None = None,
+    use_gpu: bool = True,
 ) -> NDArray[np.floating[Any]]:
+    if use_gpu:
+        try:
+            from astroai.core.calibration.gpu_engine import GPUCalibrationEngine
+            engine = GPUCalibrationEngine()
+            if engine.device_type != "cpu":
+                return engine.calibrate_frame_gpu(light, light_meta, library, load_data)
+        except Exception:
+            pass
+
     result = light.copy()
 
     dark_frame = find_best_dark(light_meta, library)

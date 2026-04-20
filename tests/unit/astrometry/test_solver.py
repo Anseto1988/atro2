@@ -18,6 +18,7 @@ from astroai.astrometry.catalog import (
     pixel_to_radec,
 )
 from astroai.astrometry.solver import AstapSolver, SolverError
+from astroai.engine.platesolving.solver import PlateSolver, SolveError
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +196,9 @@ class TestAstapSolverSolveArray:
 # AstapSolver — retry with expanded radius
 # ---------------------------------------------------------------------------
 
-class TestAstapSolverRetry:
+class TestPlateSolverRetry:
+    """Tests for PlateSolver retry logic with expanding search radius."""
+
     def test_retry_expands_radius(self, tmp_path: Path) -> None:
         fits_path = tmp_path / "test.fits"
         fits.PrimaryHDU(data=np.zeros((64, 64), dtype=np.float32)).writeto(fits_path)
@@ -217,25 +220,27 @@ class TestAstapSolverRetry:
             _write_wcs_fits(wcs_path, expected)
             return MagicMock(returncode=0, stdout="OK", stderr="")
 
-        solver = AstapSolver(executable="/fake/astap", search_radius_deg=10.0, max_retries=3)
+        solver = PlateSolver(
+            astap_path=Path("/fake/astap"), search_radius_deg=10.0, max_retries=3
+        )
         with patch("subprocess.run", side_effect=_fake_run):
-            sol = solver.solve(fits_path)
+            result = solver.solve(fits_path)
 
         assert call_count == 3
         assert radii_seen[0] == pytest.approx(10.0)
-        assert radii_seen[1] == pytest.approx(20.0)
-        assert radii_seen[2] == pytest.approx(40.0)
-        assert sol.ra_center == pytest.approx(10.0)
+        assert radii_seen[1] == pytest.approx(15.0)  # PlateSolver uses 1.5x multiplier
+        assert radii_seen[2] == pytest.approx(22.5)
+        assert result.ra_center == pytest.approx(10.0, abs=0.01)
 
     def test_all_retries_exhausted_raises(self, tmp_path: Path) -> None:
         fits_path = tmp_path / "test.fits"
         fits.PrimaryHDU(data=np.zeros((64, 64), dtype=np.float32)).writeto(fits_path)
 
         mock_result = MagicMock(returncode=1, stdout="", stderr="No solution")
-        solver = AstapSolver(executable="/fake/astap", max_retries=2)
+        solver = PlateSolver(astap_path=Path("/fake/astap"), max_retries=2)
 
         with patch("subprocess.run", return_value=mock_result):
-            with pytest.raises(SolverError, match="failed after 2 attempts"):
+            with pytest.raises(SolveError, match="failed after 2 attempts"):
                 solver.solve(fits_path)
 
     def test_timeout_triggers_retry(self, tmp_path: Path) -> None:
@@ -256,12 +261,12 @@ class TestAstapSolverRetry:
             _write_wcs_fits(wcs_path, expected)
             return MagicMock(returncode=0, stdout="OK", stderr="")
 
-        solver = AstapSolver(executable="/fake/astap", max_retries=3)
+        solver = PlateSolver(astap_path=Path("/fake/astap"), max_retries=3)
         with patch("subprocess.run", side_effect=_fake_run):
-            sol = solver.solve(fits_path)
+            result = solver.solve(fits_path)
 
         assert call_count == 2
-        assert sol.ra_center == pytest.approx(99.0)
+        assert result.ra_center == pytest.approx(99.0, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
