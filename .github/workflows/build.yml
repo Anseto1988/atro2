@@ -37,6 +37,8 @@ jobs:
         run: poetry run mypy astroai/
       - name: Test
         run: poetry run pytest tests/unit/ -v
+      - name: Verify ASTAP platform detection
+        run: poetry run python -c "from astroai.engine.platesolving.astap_binary import _detect_platform_key; print('Platform:', _detect_platform_key())"
 
   build-bundle:
     needs: test
@@ -71,6 +73,10 @@ jobs:
           restore-keys: ${{ runner.os }}-poetry-
       - name: Install dependencies (with PyInstaller)
         run: poetry install --with dev --sync
+      - name: Download ASTAP binary
+        run: poetry run python scripts/download_astap.py
+      - name: Verify ASTAP binary
+        run: poetry run python -c "from astroai.engine.platesolving.astap_binary import get_astap_path; print('ASTAP:', get_astap_path())"
       - name: Bundle with PyInstaller
         run: poetry run pyinstaller scripts/astroai.spec --noconfirm
       - name: Package artifact (Windows)

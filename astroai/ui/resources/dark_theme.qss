@@ -382,6 +382,21 @@ QPushButton#deactivateButton:hover {
     background-color: #5a2828;
 }
 
+/* Annotation panel */
+QLabel#annotationStatusLabel {
+    color: #6a5a44;
+    font-size: 11px;
+    font-style: italic;
+    padding: 2px 0px;
+}
+
+QLabel#annotationStatusActive {
+    color: #6aa840;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 0px;
+}
+
 /* Upgrade dialog */
 QLabel#upgradeBody {
     font-size: 13px;

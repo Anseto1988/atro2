@@ -24,6 +24,7 @@ class ImageViewer(QWidget):
     """Displays astronomical images with lazy tile loading, zoom and pan."""
 
     zoom_changed = Signal(float)
+    view_changed = Signal()
     pixel_hovered = Signal(int, int, float)  # x, y, value
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -164,6 +165,7 @@ class ImageViewer(QWidget):
             delta = pos - self._drag_start
             self._offset += delta
             self._drag_start = pos
+            self.view_changed.emit()
             self.update()
         elif self._raw_data is not None:
             ix = int((pos.x() - self._offset.x()) / self._zoom)
@@ -181,15 +183,19 @@ class ImageViewer(QWidget):
             self.fit_to_view()
         elif key == Qt.Key.Key_Left:
             self._offset += QPointF(_PAN_STEP, 0)
+            self.view_changed.emit()
             self.update()
         elif key == Qt.Key.Key_Right:
             self._offset += QPointF(-_PAN_STEP, 0)
+            self.view_changed.emit()
             self.update()
         elif key == Qt.Key.Key_Up:
             self._offset += QPointF(0, _PAN_STEP)
+            self.view_changed.emit()
             self.update()
         elif key == Qt.Key.Key_Down:
             self._offset += QPointF(0, -_PAN_STEP)
+            self.view_changed.emit()
             self.update()
         else:
             super().keyPressEvent(event)

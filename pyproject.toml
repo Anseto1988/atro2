@@ -5,6 +5,9 @@ description = "AI-powered astrophotography processing suite"
 authors = []
 readme = "README.md"
 packages = [{include = "astroai"}]
+include = [
+    {path = "astroai/engine/platesolving/bin/**/*", format = ["sdist", "wheel"]},
+]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.13"

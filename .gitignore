@@ -14,6 +14,9 @@ models/*.pth
 models/*.onnx
 models/*.pt
 
+# ASTAP binaries (downloaded at build time)
+astroai/engine/platesolving/bin/
+
 # Large image data
 *.fits
 *.xisf

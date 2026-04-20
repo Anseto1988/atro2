@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QStackedLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -34,10 +35,12 @@ from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.log_widget import LogWidget
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
+from astroai.ui.widgets.annotation_panel import AnnotationPanel
 from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
 from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
+from astroai.ui.overlay.annotation_overlay import AnnotationOverlay
 from astroai.licensing.models import LicenseTier
 
 __all__ = ["MainWindow", "main"]
@@ -93,9 +96,18 @@ class MainWindow(QMainWindow):
         self._offline_banner = OfflineBanner()
         central_layout.addWidget(self._offline_banner)
 
-        self._viewer = ImageViewer()
-        central_layout.addWidget(self._viewer, stretch=1)
+        viewer_container = QWidget()
+        stack = QStackedLayout(viewer_container)
+        stack.setStackingMode(QStackedLayout.StackingMode.StackAll)
+        stack.setContentsMargins(0, 0, 0, 0)
 
+        self._viewer = ImageViewer()
+        self._annotation_overlay = AnnotationOverlay(self._viewer)
+
+        stack.addWidget(self._viewer)
+        stack.addWidget(self._annotation_overlay)
+
+        central_layout.addWidget(viewer_container, stretch=1)
         self.setCentralWidget(central)
 
     def _setup_docks(self) -> None:
@@ -142,6 +154,14 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, channel_dock)
+
+        self._annotation_panel = AnnotationPanel()
+        annot_dock = QDockWidget("Annotationen", self)
+        annot_dock.setWidget(self._annotation_panel)
+        annot_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, annot_dock)
 
         self._progress = ProgressWidget()
         prog_dock = QDockWidget("Fortschritt", self)
@@ -225,6 +245,11 @@ class MainWindow(QMainWindow):
         self._file_loader.load_status.connect(self._on_load_status)
         self._license.status_changed.connect(self._license_badge.on_status_changed)
         self._license.status_changed.connect(self._offline_banner.on_status_changed)
+
+        self._annotation_panel.dso_toggled.connect(self._annotation_overlay.set_show_dso)
+        self._annotation_panel.stars_toggled.connect(self._annotation_overlay.set_show_stars)
+        self._annotation_panel.boundaries_toggled.connect(self._annotation_overlay.set_show_boundaries)
+        self._annotation_panel.grid_toggled.connect(self._annotation_overlay.set_show_grid)
 
     @Slot()
     def _on_open_image(self) -> None:
@@ -361,6 +386,17 @@ class MainWindow(QMainWindow):
     def _on_manage_license(self) -> None:
         dlg = ActivationDialog(self._license, self)
         dlg.exec()
+
+    def set_wcs_solution(self, wcs: object | None) -> None:
+        """Called by plate-solve pipeline to activate annotation overlay."""
+        from astroai.ui.overlay.sky_objects import WcsTransform
+
+        if wcs is not None and isinstance(wcs, WcsTransform):
+            self._annotation_overlay.set_wcs(wcs)
+            self._annotation_panel.set_wcs_active(True)
+        else:
+            self._annotation_overlay.set_wcs(None)
+            self._annotation_panel.set_wcs_active(False)
 
     def require_tier(self, feature_name: str, required: LicenseTier) -> bool:
         """Check tier access; shows UpgradeDialog if insufficient. Returns True if allowed."""

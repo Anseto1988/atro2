@@ -12,6 +12,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(ROOT / "astroai" / "ui" / "resources"), "astroai/ui/resources"),
+        (str(ROOT / "astroai" / "engine" / "platesolving" / "bin"), "astroai/engine/platesolving/bin"),
     ],
     hiddenimports=[
         "astroai.core.io.fits_io",
@@ -22,6 +23,10 @@ a = Analysis(
         "astroai.core.calibration.calibrate",
         "astroai.engine.registration.aligner",
         "astroai.engine.stacking.stacker",
+        "astroai.engine.platesolving.astap_binary",
+        "astroai.engine.platesolving.solver",
+        "astroai.engine.platesolving.wcs_writer",
+        "astroai.engine.platesolving.annotation",
         "astroai.inference.backends.gpu",
         "astroai.inference.models.registry",
         "astroai.inference.scoring.frame_scorer",
