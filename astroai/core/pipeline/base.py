@@ -42,6 +42,8 @@ class PipelineContext:
     images: list[NDArray[np.floating[Any]]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     result: NDArray[np.floating[Any]] | None = None
+    starless_image: NDArray[np.floating[Any]] | None = None
+    star_mask: NDArray[np.floating[Any]] | None = None
 
 
 class PipelineStep(ABC):

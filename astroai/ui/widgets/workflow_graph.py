@@ -20,6 +20,7 @@ _COLORS: dict[StepState, tuple[QColor, QColor, QColor]] = {
     StepState.ACTIVE: (QColor(58, 42, 16), QColor(138, 106, 48), QColor(237, 224, 204)),
     StepState.DONE: (QColor(26, 42, 24), QColor(74, 122, 58), QColor(180, 220, 170)),
     StepState.ERROR: (QColor(42, 24, 24), QColor(122, 58, 58), QColor(220, 170, 170)),
+    StepState.DISABLED: (QColor(30, 28, 26), QColor(44, 40, 36), QColor(100, 92, 80)),
 }
 
 
@@ -34,22 +35,34 @@ class WorkflowGraph(QWidget):
         self.setMinimumHeight(_NODE_H + 24)
         self.setMinimumWidth(200)
         self.setAccessibleName("Pipeline-Workflow")
-        self.setToolTip("Verarbeitungs-Pipeline: Kalibrierung \u2192 Registrierung \u2192 Stacking \u2192 Stretching \u2192 Entrauschen")
+        self._update_tooltip()
 
     @Slot(str, str)
     def _on_step_changed(self, _key: str, _state: str) -> None:
+        self._update_tooltip()
         self.update()
 
     @Slot()
     def _on_reset(self) -> None:
+        self._update_tooltip()
         self.update()
 
+    def _update_tooltip(self) -> None:
+        labels = [
+            s.label for s in self._model.steps if s.state is not StepState.DISABLED
+        ]
+        self.setToolTip("Verarbeitungs-Pipeline: " + " \u2192 ".join(labels))
+
+    def _visible_steps(self) -> list:
+        return self._model.steps
+
     def _total_width(self) -> float:
-        n = len(self._model.steps)
+        steps = self._visible_steps()
+        n = len(steps)
         return n * _NODE_W + (n - 1) * _NODE_SPACING
 
     def paintEvent(self, _event: object) -> None:
-        steps = self._model.steps
+        steps = self._visible_steps()
         if not steps:
             return
 
@@ -72,6 +85,7 @@ class WorkflowGraph(QWidget):
             rects.append(rect)
 
             bg, border, text_color = _COLORS[step.state]
+            is_disabled = step.state is StepState.DISABLED
 
             path = QPainterPath()
             path.addRoundedRect(rect, _CORNER_RADIUS, _CORNER_RADIUS)
@@ -80,7 +94,10 @@ class WorkflowGraph(QWidget):
             painter.drawPath(path)
 
             pen_width = 2.5 if step.state is StepState.ACTIVE else 1.5
-            painter.setPen(QPen(border, pen_width))
+            pen = QPen(border, pen_width)
+            if is_disabled:
+                pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPath(path)
 

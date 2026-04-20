@@ -33,6 +33,7 @@ from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.log_widget import LogWidget
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
+from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.licensing.models import LicenseTier
 
@@ -114,6 +115,14 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.TopDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, wf_dock)
+
+        self._starless_panel = StarlessPanel(self._pipeline)
+        starless_dock = QDockWidget("Starless", self)
+        starless_dock.setWidget(self._starless_panel)
+        starless_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, starless_dock)
 
         self._progress = ProgressWidget()
         prog_dock = QDockWidget("Fortschritt", self)

@@ -7,6 +7,7 @@ from astroai.ui.widgets.license_badge import LicenseBadge
 from astroai.ui.widgets.log_widget import LogWidget
 from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.progress_widget import ProgressWidget
+from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 
@@ -18,6 +19,7 @@ __all__ = [
     "LogWidget",
     "OfflineBanner",
     "ProgressWidget",
+    "StarlessPanel",
     "UpgradeDialog",
     "WorkflowGraph",
 ]

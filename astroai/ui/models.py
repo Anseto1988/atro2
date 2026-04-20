@@ -12,16 +12,18 @@ class StepState(Enum):
     ACTIVE = "active"
     DONE = "done"
     ERROR = "error"
+    DISABLED = "disabled"
 
 
 class PipelineStep:
-    __slots__ = ("key", "label", "state", "progress")
+    __slots__ = ("key", "label", "state", "progress", "optional")
 
-    def __init__(self, key: str, label: str) -> None:
+    def __init__(self, key: str, label: str, *, optional: bool = False) -> None:
         self.key = key
         self.label = label
         self.state: StepState = StepState.PENDING
         self.progress: float = 0.0
+        self.optional = optional
 
 
 class PipelineModel(QObject):
@@ -30,20 +32,99 @@ class PipelineModel(QObject):
     step_changed = Signal(str, str)  # (step_key, new_state_value)
     progress_changed = Signal(str, float)  # (step_key, 0.0-1.0)
     pipeline_reset = Signal()
+    starless_config_changed = Signal()
 
     DEFAULT_STEPS = [
-        ("calibrate", "Kalibrierung"),
-        ("register", "Registrierung"),
-        ("stack", "Stacking"),
-        ("stretch", "Stretching"),
-        ("denoise", "Entrauschen"),
+        ("calibrate", "Kalibrierung", False),
+        ("register", "Registrierung", False),
+        ("stack", "Stacking", False),
+        ("stretch", "Stretching", False),
+        ("denoise", "Entrauschen", False),
+        ("starless", "Starless", True),
+        ("export", "Export", False),
     ]
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._steps: list[PipelineStep] = [
-            PipelineStep(k, lbl) for k, lbl in self.DEFAULT_STEPS
+            PipelineStep(k, lbl, optional=opt) for k, lbl, opt in self.DEFAULT_STEPS
         ]
+        self._starless_enabled: bool = False
+        self._starless_strength: float = 1.0
+        self._starless_format: str = "xisf"
+        self._save_star_mask: bool = True
+        self._update_starless_step_state()
+
+    # -- starless config properties --
+
+    @property
+    def starless_enabled(self) -> bool:
+        return self._starless_enabled
+
+    @starless_enabled.setter
+    def starless_enabled(self, value: bool) -> None:
+        if self._starless_enabled == value:
+            return
+        self._starless_enabled = value
+        self._update_starless_step_state()
+        self.starless_config_changed.emit()
+
+    @property
+    def starless_strength(self) -> float:
+        return self._starless_strength
+
+    @starless_strength.setter
+    def starless_strength(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._starless_strength == value:
+            return
+        self._starless_strength = value
+        self.starless_config_changed.emit()
+
+    @property
+    def starless_format(self) -> str:
+        return self._starless_format
+
+    @starless_format.setter
+    def starless_format(self, value: str) -> None:
+        if self._starless_format == value:
+            return
+        self._starless_format = value
+        self.starless_config_changed.emit()
+
+    @property
+    def save_star_mask(self) -> bool:
+        return self._save_star_mask
+
+    @save_star_mask.setter
+    def save_star_mask(self, value: bool) -> None:
+        if self._save_star_mask == value:
+            return
+        self._save_star_mask = value
+        self.starless_config_changed.emit()
+
+    def _update_starless_step_state(self) -> None:
+        step = self.step_by_key("starless")
+        if step is None:
+            return
+        if not self._starless_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("starless", StepState.DISABLED.value)
+        elif self._starless_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("starless", StepState.PENDING.value)
+
+    # -- export config bridge --
+
+    def export_config(self) -> dict[str, Any]:
+        """Return ExportStep-compatible parameters derived from UI state."""
+        return {
+            "fmt_value": self._starless_format,
+            "export_starless": self._starless_enabled,
+            "export_star_mask": self._starless_enabled and self._save_star_mask,
+        }
+
+    # -- step access --
 
     @property
     def steps(self) -> list[PipelineStep]:
@@ -71,13 +152,18 @@ class PipelineModel(QObject):
 
     def reset(self) -> None:
         for step in self._steps:
-            step.state = StepState.PENDING
+            if step.optional and not self._starless_enabled:
+                step.state = StepState.DISABLED
+            else:
+                step.state = StepState.PENDING
             step.progress = 0.0
         self.pipeline_reset.emit()
 
     def advance_to(self, key: str) -> None:
         found = False
         for step in self._steps:
+            if step.state is StepState.DISABLED:
+                continue
             if step.key == key:
                 step.state = StepState.ACTIVE
                 step.progress = 0.0

@@ -35,6 +35,16 @@ _NAFNET_MANIFEST = {
     },
 }
 
+_STARNET_MANIFEST = {
+    "starnet_plus_plus": {
+        "url": "https://github.com/AstroAI-Suite/models/releases/download/v0.1.0/starnet_plus_plus.onnx",
+        "sha256": "placeholder_no_public_url_available",
+        "filename": "starnet_plus_plus.onnx",
+        "description": "StarNet++ star removal model (ONNX, MIT)",
+        "available": False,
+    },
+}
+
 
 @dataclass
 class ModelManifestEntry:
@@ -63,19 +73,23 @@ class ModelDownloader:
 
     def get_manifest(self) -> dict[str, ModelManifestEntry]:
         entries: dict[str, ModelManifestEntry] = {}
-        for name, info in _NAFNET_MANIFEST.items():
-            entries[name] = ModelManifestEntry(
-                name=name,
-                url=info["url"],
-                sha256=info["sha256"],
-                filename=info["filename"],
-                description=info.get("description", ""),
-            )
+        for source in (_NAFNET_MANIFEST, _STARNET_MANIFEST):
+            for name, info in source.items():
+                entries[name] = ModelManifestEntry(
+                    name=name,
+                    url=info["url"],
+                    sha256=info["sha256"],
+                    filename=info["filename"],
+                    description=info.get("description", ""),
+                )
         return entries
 
     def is_available(self, name: str) -> bool:
         manifest = self.get_manifest()
         if name not in manifest:
+            return False
+        source_info = _NAFNET_MANIFEST.get(name) or _STARNET_MANIFEST.get(name)
+        if source_info and not source_info.get("available", True):
             return False
         path = self._models_dir / manifest[name].filename
         return path.exists() and self._verify_checksum(path, manifest[name].sha256)

@@ -63,3 +63,57 @@ class TestExportStep:
         ctx = PipelineContext(images=[data])
         ExportStep(out_dir, fmt=ExportFormat.FITS).execute(ctx)
         assert out_dir.exists()
+
+
+class TestExportStepStarOutputs:
+    def test_export_starless(self, tmp_path: Path) -> None:
+        data = np.random.default_rng(10).random((32, 32)).astype(np.float32)
+        starless = np.random.default_rng(11).random((32, 32)).astype(np.float32)
+        ctx = PipelineContext(result=data, starless_image=starless)
+        step = ExportStep(
+            tmp_path, fmt=ExportFormat.FITS,
+            filename="astro", export_starless=True,
+        )
+        result = step.execute(ctx)
+        assert (tmp_path / "astro.fits").exists()
+        assert (tmp_path / "astro_starless.fits").exists()
+        assert "export_starless_path" in result.metadata
+
+    def test_export_star_mask(self, tmp_path: Path) -> None:
+        data = np.random.default_rng(12).random((32, 32)).astype(np.float32)
+        mask = (np.random.default_rng(13).random((32, 32)) > 0.9).astype(np.float32)
+        ctx = PipelineContext(result=data, star_mask=mask)
+        step = ExportStep(
+            tmp_path, fmt=ExportFormat.TIFF32,
+            filename="nebula", export_star_mask=True,
+        )
+        result = step.execute(ctx)
+        assert (tmp_path / "nebula.tif").exists()
+        assert (tmp_path / "nebula_starmask.tif").exists()
+        assert "export_starmask_path" in result.metadata
+
+    def test_no_starless_skips_export(self, tmp_path: Path) -> None:
+        data = np.zeros((16, 16), dtype=np.float32)
+        ctx = PipelineContext(result=data)
+        step = ExportStep(
+            tmp_path, fmt=ExportFormat.FITS,
+            export_starless=True, export_star_mask=True,
+        )
+        result = step.execute(ctx)
+        assert (tmp_path / "output.fits").exists()
+        assert "export_starless_path" not in result.metadata
+        assert "export_starmask_path" not in result.metadata
+
+    def test_both_star_outputs(self, tmp_path: Path) -> None:
+        data = np.random.default_rng(14).random((32, 32)).astype(np.float32)
+        starless = np.random.default_rng(15).random((32, 32)).astype(np.float32)
+        mask = (np.random.default_rng(16).random((32, 32)) > 0.8).astype(np.float32)
+        ctx = PipelineContext(result=data, starless_image=starless, star_mask=mask)
+        step = ExportStep(
+            tmp_path, fmt=ExportFormat.XISF,
+            filename="m42", export_starless=True, export_star_mask=True,
+        )
+        result = step.execute(ctx)
+        assert (tmp_path / "m42.xisf").exists()
+        assert (tmp_path / "m42_starless.xisf").exists()
+        assert (tmp_path / "m42_starmask.xisf").exists()

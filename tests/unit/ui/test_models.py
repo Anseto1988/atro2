@@ -22,9 +22,9 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 5
+        assert len(steps) == 7
         assert steps[0].key == "calibrate"
-        assert steps[-1].key == "denoise"
+        assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
         assert model.step_by_key("stack") is not None
@@ -57,7 +57,10 @@ class TestPipelineModel:
         model.set_step_progress("calibrate", 1.0)
         model.reset()
         for step in model.steps:
-            assert step.state is StepState.PENDING
+            if step.optional and not model.starless_enabled:
+                assert step.state is StepState.DISABLED
+            else:
+                assert step.state is StepState.PENDING
             assert step.progress == 0.0
 
     def test_advance_to(self, model: PipelineModel) -> None:
@@ -79,3 +82,196 @@ class TestPipelineModel:
     def test_pipeline_reset_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.pipeline_reset, timeout=500):
             model.reset()
+
+
+class TestPipelineModelStarless:
+    """Tests for PipelineModel starless configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    # -- starless_enabled property --
+
+    def test_starless_enabled_default(self, model: PipelineModel) -> None:
+        assert model.starless_enabled is False
+
+    def test_starless_enabled_setter(self, model: PipelineModel) -> None:
+        model.starless_enabled = True
+        assert model.starless_enabled is True
+
+    def test_starless_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.starless_config_changed, timeout=500):
+            model.starless_enabled = True
+
+    def test_starless_enabled_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        """Setting the same value should NOT emit a signal (no-op optimization)."""
+        # Default is False, setting False again should be a no-op
+        signals = []
+        model.starless_config_changed.connect(lambda: signals.append(True))
+        model.starless_enabled = False
+        assert len(signals) == 0
+
+    def test_starless_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        """Enabling starless should change the starless step from DISABLED to PENDING."""
+        step = model.step_by_key("starless")
+        assert step is not None
+        assert step.state is StepState.DISABLED  # initially disabled
+        model.starless_enabled = True
+        assert step.state is StepState.PENDING
+
+    def test_starless_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        """Disabling starless should change the starless step from PENDING to DISABLED."""
+        model.starless_enabled = True
+        step = model.step_by_key("starless")
+        assert step is not None
+        assert step.state is StepState.PENDING
+        model.starless_enabled = False
+        assert step.state is StepState.DISABLED
+
+    def test_starless_enabled_emits_step_changed(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        """Toggling starless_enabled should emit step_changed with the new state."""
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.starless_enabled = True
+        assert blocker.args == ["starless", StepState.PENDING.value]
+
+    # -- starless_strength property --
+
+    def test_starless_strength_default(self, model: PipelineModel) -> None:
+        assert model.starless_strength == 1.0
+
+    def test_starless_strength_setter(self, model: PipelineModel) -> None:
+        model.starless_strength = 0.7
+        assert model.starless_strength == pytest.approx(0.7)
+
+    def test_starless_strength_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.starless_config_changed, timeout=500):
+            model.starless_strength = 0.5
+
+    def test_starless_strength_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        """Setting the same value should NOT emit a signal."""
+        signals = []
+        model.starless_config_changed.connect(lambda: signals.append(True))
+        model.starless_strength = 1.0  # default is 1.0
+        assert len(signals) == 0
+
+    def test_starless_strength_clamps_above_one(self, model: PipelineModel) -> None:
+        model.starless_strength = 2.5
+        assert model.starless_strength == 1.0
+
+    def test_starless_strength_clamps_below_zero(self, model: PipelineModel) -> None:
+        model.starless_strength = -0.3
+        assert model.starless_strength == 0.0
+
+    def test_starless_strength_boundary_zero(self, model: PipelineModel) -> None:
+        model.starless_strength = 0.0
+        assert model.starless_strength == 0.0
+
+    def test_starless_strength_boundary_one(self, model: PipelineModel) -> None:
+        model.starless_strength = 1.0
+        # Default is already 1.0 so no signal, but value stays valid
+        assert model.starless_strength == 1.0
+
+    # -- starless_format property --
+
+    def test_starless_format_default(self, model: PipelineModel) -> None:
+        assert model.starless_format == "xisf"
+
+    def test_starless_format_setter(self, model: PipelineModel) -> None:
+        model.starless_format = "fits"
+        assert model.starless_format == "fits"
+
+    def test_starless_format_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.starless_config_changed, timeout=500):
+            model.starless_format = "tiff"
+
+    def test_starless_format_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        """Setting the same value should NOT emit a signal."""
+        signals = []
+        model.starless_config_changed.connect(lambda: signals.append(True))
+        model.starless_format = "xisf"  # default
+        assert len(signals) == 0
+
+    # -- save_star_mask property --
+
+    def test_save_star_mask_default(self, model: PipelineModel) -> None:
+        assert model.save_star_mask is True
+
+    def test_save_star_mask_setter(self, model: PipelineModel) -> None:
+        model.save_star_mask = False
+        assert model.save_star_mask is False
+
+    def test_save_star_mask_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.starless_config_changed, timeout=500):
+            model.save_star_mask = False
+
+    def test_save_star_mask_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        """Setting the same value should NOT emit a signal."""
+        signals = []
+        model.starless_config_changed.connect(lambda: signals.append(True))
+        model.save_star_mask = True  # default
+        assert len(signals) == 0
+
+    # -- export_config method --
+
+    def test_export_config_default(self, model: PipelineModel) -> None:
+        """Default config: starless disabled, so export_starless/star_mask are False."""
+        config = model.export_config()
+        assert config == {
+            "fmt_value": "xisf",
+            "export_starless": False,
+            "export_star_mask": False,
+        }
+
+    def test_export_config_starless_enabled(self, model: PipelineModel) -> None:
+        """When starless is enabled and save_star_mask=True, both flags are True."""
+        model.starless_enabled = True
+        config = model.export_config()
+        assert config == {
+            "fmt_value": "xisf",
+            "export_starless": True,
+            "export_star_mask": True,
+        }
+
+    def test_export_config_starless_enabled_no_mask(self, model: PipelineModel) -> None:
+        """When starless is enabled but save_star_mask=False, mask export is False."""
+        model.starless_enabled = True
+        model.save_star_mask = False
+        config = model.export_config()
+        assert config == {
+            "fmt_value": "xisf",
+            "export_starless": True,
+            "export_star_mask": False,
+        }
+
+    def test_export_config_respects_format(self, model: PipelineModel) -> None:
+        """Export config should reflect the current format setting."""
+        model.starless_format = "fits"
+        config = model.export_config()
+        assert config["fmt_value"] == "fits"
+
+    def test_export_config_disabled_ignores_mask_setting(self, model: PipelineModel) -> None:
+        """When starless is disabled, export_star_mask is False regardless of save_star_mask."""
+        model.save_star_mask = True  # default, but explicit
+        model.starless_enabled = False
+        config = model.export_config()
+        assert config["export_star_mask"] is False
+
+    # -- reset interaction with starless --
+
+    def test_reset_keeps_starless_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        """After reset, optional starless step should stay DISABLED if starless is off."""
+        model.set_step_state("starless", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("starless")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_starless_pending_when_enabled(self, model: PipelineModel) -> None:
+        """After reset, starless step should be PENDING if starless is enabled."""
+        model.starless_enabled = True
+        model.set_step_state("starless", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("starless")
+        assert step is not None
+        assert step.state is StepState.PENDING
