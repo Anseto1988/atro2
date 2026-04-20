@@ -26,6 +26,10 @@ models/*.pt
 .idea/
 *.swp
 
+# Paperclip artifacts
+scripts/*.json
+ver*_analysis.md
+
 # OS
 .DS_Store
 Thumbs.db
