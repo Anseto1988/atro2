@@ -9,7 +9,7 @@ packages = [{include = "astroai"}]
 [tool.poetry.dependencies]
 python = ">=3.12,<3.13"
 PySide6 = "^6.7"
-torch = {version = "^2.3", extras = ["cuda121"]}
+torch = "^2.3"
 torchvision = "^0.18"
 numpy = "^1.26"
 astropy = "^6.1"
