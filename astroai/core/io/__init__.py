@@ -1,12 +1,16 @@
 from astroai.core.io.fits_io import ImageMetadata, read_fits, write_fits
-from astroai.core.io.xisf_io import read_xisf
+from astroai.core.io.tiff_io import read_tiff, write_tiff32
+from astroai.core.io.xisf_io import read_xisf, write_xisf
 
 __all__ = [
     "ImageMetadata",
     "read_fits",
     "read_raw",
+    "read_tiff",
     "read_xisf",
     "write_fits",
+    "write_tiff32",
+    "write_xisf",
 ]
 
 

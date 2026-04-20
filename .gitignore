@@ -30,6 +30,9 @@ models/*.pt
 scripts/*.json
 ver*_analysis.md
 
+# Project status reports (generated, not source)
+projektstand/
+
 # PyInstaller
 *.manifest
 *.spec.bak

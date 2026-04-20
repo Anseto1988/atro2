@@ -81,6 +81,82 @@ def _parse_xisf_metadata(root: ET.Element) -> ImageMetadata:
     )
 
 
+_DTYPE_REVERSE_MAP: dict[np.dtype[Any], str] = {v: k for k, v in _DTYPE_MAP.items()}
+
+
+def write_xisf(
+    path: str | Path,
+    data: NDArray[np.floating[Any]],
+    metadata: ImageMetadata | None = None,
+) -> Path:
+    path = Path(path)
+    if data.ndim == 2:
+        channels, height, width = 1, data.shape[0], data.shape[1]
+        data = data.reshape(1, height, width)
+    elif data.ndim == 3:
+        channels, height, width = data.shape
+    else:
+        raise ValueError(f"Expected 2D or 3D array, got {data.ndim}D")
+
+    data = data.astype(np.float32)
+    raw_bytes = data.tobytes()
+    sample_format = _DTYPE_REVERSE_MAP.get(data.dtype, "Float32")
+
+    ns = "http://www.pixinsight.com/xisf"
+
+    def _build_xml(attachment_offset: int) -> bytes:
+        root = ET.Element(f"{{{ns}}}xisf", attrib={"version": "1.0"})
+        geometry = f"{width}:{height}:{channels}"
+        location = f"attachment:{attachment_offset}:{len(raw_bytes)}"
+        img = ET.SubElement(root, f"{{{ns}}}Image", attrib={
+            "geometry": geometry,
+            "sampleFormat": sample_format,
+            "location": location,
+        })
+        if metadata:
+            if metadata.exposure is not None:
+                ET.SubElement(img, f"{{{ns}}}Property", attrib={
+                    "id": "Instrument:Exposure", "type": "Float64",
+                    "value": str(metadata.exposure),
+                })
+            if metadata.gain_iso is not None:
+                ET.SubElement(img, f"{{{ns}}}Property", attrib={
+                    "id": "Instrument:Sensor:Gain", "type": "Int32",
+                    "value": str(metadata.gain_iso),
+                })
+            if metadata.temperature is not None:
+                ET.SubElement(img, f"{{{ns}}}Property", attrib={
+                    "id": "Instrument:Sensor:Temperature", "type": "Float64",
+                    "value": str(metadata.temperature),
+                })
+            if metadata.date_obs is not None:
+                ET.SubElement(img, f"{{{ns}}}Property", attrib={
+                    "id": "Observation:Time:Start", "type": "String",
+                    "value": metadata.date_obs,
+                })
+            if metadata.extra:
+                for key, val in metadata.extra.items():
+                    ET.SubElement(img, f"{{{ns}}}FITSKeyword", attrib={
+                        "name": key, "value": f"'{val}'", "comment": "",
+                    })
+        return ET.tostring(root, encoding="unicode").encode("utf-8")
+
+    draft = _build_xml(0)
+    padded_len = (len(draft) + 127) // 128 * 128
+    attachment_offset = 16 + padded_len
+    final_xml = _build_xml(attachment_offset)
+    header_padded = final_xml.ljust(padded_len, b"\x00")
+
+    with open(path, "wb") as f:
+        f.write(XISF_MAGIC)
+        f.write(struct.pack("<I", padded_len))
+        f.write(b"\x00" * 4)
+        f.write(header_padded)
+        f.write(raw_bytes)
+
+    return path
+
+
 def read_xisf(path: str | Path) -> tuple[NDArray[np.floating[Any]], ImageMetadata]:
     path = Path(path)
     with open(path, "rb") as f:
