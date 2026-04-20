@@ -1,0 +1,17 @@
+{
+  "models": [
+    {
+      "name": "nafnet_denoise",
+      "filename": "nafnet_denoise.onnx",
+      "version": "0.1.0",
+      "description": "NAFNet-based GPU-accelerated image denoiser for astrophotography",
+      "sha256": "placeholder-pending-model-upload",
+      "size_bytes": null,
+      "url": "https://github.com/Anseto1988/atro2/releases/download/v0.1.0-alpha/nafnet_denoise.onnx",
+      "license": "MIT",
+      "required": true
+    }
+  ],
+  "registry_version": "1.0.0",
+  "last_updated": "2026-04-20"
+}
