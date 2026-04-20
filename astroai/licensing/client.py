@@ -30,8 +30,11 @@ class LicenseClient:
     def _url(self, path: str) -> str:
         return f"{self._base_url}{path}"
 
-    def activate(self, license_key: str, app_version: str) -> str:
-        """Activate a license key on this machine. Returns the raw JWT token."""
+    def activate(self, license_key: str, app_version: str) -> tuple[str, str | None]:
+        """Activate a license key on this machine.
+
+        Returns (raw_jwt, raw_attestation). Attestation may be None for legacy servers.
+        """
         payload: dict[str, str] = {
             "license_key": license_key,
             "machine_id": get_machine_id(),
@@ -48,16 +51,18 @@ class LicenseClient:
 
         if resp.status_code == 200:
             data: dict[str, Any] = resp.json()
-            token: str = data["token"]
-            return token
+            return data["token"], data.get("attestation")
 
         error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
         code = error_data.get("error", f"http_{resp.status_code}")
         detail = error_data.get("detail", "")
         raise ActivationError(code, detail)
 
-    def refresh(self, current_token: str) -> str:
-        """Refresh a license token. Returns the new raw JWT."""
+    def refresh(self, current_token: str) -> tuple[str, str | None]:
+        """Refresh a license token.
+
+        Returns (new_raw_jwt, new_raw_attestation). Attestation may be None for legacy servers.
+        """
         try:
             resp = httpx.post(
                 self._url("/api/v1/license/refresh"),
@@ -69,8 +74,7 @@ class LicenseClient:
 
         if resp.status_code == 200:
             data: dict[str, Any] = resp.json()
-            token: str = data["token"]
-            return token
+            return data["token"], data.get("attestation")
 
         error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
         code = error_data.get("error", f"http_{resp.status_code}")

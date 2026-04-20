@@ -39,12 +39,24 @@ class LicenseToken:
         return plugin_name in self.plugins
 
 
+@dataclass(frozen=True, slots=True)
+class TimeAttestation:
+    """Server-signed proof of last online timestamp (RS256-verified)."""
+
+    user_id: str
+    machine_id: str
+    last_online_at: datetime  # server-authoritative UTC timestamp
+    iat: datetime
+
+
 @dataclass(slots=True)
 class LicenseStatus:
     """Runtime license state (persisted alongside the token)."""
 
     token: LicenseToken | None = None
+    attestation: TimeAttestation | None = None  # server-signed time proof
     last_online_at: datetime | None = None
     activated: bool = False
     grace_remaining_days: int = 7
     allowed_plugins: Sequence[str] = field(default_factory=list)
+    start_counter: int = 0  # offline app-start count (resets on online refresh)

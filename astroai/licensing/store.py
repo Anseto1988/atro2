@@ -45,19 +45,30 @@ class LicenseStore:
         self._fernet = Fernet(self._key)
         self._file = self._dir / _LICENSE_FILE
 
-    def save(self, token_raw: str, last_online_at: datetime) -> None:
-        """Encrypt and persist a raw JWT token and metadata."""
+    def save(
+        self,
+        token_raw: str,
+        last_online_at: datetime,
+        attestation_raw: str | None = None,
+        start_counter: int = 0,
+    ) -> None:
+        """Encrypt and persist license data including server attestation."""
         payload: dict[str, Any] = {
             "token": token_raw,
             "last_online_at": last_online_at.isoformat(),
             "machine_id": get_machine_id(),
+            "attestation": attestation_raw,
+            "start_counter": start_counter,
         }
         data = json.dumps(payload).encode()
         encrypted = self._fernet.encrypt(data)
         self._file.write_bytes(encrypted)
 
-    def load(self) -> tuple[str, datetime] | None:
-        """Load and decrypt stored license data. Returns (raw_jwt, last_online_at) or None."""
+    def load(self) -> tuple[str, datetime, str | None, int] | None:
+        """Load and decrypt stored license data.
+
+        Returns (raw_jwt, last_online_at, raw_attestation, start_counter) or None.
+        """
         if not self._file.exists():
             return None
         try:
@@ -68,9 +79,21 @@ class LicenseStore:
             last_online_at = datetime.fromisoformat(payload["last_online_at"])
             if last_online_at.tzinfo is None:
                 last_online_at = last_online_at.replace(tzinfo=timezone.utc)
-            return token_raw, last_online_at
+            attestation_raw: str | None = payload.get("attestation")
+            start_counter: int = int(payload.get("start_counter", 0))
+            return token_raw, last_online_at, attestation_raw, start_counter
         except (InvalidToken, KeyError, json.JSONDecodeError, ValueError) as e:
             raise LicenseError(f"Corrupt license store: {e}") from e
+
+    def increment_start_counter(self) -> int:
+        """Increment offline start counter and persist. Returns new count."""
+        loaded = self.load()
+        if loaded is None:
+            raise LicenseError("No license data to increment start counter")
+        token_raw, last_online_at, attestation_raw, start_counter = loaded
+        new_count = start_counter + 1
+        self.save(token_raw, last_online_at, attestation_raw, new_count)
+        return new_count
 
     def clear(self) -> None:
         """Remove stored license data."""

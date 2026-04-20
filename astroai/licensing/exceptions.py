@@ -37,6 +37,25 @@ class RefreshError(LicenseError):
         super().__init__(f"Refresh failed: {code}" + (f" — {detail}" if detail else ""))
 
 
+class OfflineStartLimitExceeded(LicenseError):
+    """Raised when the offline app-start counter exceeds the maximum allowed."""
+
+    def __init__(self, starts: int, limit: int) -> None:
+        self.starts = starts
+        self.limit = limit
+        super().__init__(f"Offline start limit reached ({starts}/{limit}) — please connect to internet")
+
+
+class TimeRollbackDetected(LicenseError):
+    """Raised when system clock is behind the server-attested last_online_at."""
+
+    def __init__(self, delta_seconds: float) -> None:
+        self.delta_seconds = delta_seconds
+        super().__init__(
+            f"System clock rollback detected ({delta_seconds:.0f}s behind last server sync)"
+        )
+
+
 class TierInsufficientError(LicenseError):
     """Raised when the user's tier does not grant access to a model."""
 
