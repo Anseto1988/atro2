@@ -33,6 +33,7 @@ from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.license_badge import LicenseBadge
 from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.log_widget import LogWidget
+from astroai.ui.widgets.calibration_benchmark import CalibrationBenchmarkWidget
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.annotation_panel import AnnotationPanel
@@ -41,6 +42,7 @@ from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.ui.overlay.annotation_overlay import AnnotationOverlay
+from astroai.ui.widgets.sky_overlay import SkyOverlay
 from astroai.licensing.models import LicenseTier
 
 __all__ = ["MainWindow", "main"]
@@ -102,9 +104,11 @@ class MainWindow(QMainWindow):
         stack.setContentsMargins(0, 0, 0, 0)
 
         self._viewer = ImageViewer()
+        self._sky_overlay = SkyOverlay(self._viewer)
         self._annotation_overlay = AnnotationOverlay(self._viewer)
 
         stack.addWidget(self._viewer)
+        stack.addWidget(self._sky_overlay)
         stack.addWidget(self._annotation_overlay)
 
         central_layout.addWidget(viewer_container, stretch=1)
@@ -168,6 +172,12 @@ class MainWindow(QMainWindow):
         prog_dock.setWidget(self._progress)
         prog_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, prog_dock)
+
+        self._benchmark = CalibrationBenchmarkWidget()
+        bench_dock = QDockWidget("Kalibrierungs-Benchmark", self)
+        bench_dock.setWidget(self._benchmark)
+        bench_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, bench_dock)
 
         self._log_widget = LogWidget()
         self._log_dock = QDockWidget("Fehler-Log", self)
@@ -387,16 +397,72 @@ class MainWindow(QMainWindow):
         dlg = ActivationDialog(self._license, self)
         dlg.exec()
 
-    def set_wcs_solution(self, wcs: object | None) -> None:
-        """Called by plate-solve pipeline to activate annotation overlay."""
-        from astroai.ui.overlay.sky_objects import WcsTransform
+    def set_wcs_solution(
+        self,
+        wcs: object | None,
+        image_shape: tuple[int, int] | None = None,
+    ) -> None:
+        """Activate annotation overlay from plate-solve result.
 
-        if wcs is not None and isinstance(wcs, WcsTransform):
-            self._annotation_overlay.set_wcs(wcs)
-            self._annotation_panel.set_wcs_active(True)
+        Accepts:
+          - engine AnnotationOverlay (from platesolving.annotation)
+          - SolveResult (requires image_shape)
+          - astropy WCS (requires image_shape)
+          - WcsTransform protocol instance
+          - None to clear
+        """
+        from astroai.ui.overlay.sky_objects import WcsTransform
+        from astroai.ui.overlay.wcs_adapter import WcsAdapter
+
+        adapter: WcsTransform | None = None
+
+        if wcs is None:
+            pass
+        elif isinstance(wcs, WcsTransform):
+            adapter = wcs
         else:
-            self._annotation_overlay.set_wcs(None)
-            self._annotation_panel.set_wcs_active(False)
+            try:
+                from astroai.engine.platesolving.annotation import (
+                    AnnotationOverlay as EngineOverlay,
+                )
+
+                if isinstance(wcs, EngineOverlay):
+                    adapter = WcsAdapter.from_engine_overlay(wcs)
+            except ImportError:
+                pass
+
+            if adapter is None and image_shape is not None:
+                try:
+                    from astroai.engine.platesolving.solver import SolveResult
+
+                    if isinstance(wcs, SolveResult):
+                        adapter = WcsAdapter.from_solve_result(wcs, image_shape)
+                except ImportError:
+                    pass
+
+            if adapter is None and image_shape is not None:
+                try:
+                    from astropy.wcs import WCS
+
+                    if isinstance(wcs, WCS):
+                        h, w = image_shape
+                        adapter = WcsAdapter(wcs, w, h)
+                except ImportError:
+                    pass
+
+        self._annotation_overlay.set_wcs(adapter)
+        self._annotation_panel.set_wcs_active(adapter is not None)
+
+        wcs_solution = None
+        if adapter is not None:
+            try:
+                from astroai.astrometry.catalog import WcsSolution
+
+                if isinstance(wcs, WcsSolution):
+                    wcs_solution = wcs
+            except ImportError:
+                pass
+        self._sky_overlay.set_solution(wcs_solution)
 
     def require_tier(self, feature_name: str, required: LicenseTier) -> bool:
         """Check tier access; shows UpgradeDialog if insufficient. Returns True if allowed."""

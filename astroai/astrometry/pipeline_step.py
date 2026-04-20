@@ -66,8 +66,6 @@ class AstrometryStep(PipelineStep):
         context: PipelineContext,
         progress: ProgressCallback = _noop_callback,
     ) -> PipelineContext:
-        import numpy as np
-
         progress(PipelineProgress(
             stage=self.stage,
             current=0,

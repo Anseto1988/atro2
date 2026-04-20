@@ -44,6 +44,14 @@ astroai = "astroai.ui.main.app:main"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.pytest.ini_options]
+markers = [
+    "gpu: requires real GPU hardware (CUDA or MPS)",
+    "benchmark: performance benchmark (excluded from CI)",
+    "slow: tests with large arrays (>1024x1024)",
+]
+addopts = "-m 'not benchmark'"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

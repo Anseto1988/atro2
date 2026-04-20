@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import math
 import platform
-import shutil
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path

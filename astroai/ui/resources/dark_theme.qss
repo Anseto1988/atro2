@@ -397,6 +397,62 @@ QLabel#annotationStatusActive {
     padding: 2px 0px;
 }
 
+/* Calibration benchmark widget */
+QWidget#calibrationBenchmark {
+    background-color: #1e1810;
+    border: 1px solid #3a2e1e;
+    border-radius: 6px;
+}
+
+QLabel#benchmarkBadgeCuda {
+    background-color: #1a3a18;
+    color: #78c868;
+    border: 1px solid #3a6a30;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+QLabel#benchmarkBadgeMps {
+    background-color: #1a2a3a;
+    color: #68a8c8;
+    border: 1px solid #30586a;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+QLabel#benchmarkBadgeCpu {
+    background-color: #3a2e1e;
+    color: #a89478;
+    border: 1px solid #4a3a24;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+QLabel#benchmarkMetricTitle {
+    color: #6a5a44;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+QLabel#benchmarkMetricValue {
+    color: #ede0cc;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+QLabel#benchmarkEta {
+    color: #c8a860;
+    font-size: 12px;
+    font-style: italic;
+}
+
 /* Upgrade dialog */
 QLabel#upgradeBody {
     font-size: 13px;

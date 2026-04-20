@@ -1,5 +1,6 @@
 """Custom AstroAI widgets."""
 
+from astroai.ui.widgets.calibration_benchmark import CalibrationBenchmarkWidget
 from astroai.ui.widgets.activation_dialog import ActivationDialog
 from astroai.ui.widgets.annotation_panel import AnnotationPanel
 from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
@@ -15,6 +16,7 @@ from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 
 __all__ = [
+    "CalibrationBenchmarkWidget",
     "ActivationDialog",
     "AnnotationPanel",
     "ChannelCombinerPanel",

@@ -43,7 +43,6 @@ class AstapSolver:
         fov_deg: float = 0.0,
         timeout: int = 120,
     ) -> None:
-        import math
         self._solver = PlateSolver(
             astap_path=Path(executable) if executable else None,
             search_radius_deg=search_radius_deg,
@@ -145,7 +144,7 @@ class AstapSolver:
         from astropy.io import fits as _fits
 
         with _fits.open(wcs_path) as hdul:
-            hdr = hdul[0].header  # type: ignore[index]
+            hdr = hdul[0].header
 
         def _get(key: str, default: float = 0.0) -> float:
             val = hdr.get(key, default)

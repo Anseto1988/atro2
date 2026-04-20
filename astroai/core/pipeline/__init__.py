@@ -7,6 +7,7 @@ from astroai.core.pipeline.base import (
     ProgressCallback,
 )
 from astroai.core.pipeline.export_step import ExportFormat, ExportStep
+from astroai.core.pipeline.platesolving_step import PlateSolvingStep
 
 __all__ = [
     "ExportFormat",
@@ -16,5 +17,6 @@ __all__ = [
     "PipelineProgress",
     "PipelineStage",
     "PipelineStep",
+    "PlateSolvingStep",
     "ProgressCallback",
 ]

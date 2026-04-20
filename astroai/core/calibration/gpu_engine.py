@@ -17,7 +17,19 @@ class GPUCalibrationEngine:
     """GPU-accelerated calibration via PyTorch (CUDA / MPS / CPU fallback)."""
 
     def __init__(self) -> None:
-        self._device = DeviceManager().get_device()
+        device = DeviceManager().get_device()
+        self._device = self._validate_device(device)
+
+    @staticmethod
+    def _validate_device(device: torch.device) -> torch.device:
+        """Return device only if a test tensor actually runs on it; else CPU."""
+        if device.type == "cpu":
+            return device
+        try:
+            torch.zeros(1, device=device)
+            return device
+        except Exception:
+            return torch.device("cpu")
 
     def _to_tensor(self, arr: NDArray[np.floating[Any]]) -> torch.Tensor:
         return torch.from_numpy(arr.astype(np.float32)).to(self._device)

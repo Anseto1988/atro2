@@ -266,3 +266,59 @@ class TestFindInPath:
             from astroai.engine.platesolving.astap_binary import _find_in_path
             result = _find_in_path()
             assert result is None
+
+
+class TestExtractArchive:
+    def test_extract_tar_gz(self, tmp_path: Path) -> None:
+        import tarfile
+        from astroai.engine.platesolving.astap_binary import _extract_archive
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "astap").write_bytes(b"binary content")
+
+        archive = tmp_path / "astap.tar.gz"
+        with tarfile.open(str(archive), "w:gz") as tf:
+            tf.add(str(src_dir / "astap"), arcname="astap")
+
+        dest = tmp_path / "dest"
+        _extract_archive(archive, dest)
+        assert (dest / "astap").exists()
+
+    def test_extract_zip(self, tmp_path: Path) -> None:
+        import zipfile
+        from astroai.engine.platesolving.astap_binary import _extract_archive
+
+        archive = tmp_path / "astap.zip"
+        with zipfile.ZipFile(str(archive), "w") as zf:
+            zf.writestr("astap.exe", b"binary content")
+
+        dest = tmp_path / "dest"
+        _extract_archive(archive, dest)
+        assert (dest / "astap.exe").exists()
+
+    def test_extract_unknown_copies(self, tmp_path: Path) -> None:
+        from astroai.engine.platesolving.astap_binary import _extract_archive
+
+        archive = tmp_path / "astap.bin"
+        archive.write_bytes(b"raw binary")
+
+        dest = tmp_path / "dest"
+        _extract_archive(archive, dest)
+        assert (dest / "astap.bin").exists()
+
+
+class TestDownloadAstap:
+    def test_download_skips_if_already_present(self, tmp_path: Path) -> None:
+        from astroai.engine.platesolving.astap_binary import download_astap, _get_spec
+
+        spec = _get_spec()
+        target_dir = tmp_path / spec.key
+        target_dir.mkdir(parents=True)
+        binary = target_dir / spec.binary_name
+        binary.write_bytes(b"existing")
+        if platform.system() != "Windows":
+            binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+
+        result = download_astap(target_dir)
+        assert result == binary
