@@ -5,11 +5,13 @@ export interface Env {
   MODELS_BUCKET: R2Bucket;
   JWT_PRIVATE_KEY: string;
   JWT_PUBLIC_KEY: string;
+  STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   R2_ACCOUNT_ID: string;
   R2_BUCKET_NAME: string;
+  ALLOWED_ORIGIN: string;
 }
 
 export type AppContext = Context<{ Bindings: Env; Variables: { claims?: JwtClaims } }>;

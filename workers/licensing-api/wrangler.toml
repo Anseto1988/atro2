@@ -1,0 +1,31 @@
+name = "astroai-licensing-api"
+main = "src/index.ts"
+compatibility_date = "2024-05-01"
+
+[vars]
+R2_BUCKET_NAME = "astroai-models"
+ALLOWED_ORIGIN = "https://astroai.app"
+
+[[kv_namespaces]]
+binding = "LICENSE_KV"
+id = "PLACEHOLDER_KV_ID"
+preview_id = "PLACEHOLDER_PREVIEW_KV_ID"
+
+[[r2_buckets]]
+binding = "MODELS_BUCKET"
+bucket_name = "astroai-models"
+preview_bucket_name = "astroai-models-preview"
+
+# Secrets (set via `wrangler secret put`):
+# JWT_PRIVATE_KEY   — PEM-encoded RSA-2048 private key
+# JWT_PUBLIC_KEY    — PEM-encoded RSA-2048 public key
+# STRIPE_WEBHOOK_SECRET — Stripe webhook signing secret
+# R2_ACCESS_KEY_ID  — R2 S3-compatible access key
+# R2_SECRET_ACCESS_KEY — R2 S3-compatible secret key
+# R2_ACCOUNT_ID     — Cloudflare account ID
+
+[env.staging.vars]
+ALLOWED_ORIGIN = "https://staging.astroai.app"
+
+[env.production.vars]
+ALLOWED_ORIGIN = "https://astroai.app"

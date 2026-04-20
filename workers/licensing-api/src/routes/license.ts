@@ -46,20 +46,26 @@ license.post("/activate", rateLimitMiddleware, async (c) => {
 
 license.post("/refresh", authMiddleware, async (c) => {
   const claims = c.get("claims");
-  const licenseKeys = await c.env.LICENSE_KV.list({ prefix: "license:" });
 
   let foundRecord = null;
   let foundKey = "";
-  for (const entry of licenseKeys.keys) {
-    const raw = await c.env.LICENSE_KV.get(entry.name);
-    if (!raw) continue;
-    const rec = JSON.parse(raw);
-    if (rec.email === claims.sub && rec.machine_ids?.includes(claims.machine_id)) {
-      foundRecord = rec;
-      foundKey = entry.name;
-      break;
+  let cursor: string | undefined;
+  do {
+    const page = await c.env.LICENSE_KV.list({ prefix: "license:", cursor });
+    for (const entry of page.keys) {
+      const raw = await c.env.LICENSE_KV.get(entry.name);
+      if (!raw) continue;
+      const rec = JSON.parse(raw);
+      if (rec.email === claims.sub && rec.machine_ids?.includes(claims.machine_id)) {
+        foundRecord = rec;
+        foundKey = entry.name;
+        break;
+      }
     }
-  }
+    if (foundRecord) break;
+    if (!page.list_complete) cursor = page.cursor;
+    else break;
+  } while (true);
 
   if (!foundRecord) {
     return c.json({ error: "license_revoked" }, 410);
@@ -79,21 +85,26 @@ license.post("/refresh", authMiddleware, async (c) => {
 
 license.post("/deactivate", authMiddleware, async (c) => {
   const claims = c.get("claims");
-  const licenseKeys = await c.env.LICENSE_KV.list({ prefix: "license:" });
 
-  for (const entry of licenseKeys.keys) {
-    const raw = await c.env.LICENSE_KV.get(entry.name);
-    if (!raw) continue;
-    const rec = JSON.parse(raw);
-    if (rec.email === claims.sub && rec.machine_ids?.includes(claims.machine_id)) {
-      rec.machine_ids = rec.machine_ids.filter((id: string) => id !== claims.machine_id);
-      rec.seats_used = rec.machine_ids.length;
-      await c.env.LICENSE_KV.put(entry.name, JSON.stringify(rec));
+  let cursor: string | undefined;
+  do {
+    const page = await c.env.LICENSE_KV.list({ prefix: "license:", cursor });
+    for (const entry of page.keys) {
+      const raw = await c.env.LICENSE_KV.get(entry.name);
+      if (!raw) continue;
+      const rec = JSON.parse(raw);
+      if (rec.email === claims.sub && rec.machine_ids?.includes(claims.machine_id)) {
+        rec.machine_ids = rec.machine_ids.filter((id: string) => id !== claims.machine_id);
+        rec.seats_used = rec.machine_ids.length;
+        await c.env.LICENSE_KV.put(entry.name, JSON.stringify(rec));
 
-      await blacklistJti(claims.jti, claims.exp, c.env.LICENSE_KV);
-      return c.json({ seats_released: 1 });
+        await blacklistJti(claims.jti, claims.exp, c.env.LICENSE_KV);
+        return c.json({ seats_released: 1 });
+      }
     }
-  }
+    if (!page.list_complete) cursor = page.cursor;
+    else break;
+  } while (true);
 
   return c.json({ error: "license_not_found" }, 404);
 });
