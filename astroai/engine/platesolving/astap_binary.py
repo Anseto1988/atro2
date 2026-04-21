@@ -183,11 +183,8 @@ def download_astap(target_dir: Path | None = None) -> Path:
 
     logger.info("Downloading ASTAP for %s from %s", spec.key, spec.url)
 
-    tmp = tempfile.NamedTemporaryFile(
-        dir=dest_dir, suffix=".download", delete=False
-    )
-    tmp_path = Path(tmp.name)
-    tmp.close()
+    tmp_dir = tempfile.mkdtemp(prefix="astap_dl_")
+    tmp_path = Path(tmp_dir) / "archive.download"
 
     try:
         req = urllib.request.Request(spec.url)
@@ -217,7 +214,7 @@ def download_astap(target_dir: Path | None = None) -> Path:
 
         _make_executable(binary_path)
     finally:
-        tmp_path.unlink(missing_ok=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     if not _is_executable(binary_path):
         raise RuntimeError(f"ASTAP binary not executable after download: {binary_path}")

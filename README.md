@@ -72,13 +72,13 @@ python benchmarks/calibration_gpu_bench.py
 
 ## Pre-built Bundles
 
-Download the latest bundle from the
-[GitHub Actions artifacts](../../actions/workflows/build.yml):
+Download the latest release from the
+[GitHub Releases](https://github.com/Anseto1988/atro2/releases/tag/v2.0.0-alpha):
 
 | Platform | Archive |
 |----------|---------|
-| Windows  | `astroai-2.0.0-alpha-win.zip` |
-| Linux    | `astroai-2.0.0-alpha-linux.tar.gz` |
+| Windows  | [`astroai-2.0.0-alpha-win.zip`](https://github.com/Anseto1988/atro2/releases/download/v2.0.0-alpha/astroai-2.0.0-alpha-win.zip) |
+| Linux    | [`astroai-2.0.0-alpha-linux.tar.gz`](https://github.com/Anseto1988/atro2/releases/download/v2.0.0-alpha/astroai-2.0.0-alpha-linux.tar.gz) |
 
 ### Windows
 
@@ -91,6 +91,7 @@ Download the latest bundle from the
 tar xzf astroai-2.0.0-alpha-linux.tar.gz
 ./AstroAI/AstroAI
 ```
+
 
 ## Development
 
