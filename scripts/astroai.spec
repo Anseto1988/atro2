@@ -90,6 +90,7 @@ a = Analysis(
     excludes=[
         "tkinter",
         "matplotlib",
+        "astropy.visualization",
         "IPython",
         "jupyter",
         "pytest",
