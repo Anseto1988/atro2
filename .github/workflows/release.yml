@@ -4,6 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+
 jobs:
   build-release:
     strategy:
@@ -37,7 +40,13 @@ jobs:
           key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
           restore-keys: ${{ runner.os }}-poetry-
       - name: Install dependencies
-        run: poetry install --with dev --sync
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = "win" ]; then
+            poetry install --with dev --extras secure-keystore --sync
+          else
+            poetry install --with dev --sync
+          fi
       - name: Download ASTAP binary
         continue-on-error: true
         run: poetry run python scripts/download_astap.py
