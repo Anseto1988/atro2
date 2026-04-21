@@ -8,7 +8,51 @@ permissions:
   contents: write
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create.outputs.upload_url }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body: |
+            ## AstroAI Suite v${{ steps.version.outputs.version }}
+
+            ### Neue Features seit v1.1.0-alpha
+
+            - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay
+            - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback)
+            - AI-Koordinaten-Extraktion + Sky-Atlas-Integration
+
+            ### Alle Features
+
+            - **E3** Background-Extraktion — Gradient-Removal & Pipeline-Integration
+            - **E4+E1** Projekt-Persistenz, TIFF I/O, XISF-Write, Export-Step, LogWidget
+            - **E4** LRGB/Narrowband Multi-Kanal-Workflow — ChannelCombiner, NarrowbandMapper
+            - **E5** Starless — StarRemovalStep, StarlessPanel
+            - **E6** Deconvolution, DenoiseStep, StretchStep
+            - Cloudflare Workers Licensing API
+            - Security Hardening S-01 bis S-04
+
+            ### Breaking Changes
+            Keine.
+
+            ### Installation
+            Lade das passende Artifact für dein Betriebssystem herunter und entpacke es.
+
   build-release:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -71,25 +115,4 @@ jobs:
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          prerelease: true
-          body: |
-            ## AstroAI Suite v${{ env.VERSION }}
-
-            ### Neue Features seit v0.1.0-alpha
-
-            - **E3** Background-Extraktion — Gradient-Removal & Pipeline-Integration
-            - **E4+E1** Projekt-Persistenz, TIFF I/O, XISF-Write, Export-Step, LogWidget
-            - **E4** LRGB/Narrowband Multi-Kanal-Workflow — ChannelCombiner, NarrowbandMapper
-            - **E5** Starless — StarRemovalStep, StarlessPanel
-            - **E6** Deconvolution, DenoiseStep, StretchStep
-            - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay
-            - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback)
-            - Cloudflare Workers Licensing API
-            - Security Hardening S-01 bis S-04
-
-            ### Breaking Changes
-            Keine.
-
-            ### Installation
-            Lade das passende Artifact für dein Betriebssystem herunter und entpacke es.
           files: astroai-${{ env.VERSION }}-${{ matrix.target }}.${{ matrix.archive_ext }}
