@@ -10,11 +10,19 @@ from astroai.core.calibration.matcher import (
     find_best_dark,
     find_best_flat,
 )
+from astroai.core.calibration.metrics import (
+    BenchmarkBackend,
+    BenchmarkMetrics,
+    MetricsCallback,
+)
 
 __all__ = [
+    "BenchmarkBackend",
+    "BenchmarkMetrics",
     "CalibrationFrame",
     "CalibrationLibrary",
     "GPUCalibrationEngine",
+    "MetricsCallback",
     "apply_dark",
     "apply_flat",
     "calibrate_frame",

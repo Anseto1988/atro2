@@ -39,20 +39,20 @@ _PLATFORM_SPECS: dict[str, _PlatformSpec] = {
     "linux-x86_64": _PlatformSpec(
         key="linux-x86_64",
         binary_name="astap",
-        url="https://github.com/AstroAI-Suite/astap-bin/releases/download/v0.2.1/astap-linux-x86_64.tar.gz",
-        sha256="placeholder_linux_x86_64",
+        url="https://github.com/Anseto1988/astap-bin/releases/download/v0.2.1/astap-linux-x86_64.tar.gz",
+        sha256="ce3d61573aa14c61276aec7c5b95bd44ec8b21fdb0e19b5011a0295ef2960b7a",
     ),
     "darwin-arm64": _PlatformSpec(
         key="darwin-arm64",
         binary_name="astap",
-        url="https://github.com/AstroAI-Suite/astap-bin/releases/download/v0.2.1/astap-darwin-arm64.tar.gz",
-        sha256="placeholder_darwin_arm64",
+        url="https://github.com/Anseto1988/astap-bin/releases/download/v0.2.1/astap-darwin-arm64.tar.gz",
+        sha256="e8b6ab8c16a1f22693d244bf8c160dbc784d3bb4f51b8a0cb6b9a1fb60db4c84",
     ),
     "win32-x86_64": _PlatformSpec(
         key="win32-x86_64",
         binary_name="astap.exe",
-        url="https://github.com/AstroAI-Suite/astap-bin/releases/download/v0.2.1/astap-win32-x86_64.zip",
-        sha256="placeholder_win32_x86_64",
+        url="https://github.com/Anseto1988/astap-bin/releases/download/v0.2.1/astap-win32-x86_64.zip",
+        sha256="6820c42ade89fe109e8bfcf185a8e2d87c9123ec62991bbacdb8dc15f575fcf6",
     ),
 }
 

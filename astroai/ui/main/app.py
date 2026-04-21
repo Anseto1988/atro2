@@ -33,6 +33,7 @@ from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.license_badge import LicenseBadge
 from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.log_widget import LogWidget
+from astroai.core.calibration.worker import CalibrationWorker
 from astroai.ui.widgets.calibration_benchmark import CalibrationBenchmarkWidget
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
@@ -78,6 +79,7 @@ class MainWindow(QMainWindow):
 
         self._license = license_adapter or QLicenseAdapter(self)
         self._pipeline = PipelineModel(self)
+        self._calibration_worker = CalibrationWorker(self)
         self._file_loader = FileLoader(self)
         self._project = AstroProject()
         self._project_path: Path | None = None
@@ -225,6 +227,29 @@ class MainWindow(QMainWindow):
         file_menu.addAction(open_img_act)
 
         file_menu.addSeparator()
+
+        import_menu = QMenu("Frames &importieren", self)
+
+        import_lights_act = QAction("&Light-Frames importieren...", self)
+        import_lights_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_L))  # type: ignore[operator]
+        import_lights_act.triggered.connect(self._on_import_lights)
+        import_menu.addAction(import_lights_act)
+
+        import_darks_act = QAction("&Dark-Frames importieren...", self)
+        import_darks_act.triggered.connect(self._on_import_darks)
+        import_menu.addAction(import_darks_act)
+
+        import_flats_act = QAction("&Flat-Frames importieren...", self)
+        import_flats_act.triggered.connect(self._on_import_flats)
+        import_menu.addAction(import_flats_act)
+
+        import_bias_act = QAction("&Bias-Frames importieren...", self)
+        import_bias_act.triggered.connect(self._on_import_bias)
+        import_menu.addAction(import_bias_act)
+
+        file_menu.addMenu(import_menu)
+
+        file_menu.addSeparator()
         quit_act = QAction("&Beenden", self)
         quit_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Q))  # type: ignore[operator]
         quit_act.triggered.connect(self.close)
@@ -261,6 +286,10 @@ class MainWindow(QMainWindow):
         self._annotation_panel.boundaries_toggled.connect(self._annotation_overlay.set_show_boundaries)
         self._annotation_panel.grid_toggled.connect(self._annotation_overlay.set_show_grid)
 
+        self._calibration_worker.metrics.connect(self._benchmark.update_metrics)
+        self._calibration_worker.finished.connect(self._on_calibration_finished)
+        self._calibration_worker.error.connect(self._on_calibration_error)
+
     @Slot()
     def _on_open_image(self) -> None:
         if self._file_loader.is_loading:
@@ -276,6 +305,62 @@ class MainWindow(QMainWindow):
         self._progress.set_indeterminate()
         self._progress.set_status("Lade...")
         self._file_loader.load(Path(path))
+
+    _FITS_FILTER = "FITS (*.fits *.fit *.fts);;TIFF (*.tif *.tiff);;PNG (*.png);;Alle (*)"
+
+    def _pick_files(self, title: str) -> list[str]:
+        paths, _ = QFileDialog.getOpenFileNames(self, title, "", self._FITS_FILTER)
+        return paths
+
+    @Slot()
+    def _on_import_lights(self) -> None:
+        from astroai.project.project_file import FrameEntry
+
+        paths = self._pick_files("Light-Frames importieren")
+        if not paths:
+            return
+        existing = {e.path for e in self._project.input_frames}
+        added = 0
+        for p in paths:
+            if p not in existing:
+                self._project.input_frames.append(FrameEntry(path=p))
+                existing.add(p)
+                added += 1
+        self._project.touch()
+        self._status_bar.showMessage(f"{added} Light-Frame(s) zum Projekt hinzugefuegt")
+
+    @Slot()
+    def _on_import_darks(self) -> None:
+        paths = self._pick_files("Dark-Frames importieren")
+        if not paths:
+            return
+        existing = set(self._project.calibration.dark_frames)
+        added = sum(1 for p in paths if p not in existing)
+        self._project.calibration.dark_frames = list(existing | set(paths))
+        self._project.touch()
+        self._status_bar.showMessage(f"{added} Dark-Frame(s) zum Projekt hinzugefuegt")
+
+    @Slot()
+    def _on_import_flats(self) -> None:
+        paths = self._pick_files("Flat-Frames importieren")
+        if not paths:
+            return
+        existing = set(self._project.calibration.flat_frames)
+        added = sum(1 for p in paths if p not in existing)
+        self._project.calibration.flat_frames = list(existing | set(paths))
+        self._project.touch()
+        self._status_bar.showMessage(f"{added} Flat-Frame(s) zum Projekt hinzugefuegt")
+
+    @Slot()
+    def _on_import_bias(self) -> None:
+        paths = self._pick_files("Bias-Frames importieren")
+        if not paths:
+            return
+        existing = set(self._project.calibration.bias_frames)
+        added = sum(1 for p in paths if p not in existing)
+        self._project.calibration.bias_frames = list(existing | set(paths))
+        self._project.touch()
+        self._status_bar.showMessage(f"{added} Bias-Frame(s) zum Projekt hinzugefuegt")
 
     @Slot(object, str)
     def _on_image_loaded(self, data: object, name: str) -> None:
@@ -463,6 +548,17 @@ class MainWindow(QMainWindow):
             except ImportError:
                 pass
         self._sky_overlay.set_solution(wcs_solution)
+
+    @Slot(object)
+    def _on_calibration_finished(self, _results: object) -> None:
+        self._benchmark.finish()
+
+    @Slot(str)
+    def _on_calibration_error(self, msg: str) -> None:
+        import logging
+
+        self._benchmark.reset()
+        logging.getLogger("astroai.pipeline").error("Kalibrierung fehlgeschlagen: %s", msg)
 
     def require_tier(self, feature_name: str, required: LicenseTier) -> bool:
         """Check tier access; shows UpgradeDialog if insufficient. Returns True if allowed."""

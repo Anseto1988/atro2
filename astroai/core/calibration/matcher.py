@@ -27,6 +27,30 @@ class CalibrationLibrary:
     def empty() -> CalibrationLibrary:
         return CalibrationLibrary(darks=[], flats=[], bias=[])
 
+    @staticmethod
+    def from_config(config: object, load_data: bool = False) -> CalibrationLibrary:
+        """Build a CalibrationLibrary from a CalibrationConfig by loading FITS files."""
+        from astroai.core.io.fits_io import read_fits
+
+        def _load_frames(paths: list[str]) -> list[CalibrationFrame]:
+            frames: list[CalibrationFrame] = []
+            for p in paths:
+                path = Path(p)
+                if not path.exists():
+                    continue
+                try:
+                    data, meta = read_fits(path)
+                    frames.append(CalibrationFrame(path, meta, data if load_data else None))
+                except Exception:
+                    pass
+            return frames
+
+        return CalibrationLibrary(
+            darks=_load_frames(getattr(config, "dark_frames", [])),
+            flats=_load_frames(getattr(config, "flat_frames", [])),
+            bias=_load_frames(getattr(config, "bias_frames", [])),
+        )
+
 
 def _match_score(light: ImageMetadata, cal: ImageMetadata) -> float:
     score = 0.0

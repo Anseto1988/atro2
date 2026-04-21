@@ -108,16 +108,22 @@ class PlateSolver:
             try:
                 wcs = self._run_astap_subprocess(fits_path, ra_hint, dec_hint, radius)
                 elapsed = time.monotonic() - start
+                import math
                 ra_c, dec_c = wcs.wcs.crval
-                pixel_scale = abs(wcs.wcs.cdelt[0]) if wcs.wcs.cdelt[0] != 0 else 0.000277
+                cd = wcs.wcs.cd if wcs.wcs.has_cd() else None
+                if cd is not None:
+                    pixel_scale = (abs(cd[0, 0] * cd[1, 1] - cd[0, 1] * cd[1, 0])) ** 0.5
+                    rot = math.degrees(math.atan2(cd[0, 1], cd[0, 0]))
+                else:
+                    cdelt = wcs.wcs.cdelt
+                    pixel_scale = abs(cdelt[0]) if cdelt[0] != 0 else 0.000277
+                    rot = 0.0
+                    if wcs.wcs.has_pc():
+                        rot = math.degrees(math.atan2(wcs.wcs.get_pc()[0, 1], wcs.wcs.get_pc()[0, 0]))
                 naxis1 = wcs.pixel_shape[0] if wcs.pixel_shape else 1000
                 naxis2 = wcs.pixel_shape[1] if wcs.pixel_shape else 1000
                 fw = naxis1 * pixel_scale
                 fh = naxis2 * pixel_scale
-                rot = 0.0
-                if hasattr(wcs.wcs, "pc") and wcs.wcs.pc is not None:
-                    import math
-                    rot = math.degrees(math.atan2(wcs.wcs.pc[0, 1], wcs.wcs.pc[0, 0]))
 
                 return SolveResult(
                     wcs=wcs,

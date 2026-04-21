@@ -1,9 +1,6 @@
 """Benchmark display for GPU vs. CPU calibration progress."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
-
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -13,24 +10,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from astroai.core.calibration.metrics import BenchmarkBackend, BenchmarkMetrics
+
 __all__ = ["CalibrationBenchmarkWidget", "BenchmarkBackend", "BenchmarkMetrics"]
-
-
-class BenchmarkBackend(Enum):
-    CPU = "CPU"
-    CUDA = "CUDA"
-    MPS = "MPS"
-
-
-@dataclass(frozen=True, slots=True)
-class BenchmarkMetrics:
-    backend: BenchmarkBackend
-    device_name: str
-    frames_per_second: float
-    speedup_factor: float
-    current_frame: int
-    total_frames: int
-    eta_seconds: float
 
 
 class _BackendBadge(QLabel):

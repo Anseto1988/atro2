@@ -10,6 +10,7 @@ from astroai.core.calibration.matcher import (
     CalibrationFrame,
     CalibrationLibrary,
 )
+from astroai.core.calibration.metrics import BenchmarkBackend, BenchmarkMetrics
 from astroai.core.io.fits_io import ImageMetadata
 from pathlib import Path
 
@@ -236,6 +237,87 @@ class TestCalibrationFrameIntegration:
         lib = CalibrationLibrary.empty()
         result = calibrate_frame(light, meta, lib, use_gpu=False)
         assert result.shape == (64, 64)
+
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkMetrics emission from calibrate_batch_gpu
+# ---------------------------------------------------------------------------
+class TestBenchmarkMetricsEmission:
+    def test_on_metrics_called_for_each_boundary(
+        self, rng: np.random.Generator, engine: GPUCalibrationEngine
+    ) -> None:
+        collected: list[BenchmarkMetrics] = []
+        meta = _meta()
+        lib = CalibrationLibrary.empty()
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(5)]
+
+        engine.calibrate_batch_gpu(frames, meta, lib, on_metrics=collected.append)
+
+        assert len(collected) >= 2
+        assert collected[0].current_frame == 1
+        assert collected[-1].current_frame == 5
+        assert collected[-1].total_frames == 5
+
+    def test_on_metrics_has_correct_backend(
+        self, rng: np.random.Generator, engine: GPUCalibrationEngine
+    ) -> None:
+        collected: list[BenchmarkMetrics] = []
+        meta = _meta()
+        lib = CalibrationLibrary.empty()
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(3)]
+
+        engine.calibrate_batch_gpu(frames, meta, lib, on_metrics=collected.append)
+
+        for m in collected:
+            assert isinstance(m.backend, BenchmarkBackend)
+            assert m.device_name
+            assert m.frames_per_second > 0
+            assert m.eta_seconds >= 0
+
+    def test_on_metrics_cpu_fallback_speedup_is_one(
+        self, rng: np.random.Generator
+    ) -> None:
+        collected: list[BenchmarkMetrics] = []
+        engine = GPUCalibrationEngine()
+        if engine.device_type != "cpu":
+            pytest.skip("test requires CPU-only engine")
+        meta = _meta()
+        lib = CalibrationLibrary.empty()
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(3)]
+
+        engine.calibrate_batch_gpu(frames, meta, lib, on_metrics=collected.append)
+
+        for m in collected:
+            assert m.backend == BenchmarkBackend.CPU
+            assert m.speedup_factor == 1.0
+
+    def test_on_metrics_none_is_safe(
+        self, rng: np.random.Generator, engine: GPUCalibrationEngine
+    ) -> None:
+        meta = _meta()
+        lib = CalibrationLibrary.empty()
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(3)]
+        results = engine.calibrate_batch_gpu(frames, meta, lib, on_metrics=None)
+        assert len(results) == 3
+
+    def test_batch_results_unchanged_with_metrics(
+        self, rng: np.random.Generator, engine: GPUCalibrationEngine
+    ) -> None:
+        meta = _meta()
+        dark = rng.random((64, 64), dtype=np.float32) * 0.1
+        flat = rng.random((64, 64), dtype=np.float32) + 0.5
+        lib = _lib(dark, flat, meta)
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(3)]
+
+        without = engine.calibrate_batch_gpu(frames, meta, lib)
+        with_metrics = engine.calibrate_batch_gpu(
+            frames, meta, lib, on_metrics=lambda _: None
+        )
+
+        for a, b in zip(without, with_metrics):
+            np.testing.assert_allclose(a, b, atol=1e-7)
+
 
     def test_gpu_cpu_results_same_shape(self, rng: np.random.Generator) -> None:
         meta = _meta()
