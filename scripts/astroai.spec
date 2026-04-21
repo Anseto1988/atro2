@@ -69,7 +69,11 @@ _hidden_imports = [
 ]
 
 if IS_WIN:
-    _hidden_imports += ["win32crypt", "win32api", "pywintypes"]
+    try:
+        import pywintypes  # noqa: F401
+        _hidden_imports += ["win32crypt", "win32api", "pywintypes"]
+    except ImportError:
+        pass
 
 a = Analysis(
     [str(ROOT / "astroai" / "ui" / "main" / "app.py")],
