@@ -16,6 +16,7 @@ class PipelineStage(Enum):
     STACKING = auto()
     DRIZZLE = auto()
     ASTROMETRY = auto()
+    MOSAIC = auto()
     PROCESSING = auto()
     SAVING = auto()
 
