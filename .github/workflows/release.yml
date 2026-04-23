@@ -33,6 +33,7 @@ jobs:
 
             - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay
             - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback)
+            - **F-3** Drizzle Super-Resolution — 2x/3x Sub-Pixel-Upscaling
             - AI-Koordinaten-Extraktion + Sky-Atlas-Integration
 
             ### Alle Features
@@ -42,6 +43,7 @@ jobs:
             - **E4** LRGB/Narrowband Multi-Kanal-Workflow — ChannelCombiner, NarrowbandMapper
             - **E5** Starless — StarRemovalStep, StarlessPanel
             - **E6** Deconvolution, DenoiseStep, StretchStep
+            - **F-3** Drizzle Super-Resolution (reproject-basiert)
             - Cloudflare Workers Licensing API
             - Security Hardening S-01 bis S-04
 
@@ -87,9 +89,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.target }}" = "win" ]; then
-            poetry install --with dev --extras secure-keystore --sync
+            poetry install --with dev --extras secure-keystore --no-interaction
           else
-            poetry install --with dev --sync
+            poetry install --with dev --no-interaction
           fi
       - name: Install CPU-only PyTorch (smaller bundle)
         shell: bash

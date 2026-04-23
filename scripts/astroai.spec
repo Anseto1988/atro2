@@ -27,6 +27,9 @@ _hidden_imports = [
     "astroai.engine.platesolving.solver",
     "astroai.engine.platesolving.wcs_writer",
     "astroai.engine.platesolving.annotation",
+    "astroai.engine.drizzle",
+    "astroai.engine.drizzle.engine",
+    "astroai.engine.drizzle.pipeline_step",
     "astroai.inference.backends.gpu",
     "astroai.inference.models.registry",
     "astroai.inference.scoring.frame_scorer",
@@ -56,6 +59,7 @@ _hidden_imports = [
     "astroai.ui.widgets.histogram_widget",
     "astroai.ui.widgets.workflow_graph",
     "astroai.ui.widgets.progress_widget",
+    "astroai.ui.widgets.drizzle_panel",
     "PySide6.QtCore",
     "PySide6.QtGui",
     "PySide6.QtWidgets",
@@ -66,6 +70,7 @@ _hidden_imports = [
     "PIL",
     "tqdm",
     "onnxruntime",
+    "reproject",
 ]
 
 if IS_WIN:
