@@ -35,11 +35,15 @@ class PipelineModel(QObject):
     starless_config_changed = Signal()
     deconvolution_config_changed = Signal()
     channel_combine_config_changed = Signal()
+    drizzle_config_changed = Signal()
+    mosaic_config_changed = Signal()
 
     DEFAULT_STEPS = [
         ("calibrate", "Kalibrierung", False),
         ("register", "Registrierung", False),
         ("stack", "Stacking", False),
+        ("drizzle", "Drizzle", True),
+        ("mosaic", "Mosaic", True),
         ("stretch", "Stretching", False),
         ("denoise", "Entrauschen", False),
         ("deconvolution", "Deconvolution", True),
@@ -62,8 +66,19 @@ class PipelineModel(QObject):
         self._channel_combine_enabled: bool = False
         self._channel_combine_mode: str = "lrgb"
         self._channel_combine_palette: str = "SHO"
+        self._drizzle_enabled: bool = False
+        self._drizzle_drop_size: float = 0.7
+        self._drizzle_scale: float = 1.0
+        self._drizzle_pixfrac: float = 1.0
+        self._mosaic_enabled: bool = False
+        self._mosaic_blend_mode: str = "average"
+        self._mosaic_gradient_correct: bool = True
+        self._mosaic_output_scale: float = 1.0
+        self._mosaic_panels: list[str] = []
         self._update_starless_step_state()
         self._update_deconvolution_step_state()
+        self._update_drizzle_step_state()
+        self._update_mosaic_step_state()
 
     # -- starless config properties --
 
@@ -208,6 +223,146 @@ class PipelineModel(QObject):
         self._channel_combine_palette = value
         self.channel_combine_config_changed.emit()
 
+    # -- drizzle config properties -----------------------------------------
+
+    @property
+    def drizzle_enabled(self) -> bool:
+        return self._drizzle_enabled
+
+    @drizzle_enabled.setter
+    def drizzle_enabled(self, value: bool) -> None:
+        if self._drizzle_enabled == value:
+            return
+        self._drizzle_enabled = value
+        self._update_drizzle_step_state()
+        self.drizzle_config_changed.emit()
+
+    @property
+    def drizzle_drop_size(self) -> float:
+        return self._drizzle_drop_size
+
+    @drizzle_drop_size.setter
+    def drizzle_drop_size(self, value: float) -> None:
+        if self._drizzle_drop_size == value:
+            return
+        self._drizzle_drop_size = value
+        self.drizzle_config_changed.emit()
+
+    @property
+    def drizzle_scale(self) -> float:
+        return self._drizzle_scale
+
+    @drizzle_scale.setter
+    def drizzle_scale(self, value: float) -> None:
+        value = max(0.5, min(3.0, value))
+        if self._drizzle_scale == value:
+            return
+        self._drizzle_scale = value
+        self.drizzle_config_changed.emit()
+
+    @property
+    def drizzle_pixfrac(self) -> float:
+        return self._drizzle_pixfrac
+
+    @drizzle_pixfrac.setter
+    def drizzle_pixfrac(self, value: float) -> None:
+        value = max(0.1, min(1.0, value))
+        if self._drizzle_pixfrac == value:
+            return
+        self._drizzle_pixfrac = value
+        self.drizzle_config_changed.emit()
+
+    def _update_drizzle_step_state(self) -> None:
+        step = self.step_by_key("drizzle")
+        if step is None:
+            return
+        if not self._drizzle_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("drizzle", StepState.DISABLED.value)
+        elif self._drizzle_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("drizzle", StepState.PENDING.value)
+
+    # -- mosaic config properties --------------------------------------------
+
+    @property
+    def mosaic_enabled(self) -> bool:
+        return self._mosaic_enabled
+
+    @mosaic_enabled.setter
+    def mosaic_enabled(self, value: bool) -> None:
+        if self._mosaic_enabled == value:
+            return
+        self._mosaic_enabled = value
+        self._update_mosaic_step_state()
+        self.mosaic_config_changed.emit()
+
+    @property
+    def mosaic_blend_mode(self) -> str:
+        return self._mosaic_blend_mode
+
+    @mosaic_blend_mode.setter
+    def mosaic_blend_mode(self, value: str) -> None:
+        if self._mosaic_blend_mode == value:
+            return
+        self._mosaic_blend_mode = value
+        self.mosaic_config_changed.emit()
+
+    @property
+    def mosaic_gradient_correct(self) -> bool:
+        return self._mosaic_gradient_correct
+
+    @mosaic_gradient_correct.setter
+    def mosaic_gradient_correct(self, value: bool) -> None:
+        if self._mosaic_gradient_correct == value:
+            return
+        self._mosaic_gradient_correct = value
+        self.mosaic_config_changed.emit()
+
+    @property
+    def mosaic_output_scale(self) -> float:
+        return self._mosaic_output_scale
+
+    @mosaic_output_scale.setter
+    def mosaic_output_scale(self, value: float) -> None:
+        value = max(0.25, min(4.0, value))
+        if self._mosaic_output_scale == value:
+            return
+        self._mosaic_output_scale = value
+        self.mosaic_config_changed.emit()
+
+    @property
+    def mosaic_panels(self) -> list[str]:
+        return list(self._mosaic_panels)
+
+    @mosaic_panels.setter
+    def mosaic_panels(self, value: list[str]) -> None:
+        if self._mosaic_panels == value:
+            return
+        self._mosaic_panels = list(value)
+        self.mosaic_config_changed.emit()
+
+    def add_mosaic_panel(self, path: str) -> None:
+        if path not in self._mosaic_panels:
+            self._mosaic_panels.append(path)
+            self.mosaic_config_changed.emit()
+
+    def remove_mosaic_panel(self, path: str) -> None:
+        if path in self._mosaic_panels:
+            self._mosaic_panels.remove(path)
+            self.mosaic_config_changed.emit()
+
+    def _update_mosaic_step_state(self) -> None:
+        step = self.step_by_key("mosaic")
+        if step is None:
+            return
+        if not self._mosaic_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("mosaic", StepState.DISABLED.value)
+        elif self._mosaic_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("mosaic", StepState.PENDING.value)
+
     # -- export config bridge --
 
     def export_config(self) -> dict[str, Any]:
@@ -248,6 +403,8 @@ class PipelineModel(QObject):
         optional_enabled = {
             "starless": self._starless_enabled,
             "deconvolution": self._deconvolution_enabled,
+            "drizzle": self._drizzle_enabled,
+            "mosaic": self._mosaic_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):

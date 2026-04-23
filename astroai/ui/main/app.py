@@ -40,6 +40,8 @@ from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.annotation_panel import AnnotationPanel
 from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
 from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
+from astroai.ui.widgets.drizzle_panel import DrizzlePanel
+from astroai.ui.widgets.mosaic_panel import MosaicPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.ui.overlay.annotation_overlay import AnnotationOverlay
@@ -136,6 +138,22 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.TopDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, wf_dock)
+
+        self._drizzle_panel = DrizzlePanel(self._pipeline)
+        drizzle_dock = QDockWidget("Drizzle", self)
+        drizzle_dock.setWidget(self._drizzle_panel)
+        drizzle_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, drizzle_dock)
+
+        self._mosaic_panel = MosaicPanel(self._pipeline)
+        mosaic_dock = QDockWidget("Mosaic", self)
+        mosaic_dock.setWidget(self._mosaic_panel)
+        mosaic_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, mosaic_dock)
 
         self._deconvolution_panel = DeconvolutionPanel(self._pipeline)
         deconv_dock = QDockWidget("Deconvolution", self)

@@ -22,8 +22,10 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 8
+        assert len(steps) == 10
         assert steps[0].key == "calibrate"
+        assert steps[3].key == "drizzle"
+        assert steps[4].key == "mosaic"
         assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
@@ -56,8 +58,14 @@ class TestPipelineModel:
         model.set_step_state("calibrate", StepState.DONE)
         model.set_step_progress("calibrate", 1.0)
         model.reset()
+        optional_enabled = {
+            "starless": model.starless_enabled,
+            "deconvolution": model.deconvolution_enabled,
+            "drizzle": model.drizzle_enabled,
+            "mosaic": model.mosaic_enabled,
+        }
         for step in model.steps:
-            if step.optional and not model.starless_enabled:
+            if step.optional and not optional_enabled.get(step.key, False):
                 assert step.state is StepState.DISABLED
             else:
                 assert step.state is StepState.PENDING
@@ -69,7 +77,11 @@ class TestPipelineModel:
         assert steps[0].state is StepState.DONE
         assert steps[1].state is StepState.DONE
         assert steps[2].state is StepState.ACTIVE
-        assert steps[3].state is StepState.PENDING
+        # drizzle at index 3 is DISABLED (optional, not enabled)
+        assert steps[3].state is StepState.DISABLED
+        # mosaic at index 4 is DISABLED (optional, not enabled)
+        assert steps[4].state is StepState.DISABLED
+        assert steps[5].state is StepState.PENDING
 
     def test_step_changed_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.step_changed, timeout=500):

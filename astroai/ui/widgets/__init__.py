@@ -9,6 +9,7 @@ from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.license_badge import LicenseBadge
 from astroai.ui.widgets.log_widget import LogWidget
+from astroai.ui.widgets.mosaic_panel import MosaicPanel
 from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.starless_panel import StarlessPanel
@@ -25,6 +26,7 @@ __all__ = [
     "ImageViewer",
     "LicenseBadge",
     "LogWidget",
+    "MosaicPanel",
     "OfflineBanner",
     "ProgressWidget",
     "StarlessPanel",
