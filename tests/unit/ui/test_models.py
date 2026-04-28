@@ -22,12 +22,13 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 11
+        assert len(steps) == 12
         assert steps[0].key == "calibrate"
         assert steps[3].key == "drizzle"
         assert steps[4].key == "mosaic"
         assert steps[5].key == "channel_combine"
         assert steps[6].key == "stretch"
+        assert steps[7].key == "color_calibration"
         assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
@@ -85,7 +86,9 @@ class TestPipelineModel:
         assert steps[4].state is StepState.DISABLED
         # channel_combine at index 5 is DISABLED (optional, not enabled)
         assert steps[5].state is StepState.DISABLED
-        assert steps[6].state is StepState.PENDING
+        assert steps[6].state is StepState.PENDING  # stretch
+        # color_calibration at index 7 is DISABLED (optional, not enabled)
+        assert steps[7].state is StepState.DISABLED
 
     def test_step_changed_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.step_changed, timeout=500):

@@ -78,14 +78,66 @@ class StarProcessingConfig:
 
 
 @dataclass
+class StarlessConfig:
+    enabled: bool = False
+    strength: float = 1.0
+    format: str = "xisf"
+    save_star_mask: bool = True
+
+
+@dataclass
+class DeconvolutionConfig:
+    enabled: bool = False
+    iterations: int = 10
+    psf_sigma: float = 1.0
+
+
+@dataclass
+class DrizzleConfig:
+    enabled: bool = False
+    drop_size: float = 0.7
+    scale: float = 1.0
+    pixfrac: float = 1.0
+
+
+@dataclass
+class MosaicConfig:
+    enabled: bool = False
+    blend_mode: str = "average"
+    gradient_correct: bool = True
+    output_scale: float = 1.0
+    panels: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ChannelCombineConfig:
+    enabled: bool = False
+    mode: str = "lrgb"
+    palette: str = "SHO"
+
+
+@dataclass
+class ColorCalibrationConfig:
+    enabled: bool = False
+    catalog: str = "gaia_dr3"
+    sample_radius: int = 8
+
+
+@dataclass
 class AstroProject:
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     input_frames: list[FrameEntry] = field(default_factory=list)
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
     registration: RegistrationConfig = field(default_factory=RegistrationConfig)
     stacking: StackingConfig = field(default_factory=StackingConfig)
+    drizzle: DrizzleConfig = field(default_factory=DrizzleConfig)
+    mosaic: MosaicConfig = field(default_factory=MosaicConfig)
+    channel_combine: ChannelCombineConfig = field(default_factory=ChannelCombineConfig)
     stretch: StretchConfig = field(default_factory=StretchConfig)
+    color_calibration: ColorCalibrationConfig = field(default_factory=ColorCalibrationConfig)
     denoise: DenoiseConfig = field(default_factory=DenoiseConfig)
+    deconvolution: DeconvolutionConfig = field(default_factory=DeconvolutionConfig)
+    starless: StarlessConfig = field(default_factory=StarlessConfig)
     star_processing: StarProcessingConfig = field(default_factory=StarProcessingConfig)
     output_path: str = ""
     output_format: str = "fits"
@@ -105,8 +157,14 @@ class AstroProject:
             calibration=CalibrationConfig(**data.get("calibration", {})),
             registration=RegistrationConfig(**data.get("registration", {})),
             stacking=StackingConfig(**data.get("stacking", {})),
+            drizzle=DrizzleConfig(**data.get("drizzle", {})),
+            mosaic=MosaicConfig(**data.get("mosaic", {})),
+            channel_combine=ChannelCombineConfig(**data.get("channel_combine", {})),
             stretch=StretchConfig(**data.get("stretch", {})),
+            color_calibration=ColorCalibrationConfig(**data.get("color_calibration", {})),
             denoise=DenoiseConfig(**data.get("denoise", {})),
+            deconvolution=DeconvolutionConfig(**data.get("deconvolution", {})),
+            starless=StarlessConfig(**data.get("starless", {})),
             star_processing=StarProcessingConfig(**data.get("star_processing", {})),
             output_path=data.get("output_path", ""),
             output_format=data.get("output_format", "fits"),

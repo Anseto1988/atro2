@@ -37,6 +37,7 @@ class PipelineModel(QObject):
     channel_combine_config_changed = Signal()
     drizzle_config_changed = Signal()
     mosaic_config_changed = Signal()
+    color_calibration_config_changed = Signal()
 
     DEFAULT_STEPS = [
         ("calibrate", "Kalibrierung", False),
@@ -46,6 +47,7 @@ class PipelineModel(QObject):
         ("mosaic", "Mosaic", True),
         ("channel_combine", "Kanal-Kombination", True),
         ("stretch", "Stretching", False),
+        ("color_calibration", "Farbkalibrierung", True),
         ("denoise", "Entrauschen", False),
         ("deconvolution", "Deconvolution", True),
         ("starless", "Starless", True),
@@ -76,11 +78,15 @@ class PipelineModel(QObject):
         self._mosaic_gradient_correct: bool = True
         self._mosaic_output_scale: float = 1.0
         self._mosaic_panels: list[str] = []
+        self._color_calibration_enabled: bool = False
+        self._color_calibration_catalog: str = "gaia_dr3"
+        self._color_calibration_sample_radius: int = 8
         self._update_starless_step_state()
         self._update_deconvolution_step_state()
         self._update_drizzle_step_state()
         self._update_mosaic_step_state()
         self._update_channel_combine_step_state()
+        self._update_color_calibration_step_state()
 
     # -- starless config properties --
 
@@ -377,6 +383,54 @@ class PipelineModel(QObject):
             step.state = StepState.PENDING
             self.step_changed.emit("mosaic", StepState.PENDING.value)
 
+    # -- color calibration config properties --------------------------------
+
+    @property
+    def color_calibration_enabled(self) -> bool:
+        return self._color_calibration_enabled
+
+    @color_calibration_enabled.setter
+    def color_calibration_enabled(self, value: bool) -> None:
+        if self._color_calibration_enabled == value:
+            return
+        self._color_calibration_enabled = value
+        self._update_color_calibration_step_state()
+        self.color_calibration_config_changed.emit()
+
+    @property
+    def color_calibration_catalog(self) -> str:
+        return self._color_calibration_catalog
+
+    @color_calibration_catalog.setter
+    def color_calibration_catalog(self, value: str) -> None:
+        if self._color_calibration_catalog == value:
+            return
+        self._color_calibration_catalog = value
+        self.color_calibration_config_changed.emit()
+
+    @property
+    def color_calibration_sample_radius(self) -> int:
+        return self._color_calibration_sample_radius
+
+    @color_calibration_sample_radius.setter
+    def color_calibration_sample_radius(self, value: int) -> None:
+        value = max(3, min(20, value))
+        if self._color_calibration_sample_radius == value:
+            return
+        self._color_calibration_sample_radius = value
+        self.color_calibration_config_changed.emit()
+
+    def _update_color_calibration_step_state(self) -> None:
+        step = self.step_by_key("color_calibration")
+        if step is None:
+            return
+        if not self._color_calibration_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("color_calibration", StepState.DISABLED.value)
+        elif self._color_calibration_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("color_calibration", StepState.PENDING.value)
+
     # -- export config bridge --
 
     def export_config(self) -> dict[str, Any]:
@@ -420,6 +474,7 @@ class PipelineModel(QObject):
             "drizzle": self._drizzle_enabled,
             "mosaic": self._mosaic_enabled,
             "channel_combine": self._channel_combine_enabled,
+            "color_calibration": self._color_calibration_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):

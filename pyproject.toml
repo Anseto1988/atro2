@@ -25,6 +25,7 @@ cryptography = "^43.0"
 PyJWT = {version = "^2.8", extras = ["crypto"]}
 httpx = "^0.27"
 reproject = ">=0.13"
+astroquery = ">=0.4.7"
 keyring = {version = "^25.0", optional = true}
 pywin32 = {version = "^306", optional = true, markers = "sys_platform == 'win32'"}
 
@@ -71,5 +72,6 @@ module = [
   "PIL.*",
   "tqdm.*",
   "reproject.*",
+  "astroquery.*",
 ]
 ignore_missing_imports = true

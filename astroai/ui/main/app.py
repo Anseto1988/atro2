@@ -42,6 +42,7 @@ from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
 from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.drizzle_panel import DrizzlePanel
 from astroai.ui.widgets.mosaic_panel import MosaicPanel
+from astroai.ui.widgets.color_calibration_panel import ColorCalibrationPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.ui.overlay.annotation_overlay import AnnotationOverlay
@@ -178,6 +179,14 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, channel_dock)
+
+        self._color_calibration_panel = ColorCalibrationPanel(self._pipeline)
+        color_cal_dock = QDockWidget("Farbkalibrierung", self)
+        color_cal_dock.setWidget(self._color_calibration_panel)
+        color_cal_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, color_cal_dock)
 
         self._annotation_panel = AnnotationPanel()
         annot_dock = QDockWidget("Annotationen", self)
