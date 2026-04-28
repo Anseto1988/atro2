@@ -108,7 +108,6 @@ class CometTracker:
                 return CometPosition(float(peak[0]), float(peak[1]), confidence=0.4)
             raise RuntimeError(f"Frame {frame_idx}: kein gültiger Blob")
 
-        region_mask = labeled == best_label
         cy, cx = center_of_mass(diff, labels=labeled, index=best_label)
         confidence = min(1.0, best_sum / (np.max(diff) * self._min_blob_area + 1e-12))
 
