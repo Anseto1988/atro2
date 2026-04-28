@@ -141,3 +141,24 @@ class TestCurvesStep:
         ctx = PipelineContext(result=image)
         result_ctx = step.execute(ctx)
         assert result_ctx.result is not None
+
+    def test_grayscale_image_with_rgb_curve(self) -> None:
+        """Line 93: 2D image + non-identity rgb_points → _apply_lut on 2D array."""
+        image = self._make_gray_image(0.3)
+        ctx = PipelineContext(result=image.copy())
+        pts = [(0.0, 0.0), (0.3, 0.6), (1.0, 1.0)]
+        step = CurvesStep(rgb_points=pts)
+        result_ctx = step.execute(ctx)
+        assert result_ctx.result is not None
+        assert result_ctx.result.ndim == 2
+        assert float(result_ctx.result.mean()) > 0.3
+
+
+class TestBuildLutEdgeCases:
+    def test_single_unique_x_after_dedup_returns_identity(self) -> None:
+        """Line 45: all points share same x → len(xs) < 2 after dedup → identity LUT."""
+        pts = [(0.5, 0.0), (0.5, 0.5), (0.5, 1.0)]
+        lut = _build_lut(pts)
+        assert lut.shape == (65536,)
+        assert float(lut[0]) == pytest.approx(0.0, abs=0.001)
+        assert float(lut[-1]) == pytest.approx(1.0, abs=0.001)

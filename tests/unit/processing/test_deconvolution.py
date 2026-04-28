@@ -235,32 +235,29 @@ class TestOnnxPaths:
         assert step._try_load_onnx() is mock_session
 
     def test_load_from_path_success(self, tmp_path: Path) -> None:
-        """_load_from_path loads and caches session when model file exists (lines 106-109)."""
+        """_load_from_path loads and caches session via OnnxModelRegistry."""
         fake_model = tmp_path / "model.onnx"
         fake_model.write_bytes(b"onnxdata")
 
         mock_session = MagicMock()
-        mock_ort = MagicMock()
-        mock_ort.InferenceSession.return_value = mock_session
 
         step = DeconvolutionStep(onnx_model_path=str(fake_model))
-        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            MockReg.return_value.load_from_path.return_value = mock_session
             session = step._load_from_path(str(fake_model))
 
         assert session is mock_session
         assert step._onnx_session is mock_session
 
     def test_load_from_registry_success(self) -> None:
-        """_load_from_registry loads ONNX when model is available in registry (lines 122-125)."""
+        """_load_from_registry loads ONNX via OnnxModelRegistry."""
         mock_session = MagicMock()
-        mock_dl = MagicMock()
-        mock_dl.is_available.return_value = True
-        mock_dl.load_onnx_session.return_value = mock_session
-        mock_dl_module = MagicMock()
-        mock_dl_module.ModelDownloader.return_value = mock_dl
 
         step = DeconvolutionStep()
-        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            registry_instance = MockReg.return_value
+            registry_instance.is_available.return_value = True
+            registry_instance.get_session.return_value = mock_session
             session = step._load_from_registry()
 
         assert session is mock_session
@@ -317,27 +314,23 @@ class TestOnnxPaths:
         assert result.shape == (h, w)
         mock_session.run.assert_called_once()
 
-    def test_load_from_path_ort_exception_returns_none(self, tmp_path: Path) -> None:
-        """InferenceSession raises general Exception → returns None (lines 110-112)."""
+    def test_load_from_path_exception_returns_none(self, tmp_path: Path) -> None:
+        """OnnxModelRegistry.load_from_path returns None on failure."""
         fake_model = tmp_path / "model.onnx"
         fake_model.write_bytes(b"onnxdata")
 
-        mock_ort = MagicMock()
-        mock_ort.InferenceSession.side_effect = RuntimeError("corrupt model")
-
         step = DeconvolutionStep()
-        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            MockReg.return_value.load_from_path.return_value = None
             result = step._load_from_path(str(fake_model))
 
         assert result is None
 
     def test_load_from_registry_exception_returns_none(self) -> None:
-        """ModelDownloader raises general Exception → returns None (lines 126-128)."""
-        mock_dl_module = MagicMock()
-        mock_dl_module.ModelDownloader.side_effect = RuntimeError("registry error")
-
+        """OnnxModelRegistry raises Exception → returns None."""
         step = DeconvolutionStep()
-        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            MockReg.return_value.is_available.side_effect = RuntimeError("registry error")
             result = step._load_from_registry()
 
         assert result is None

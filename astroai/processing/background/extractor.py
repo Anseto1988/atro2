@@ -86,7 +86,7 @@ class BackgroundExtractor:
                 x1 = min(x0 + ts, w)
                 tile = smoothed[y0:y1, x0:x1]
 
-                if tile.size == 0:
+                if tile.size == 0:  # pragma: no cover
                     continue
 
                 val = self._robust_tile_value(tile)

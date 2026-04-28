@@ -29,7 +29,7 @@ class TestGAIACatalogClient:
             mock_client.return_value.__exit__ = MagicMock(return_value=False)
             mock_client.return_value.get.return_value = fake_response
 
-            client = GAIACatalogClient()
+            client = GAIACatalogClient(use_cache=False)
             result = client.query(180.0, 45.0, 1.0)
 
         assert len(result) == 2
@@ -42,7 +42,7 @@ class TestGAIACatalogClient:
             mock_client.return_value.__exit__ = MagicMock(return_value=False)
             mock_client.return_value.get.side_effect = httpx.HTTPError("connection failed")
 
-            client = GAIACatalogClient(fail_silently=True)
+            client = GAIACatalogClient(fail_silently=True, use_cache=False)
             result = client.query(180.0, 45.0, 1.0)
 
         assert result == []
@@ -53,7 +53,7 @@ class TestGAIACatalogClient:
             mock_client.return_value.__exit__ = MagicMock(return_value=False)
             mock_client.return_value.get.side_effect = httpx.HTTPError("connection failed")
 
-            client = GAIACatalogClient(fail_silently=False)
+            client = GAIACatalogClient(fail_silently=False, use_cache=False)
             with pytest.raises(httpx.HTTPError):
                 client.query(180.0, 45.0, 1.0)
 

@@ -260,7 +260,7 @@ class TestNAFNetDenoiser:
     def test_init_stores_params(self) -> None:
         """Lines 235-239: __init__ stores strength, tile_size, etc."""
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader"):
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry"):
             n = NAFNetDenoiser(strength=0.7, tile_size=128, tile_overlap=16)
             assert n._strength == pytest.approx(0.7)
             assert n._tile_size == 128
@@ -272,24 +272,21 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            instance = MockDL.return_value
-            instance.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockReg:
+            instance = MockReg.return_value
+            instance.get_session.return_value = mock_session
             n = NAFNetDenoiser()
             s1 = n._get_session()
             s2 = n._get_session()
             assert s1 is s2
-            instance.load_onnx_session.assert_called_once_with(
-                NAFNetDenoiser.MODEL_NAME, fallback_to_dummy=True
-            )
 
     def test_denoise_grayscale(self) -> None:
         """Lines 249-261: denoise() for grayscale frame."""
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             n = NAFNetDenoiser(strength=1.0, tile_size=16, tile_overlap=2)
             frame = _make_frame(16, 16).astype(np.float32)
             result = n.denoise(frame)
@@ -301,8 +298,8 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             n = NAFNetDenoiser(strength=0.5, tile_size=16, tile_overlap=2)
             frame = _make_rgb_frame(16, 16).astype(np.float32)
             result = n.denoise(frame)
@@ -313,8 +310,8 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             # tile_size < image height forces multiple tiles + padding
             n = NAFNetDenoiser(strength=1.0, tile_size=8, tile_overlap=2)
             channel = _make_frame(20, 20)
@@ -326,8 +323,8 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             n = NAFNetDenoiser(strength=1.0, tile_size=16, tile_overlap=2)
             channel = np.full((16, 16), 200.0, dtype=np.float64)
             result = n._denoise_channel(channel)
@@ -338,8 +335,8 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             n = NAFNetDenoiser(strength=1.0, tile_size=16, tile_overlap=2)
             frame = np.random.default_rng(1).uniform(0, 1, (16, 16)).astype(np.float32)
             result = n.denoise(frame)
@@ -350,8 +347,8 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             n = NAFNetDenoiser(strength=0.0, tile_size=16, tile_overlap=2)
             frame = _make_frame(16, 16).astype(np.float32)
             result = n.denoise(frame)
@@ -362,8 +359,8 @@ class TestNAFNetDenoiser:
         from astroai.processing.denoise.denoiser import NAFNetDenoiser
         mock_session = self._make_nafnet_session()
 
-        with patch("astroai.processing.denoise.denoiser.ModelDownloader") as MockDL:
-            MockDL.return_value.load_onnx_session.return_value = mock_session
+        with patch("astroai.processing.denoise.denoiser.OnnxModelRegistry") as MockDL:
+            MockDL.return_value.get_session.return_value = mock_session
             # tile_size=32 but image is 10x10 -> ph = 32-10 > 0 -> padding branch
             n = NAFNetDenoiser(strength=1.0, tile_size=32, tile_overlap=0)
             channel = _make_frame(10, 10)

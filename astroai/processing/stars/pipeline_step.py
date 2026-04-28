@@ -16,7 +16,12 @@ from astroai.core.pipeline.base import (
     ProgressCallback,
     noop_callback,
 )
-from astroai.processing.stars.star_manager import StarManager
+from astroai.processing.stars.star_manager import (
+    DEFAULT_TILE_OVERLAP,
+    DEFAULT_TILE_SIZE,
+    OnTileProgress,
+    StarManager,
+)
 
 __all__ = ["StarRemovalStep"]
 
@@ -37,17 +42,23 @@ class StarRemovalStep(PipelineStep):
         reduce_enabled: bool = False,
         reduce_factor: float = 0.5,
         onnx_model_path: str | None = None,
+        tile_size: int = DEFAULT_TILE_SIZE,
+        tile_overlap: int = DEFAULT_TILE_OVERLAP,
     ) -> None:
         self._manager = StarManager(
             detection_sigma=detection_sigma,
             min_star_area=min_star_area,
             max_star_area=max_star_area,
             mask_dilation=mask_dilation,
+            tile_size=tile_size,
+            tile_overlap=tile_overlap,
         )
         self._reduce_enabled = reduce_enabled
         self._reduce_factor = float(np.clip(reduce_factor, 0.0, 1.0))
         self._onnx_model_path = onnx_model_path
         self._onnx_session: Any | None = None
+        self._tile_size = tile_size
+        self._tile_overlap = tile_overlap
 
     @property
     def name(self) -> str:
@@ -85,7 +96,17 @@ class StarRemovalStep(PipelineStep):
 
         session = self._try_load_onnx()
         if session is not None:
-            starless, star_mask = self._remove_onnx(data, session)
+            def _tile_progress(tile_idx: int, total_tiles: int) -> None:
+                progress(PipelineProgress(
+                    stage=self.stage,
+                    current=tile_idx,
+                    total=total_tiles,
+                    message=f"Removing stars (tile {tile_idx}/{total_tiles})\u2026",
+                ))
+
+            starless, star_mask = self._remove_onnx(
+                data, session, on_tile_progress=_tile_progress,
+            )
             logger.info("Star removal completed via ONNX model")
         else:
             starless, star_mask = self._remove_fallback(data)
@@ -110,32 +131,23 @@ class StarRemovalStep(PipelineStep):
         return self._load_from_registry()
 
     def _load_from_path(self, path: str) -> Any | None:
-        try:
-            import onnxruntime as ort
-            from pathlib import Path
+        from astroai.core.onnx_registry import OnnxModelRegistry
 
-            model_path = Path(path)
-            if not model_path.exists():
-                logger.debug("ONNX model path does not exist: %s", path)
-                return None
-            self._onnx_session = ort.InferenceSession(
-                str(model_path), providers=["CPUExecutionProvider"]
-            )
-            return self._onnx_session
-        except Exception as exc:
-            logger.debug("Failed to load ONNX from path (%s): %s", path, exc)
-            return None
+        session = OnnxModelRegistry().load_from_path(path)
+        if session is not None:
+            self._onnx_session = session
+        return session
 
     def _load_from_registry(self) -> Any | None:
         try:
-            from astroai.inference.models.downloader import ModelDownloader
+            from astroai.core.onnx_registry import OnnxModelRegistry
 
-            downloader = ModelDownloader()
-            if not downloader.is_available(_STARNET_MODEL_NAME):
+            registry = OnnxModelRegistry()
+            if not registry.is_available(_STARNET_MODEL_NAME):
                 logger.debug("Starnet++ model not available in registry")
                 return None
-            self._onnx_session = downloader.load_onnx_session(
-                _STARNET_MODEL_NAME, fallback_to_dummy=False
+            self._onnx_session = registry.get_session(
+                _STARNET_MODEL_NAME, fallback_to_dummy=False,
             )
             return self._onnx_session
         except Exception as exc:
@@ -143,14 +155,37 @@ class StarRemovalStep(PipelineStep):
             return None
 
     def _remove_onnx(
-        self, frame: NDArray[np.floating[Any]], session: Any,
+        self,
+        frame: NDArray[np.floating[Any]],
+        session: Any,
+        on_tile_progress: OnTileProgress | None = None,
     ) -> tuple[NDArray[np.floating[Any]], NDArray[np.floating[Any]]]:
+        h, w = frame.shape[:2]
         is_rgb = frame.ndim == 3 and frame.shape[2] == 3
 
-        if is_rgb:
-            inp = frame.transpose(2, 0, 1).astype(np.float32)[np.newaxis]
+        if StarManager.needs_tiling(h, w):
+            starless = StarManager.process_tiled(
+                frame,
+                lambda tile: self._onnx_infer_tile(tile, session, is_rgb),
+                tile_size=self._tile_size,
+                overlap=self._tile_overlap,
+                on_progress=on_tile_progress,
+            )
         else:
-            inp = frame.astype(np.float32)[np.newaxis, np.newaxis]
+            starless = self._onnx_infer_tile(frame, session, is_rgb)
+
+        starless = np.clip(starless.astype(frame.dtype), 0.0, None)
+        star_mask = self._derive_star_mask(frame, starless)
+        return starless, star_mask
+
+    @staticmethod
+    def _onnx_infer_tile(
+        tile: NDArray[np.floating[Any]], session: Any, is_rgb: bool,
+    ) -> NDArray[np.floating[Any]]:
+        if is_rgb:
+            inp = tile.transpose(2, 0, 1).astype(np.float32)[np.newaxis]
+        else:
+            inp = tile.astype(np.float32)[np.newaxis, np.newaxis]
 
         input_name = session.get_inputs()[0].name
         out = session.run(None, {input_name: inp})[0].squeeze()
@@ -158,9 +193,7 @@ class StarRemovalStep(PipelineStep):
         if is_rgb and out.ndim == 3 and out.shape[0] == 3:
             out = out.transpose(1, 2, 0)
 
-        starless = np.clip(out.astype(frame.dtype), 0.0, None)
-        star_mask = self._derive_star_mask(frame, starless)
-        return starless, star_mask
+        return cast(NDArray[np.floating[Any]], np.clip(out.astype(tile.dtype), 0.0, None))
 
     def _remove_fallback(
         self, frame: NDArray[np.floating[Any]],

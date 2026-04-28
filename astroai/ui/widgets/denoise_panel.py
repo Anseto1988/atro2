@@ -1,7 +1,7 @@
 """Denoising configuration panel."""
 from __future__ import annotations
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGroupBox,
@@ -19,6 +19,9 @@ __all__ = ["DenoisePanel"]
 
 class DenoisePanel(QWidget):
     """Panel for configuring the AI denoising step."""
+
+    PREVIEW_STEP = "denoise"
+    preview_requested = Signal(dict)
 
     def __init__(self, model: PipelineModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -104,14 +107,24 @@ class DenoisePanel(QWidget):
         self._overlap_spin.setValue(self._model.denoise_tile_overlap)
         self._overlap_spin.blockSignals(False)
 
+    def _emit_preview(self) -> None:
+        self.preview_requested.emit({
+            "strength": self._model.denoise_strength,
+            "tile_size": self._model.denoise_tile_size,
+            "tile_overlap": self._model.denoise_tile_overlap,
+        })
+
     @Slot(float)
     def _on_strength_changed(self, value: float) -> None:
         self._model.denoise_strength = value
+        self._emit_preview()
 
     @Slot(int)
     def _on_tile_size_changed(self, value: int) -> None:
         self._model.denoise_tile_size = value
+        self._emit_preview()
 
     @Slot(int)
     def _on_overlap_changed(self, value: int) -> None:
         self._model.denoise_tile_overlap = value
+        self._emit_preview()

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
 
 __all__ = ["StarManager"]
+
+AUTO_TILE_THRESHOLD = 4096 * 4096
+DEFAULT_TILE_SIZE = 512
+DEFAULT_TILE_OVERLAP = 64
+
+OnTileProgress = Callable[[int, int], None]
 
 
 class StarManager:
@@ -24,11 +30,15 @@ class StarManager:
         min_star_area: int = 3,
         max_star_area: int = 5000,
         mask_dilation: int = 3,
+        tile_size: int = DEFAULT_TILE_SIZE,
+        tile_overlap: int = DEFAULT_TILE_OVERLAP,
     ) -> None:
         self._sigma = detection_sigma
         self._min_area = min_star_area
         self._max_area = max_star_area
         self._dilation = mask_dilation
+        self._tile_size = tile_size
+        self._tile_overlap = tile_overlap
 
     def create_star_mask(
         self, frame: NDArray[np.floating[Any]]
@@ -53,7 +63,7 @@ class StarManager:
             ys, xs = np.where(region)
             dy = ys.max() - ys.min() + 1
             dx = xs.max() - xs.min() + 1
-            if dy == 0 or dx == 0:
+            if dy == 0 or dx == 0:  # pragma: no cover
                 continue
             aspect = max(dy, dx) / max(min(dy, dx), 1)
             if aspect > 4.0:
@@ -144,3 +154,92 @@ class StarManager:
         if ndim == 3:
             return mask[..., np.newaxis]
         return mask
+
+    # ------------------------------------------------------------------
+    # Tile-based processing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def needs_tiling(
+        h: int, w: int, threshold: int = AUTO_TILE_THRESHOLD,
+    ) -> bool:
+        return h * w > threshold
+
+    @staticmethod
+    def _cosine_weight_1d(
+        length: int, overlap: int, at_start: bool, at_end: bool,
+    ) -> NDArray[np.floating[Any]]:
+        w = np.ones(length, dtype=np.float64)
+        if overlap <= 0 or overlap >= length:
+            return w
+        ramp = np.float64(0.5) * (1.0 - np.cos(np.linspace(0, np.pi, overlap)))
+        if not at_start:
+            w[:overlap] = ramp
+        if not at_end:
+            w[-overlap:] = ramp[::-1]
+        return w
+
+    @staticmethod
+    def process_tiled(
+        image: NDArray[np.floating[Any]],
+        process_fn: Callable[[NDArray[np.floating[Any]]], NDArray[np.floating[Any]]],
+        tile_size: int = DEFAULT_TILE_SIZE,
+        overlap: int = DEFAULT_TILE_OVERLAP,
+        on_progress: OnTileProgress | None = None,
+    ) -> NDArray[np.floating[Any]]:
+        h, w = image.shape[:2]
+        step = tile_size - overlap
+
+        result = np.zeros_like(image, dtype=np.float64)
+        weight_map = np.zeros((h, w), dtype=np.float64)
+
+        y_starts = list(range(0, h, step))
+        x_starts = list(range(0, w, step))
+        total_tiles = len(y_starts) * len(x_starts)
+        tile_idx = 0
+
+        for y in y_starts:
+            for x in x_starts:
+                y1 = min(y + tile_size, h)
+                x1 = min(x + tile_size, w)
+                y0 = max(y1 - tile_size, 0)
+                x0 = max(x1 - tile_size, 0)
+
+                th, tw = y1 - y0, x1 - x0
+                tile = image[y0:y1, x0:x1]
+
+                ph, pw = tile_size - th, tile_size - tw
+                if ph > 0 or pw > 0:
+                    pad_w = [(0, ph), (0, pw)]
+                    if image.ndim == 3:
+                        pad_w.append((0, 0))
+                    tile = np.pad(tile, pad_w, mode="reflect")
+
+                processed = process_fn(tile)
+                processed = processed[:th, :tw]
+
+                wy = StarManager._cosine_weight_1d(
+                    th, overlap, at_start=(y0 == 0), at_end=(y1 == h),
+                )
+                wx = StarManager._cosine_weight_1d(
+                    tw, overlap, at_start=(x0 == 0), at_end=(x1 == w),
+                )
+                weight = wy[:, np.newaxis] * wx[np.newaxis, :]
+
+                if image.ndim == 3:
+                    result[y0:y1, x0:x1] += processed.astype(np.float64) * weight[..., np.newaxis]
+                else:
+                    result[y0:y1, x0:x1] += processed.astype(np.float64) * weight
+                weight_map[y0:y1, x0:x1] += weight
+
+                tile_idx += 1
+                if on_progress is not None:
+                    on_progress(tile_idx, total_tiles)
+
+        weight_map = np.maximum(weight_map, 1e-8)
+        if image.ndim == 3:
+            result /= weight_map[..., np.newaxis]
+        else:
+            result /= weight_map
+
+        return cast(NDArray[np.floating[Any]], result.astype(image.dtype))

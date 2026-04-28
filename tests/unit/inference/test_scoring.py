@@ -182,3 +182,13 @@ class TestFrameScorerEdgeCases:
         result = scorer._score_cloud_coverage(frame)
         assert isinstance(result, float)
         assert 0.0 <= result <= 1.0
+
+    def test_detect_stars_filters_small_regions(self) -> None:
+        """Line 48: area < min_star_area → continue. Single bright pixel has area=1;
+        with min_star_area=5 it is filtered out, returning an empty list."""
+        scorer = FrameScorer(star_threshold_sigma=0.5, min_star_area=5)
+        frame = np.zeros((32, 32), dtype=np.float64)
+        frame[16, 16] = 1e6  # single pixel → area=1 < 5
+        gray = FrameScorer._to_grayscale(frame)
+        stars = scorer._detect_stars(gray)
+        assert stars == []

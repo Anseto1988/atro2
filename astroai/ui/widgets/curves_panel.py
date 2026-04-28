@@ -203,6 +203,9 @@ class CurveEditor(QWidget):
 class CurvesPanel(QWidget):
     """Dock-panel for interactive tone-curve adjustment."""
 
+    PREVIEW_STEP = "curves"
+    preview_requested = Signal(dict)
+
     def __init__(self, model: PipelineModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model = model
@@ -275,6 +278,14 @@ class CurvesPanel(QWidget):
     def _on_channel_changed(self, _: int) -> None:
         self._sync_from_model()
 
+    def _emit_preview(self) -> None:
+        self.preview_requested.emit({
+            "rgb_points": list(self._model.curves_rgb_points),
+            "r_points": list(self._model.curves_r_points),
+            "g_points": list(self._model.curves_g_points),
+            "b_points": list(self._model.curves_b_points),
+        })
+
     @Slot(list)
     def _on_points_changed(self, points: list[tuple[float, float]]) -> None:
         ch = self._channel_combo.currentText()
@@ -287,6 +298,7 @@ class CurvesPanel(QWidget):
             self._model.curves_b_points = pts
         else:
             self._model.curves_rgb_points = pts
+        self._emit_preview()
 
     @Slot()
     def _on_reset(self) -> None:

@@ -59,6 +59,10 @@ class TestModelDownloader:
             (models_dir / "test_model.onnx").write_bytes(content)
             assert downloader.is_available("test_model")
 
+    def test_is_available_false_for_unavailable_model(self, downloader):
+        # "starnet_plus_plus" is in _STARNET_MANIFEST with "available": False → line 93
+        assert not downloader.is_available("starnet_plus_plus")
+
     def test_ensure_model_raises_for_unknown(self, downloader):
         with pytest.raises(KeyError, match="Unknown model"):
             downloader.ensure_model("nonexistent")

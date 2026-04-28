@@ -14,8 +14,20 @@ _AAVSO_VSX_URL = "https://www.aavso.org/vsx/index.php"
 
 
 class GAIACatalogClient:
-    def __init__(self, *, fail_silently: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        fail_silently: bool = True,
+        use_cache: bool = True,
+    ) -> None:
         self._fail_silently = fail_silently
+        self._cache = None
+        if use_cache:
+            try:
+                from astroai.core.catalog_cache import CatalogCache
+                self._cache = CatalogCache()
+            except Exception:
+                logger.debug("Catalog cache unavailable, proceeding without cache")
 
     def query(
         self,
@@ -24,6 +36,17 @@ class GAIACatalogClient:
         radius_deg: float,
         mag_limit: float = 15.0,
     ) -> list[dict[str, Any]]:
+        if self._cache is not None:
+            from astroai.core.catalog_cache import CatalogCache
+            key = CatalogCache.make_key(
+                "gaia_tap", ra_center, dec_center, radius_deg,
+                extra=f"mag{mag_limit}",
+            )
+            cached = self._cache.get(key)
+            if cached is not None:
+                logger.debug("GAIA TAP cache hit")
+                return cached
+
         adql = (
             "SELECT ra, dec, phot_g_mean_mag "
             "FROM \"I/355/gaiadr3\" "
@@ -40,7 +63,20 @@ class GAIACatalogClient:
             data = resp.json()
             rows = data.get("data", [])
             columns = [c["name"] for c in data.get("metadata", [])]
-            return [dict(zip(columns, row)) for row in rows]
+            result = [dict(zip(columns, row)) for row in rows]
+
+            if self._cache is not None:
+                from astroai.core.catalog_cache import CatalogCache
+                key = CatalogCache.make_key(
+                    "gaia_tap", ra_center, dec_center, radius_deg,
+                    extra=f"mag{mag_limit}",
+                )
+                self._cache.put(
+                    key, "gaia_tap", ra_center, dec_center, radius_deg, result,
+                    extra_key=f"mag{mag_limit}",
+                )
+
+            return result
         except Exception:
             if self._fail_silently:
                 logger.warning("GAIA catalog query failed", exc_info=True)

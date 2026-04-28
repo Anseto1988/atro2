@@ -11,9 +11,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from numpy.typing import NDArray
 
+from astroai.core.onnx_registry import OnnxModelRegistry
 from astroai.core.pipeline.base import ProgressCallback
 from astroai.inference.backends import DeviceManager
-from astroai.inference.models.downloader import ModelDownloader
 
 __all__ = ["Denoiser", "NAFNetDenoiser", "SimpleUNet"]
 
@@ -235,13 +235,14 @@ class NAFNetDenoiser:
         self._strength = np.clip(strength, 0.0, 1.0)
         self._tile_size = tile_size
         self._tile_overlap = tile_overlap
-        self._downloader = ModelDownloader(models_dir=models_dir, progress=progress)
+        self._registry = OnnxModelRegistry()
+        self._progress = progress
         self._session: Any | None = None
 
     def _get_session(self) -> Any:
         if self._session is None:
-            self._session = self._downloader.load_onnx_session(
-                self.MODEL_NAME, fallback_to_dummy=True
+            self._session = self._registry.get_session(
+                self.MODEL_NAME, fallback_to_dummy=True, progress=self._progress,
             )
         return self._session
 

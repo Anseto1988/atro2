@@ -74,12 +74,20 @@ class SpectralColorCalibrator:
         max_iterations: int = 10,
         outlier_sigma: float = 2.5,
         min_stars: int = 5,
+        use_cache: bool = True,
     ) -> None:
         self._catalog = catalog
         self._sample_radius = sample_radius_px
         self._max_iterations = max_iterations
         self._outlier_sigma = outlier_sigma
         self._min_stars = min_stars
+        self._cache = None
+        if use_cache:
+            try:
+                from astroai.core.catalog_cache import CatalogCache
+                self._cache = CatalogCache()
+            except Exception:
+                logger.debug("Catalog cache unavailable, proceeding without cache")
 
     @property
     def catalog(self) -> CatalogSource:
@@ -181,6 +189,20 @@ class SpectralColorCalibrator:
     def _query_gaia(
         self, ra: float, dec: float, radius: float,
     ) -> CatalogQueryResult:
+        if self._cache is not None:
+            from astroai.core.catalog_cache import CatalogCache
+            key = CatalogCache.make_key("gaia_dr3", ra, dec, radius)
+            cached = self._cache.get(key)
+            if cached is not None:
+                logger.debug("GAIA cache hit for (%.4f, %.4f, %.4f)", ra, dec, radius)
+                return CatalogQueryResult(
+                    ra=np.array(cached["ra"], dtype=np.float64),
+                    dec=np.array(cached["dec"], dtype=np.float64),
+                    color_index=np.array(cached["color_index"], dtype=np.float64),
+                    flux_ratio_rg=np.array(cached["flux_ratio_rg"], dtype=np.float64),
+                    flux_ratio_bg=np.array(cached["flux_ratio_bg"], dtype=np.float64),
+                )
+
         from astroquery.gaia import Gaia
         import astropy.units as u
         from astropy.coordinates import SkyCoord
@@ -207,7 +229,7 @@ class SpectralColorCalibrator:
             ratio_rg = np.where(flux_g > 0, flux_rp / flux_g, 1.0)
             ratio_bg = np.where(flux_g > 0, flux_bp / flux_g, 1.0)
 
-        return CatalogQueryResult(
+        result = CatalogQueryResult(
             ra=np.array(table["ra"], dtype=np.float64),
             dec=np.array(table["dec"], dtype=np.float64),
             color_index=bp_rp,
@@ -215,18 +237,49 @@ class SpectralColorCalibrator:
             flux_ratio_bg=ratio_bg,
         )
 
+        if self._cache is not None:
+            from astroai.core.catalog_cache import CatalogCache
+            key = CatalogCache.make_key("gaia_dr3", ra, dec, radius)
+            self._cache.put(
+                key, "gaia_dr3", ra, dec, radius,
+                {
+                    "ra": result.ra.tolist(),
+                    "dec": result.dec.tolist(),
+                    "color_index": result.color_index.tolist(),
+                    "flux_ratio_rg": result.flux_ratio_rg.tolist(),
+                    "flux_ratio_bg": result.flux_ratio_bg.tolist(),
+                },
+            )
+            logger.debug("Cached GAIA result for (%.4f, %.4f, %.4f)", ra, dec, radius)
+
+        return result
+
     def _query_2mass(
         self, ra: float, dec: float, radius: float,
     ) -> CatalogQueryResult:
+        if self._cache is not None:
+            from astroai.core.catalog_cache import CatalogCache
+            key = CatalogCache.make_key("2mass", ra, dec, radius)
+            cached = self._cache.get(key)
+            if cached is not None:
+                logger.debug("2MASS cache hit for (%.4f, %.4f, %.4f)", ra, dec, radius)
+                return CatalogQueryResult(
+                    ra=np.array(cached["ra"], dtype=np.float64),
+                    dec=np.array(cached["dec"], dtype=np.float64),
+                    color_index=np.array(cached["color_index"], dtype=np.float64),
+                    flux_ratio_rg=np.array(cached["flux_ratio_rg"], dtype=np.float64),
+                    flux_ratio_bg=np.array(cached["flux_ratio_bg"], dtype=np.float64),
+                )
+
         from astroquery.vizier import Vizier
         import astropy.units as u
         from astropy.coordinates import SkyCoord
 
         coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
         vizier = Vizier(columns=["RAJ2000", "DEJ2000", "Jmag", "Hmag", "Kmag"], row_limit=5000)
-        result = vizier.query_region(coord, radius=radius * u.deg, catalog="II/246/out")
+        query_result = vizier.query_region(coord, radius=radius * u.deg, catalog="II/246/out")
 
-        if not result:
+        if not query_result:
             return CatalogQueryResult(
                 ra=np.array([], dtype=np.float64),
                 dec=np.array([], dtype=np.float64),
@@ -235,7 +288,7 @@ class SpectralColorCalibrator:
                 flux_ratio_bg=np.array([], dtype=np.float64),
             )
 
-        table = result[0]
+        table = query_result[0]
         mask = (
             np.isfinite(table["Jmag"])
             & np.isfinite(table["Hmag"])
@@ -253,13 +306,30 @@ class SpectralColorCalibrator:
             ratio_rg = np.where(flux_h > 0, flux_k / flux_h, 1.0)
             ratio_bg = np.where(flux_h > 0, flux_j / flux_h, 1.0)
 
-        return CatalogQueryResult(
+        result = CatalogQueryResult(
             ra=np.array(table["RAJ2000"], dtype=np.float64),
             dec=np.array(table["DEJ2000"], dtype=np.float64),
             color_index=j_h,
             flux_ratio_rg=ratio_rg,
             flux_ratio_bg=ratio_bg,
         )
+
+        if self._cache is not None:
+            from astroai.core.catalog_cache import CatalogCache
+            key = CatalogCache.make_key("2mass", ra, dec, radius)
+            self._cache.put(
+                key, "2mass", ra, dec, radius,
+                {
+                    "ra": result.ra.tolist(),
+                    "dec": result.dec.tolist(),
+                    "color_index": result.color_index.tolist(),
+                    "flux_ratio_rg": result.flux_ratio_rg.tolist(),
+                    "flux_ratio_bg": result.flux_ratio_bg.tolist(),
+                },
+            )
+            logger.debug("Cached 2MASS result for (%.4f, %.4f, %.4f)", ra, dec, radius)
+
+        return result
 
     def _catalog_to_pixels(
         self,

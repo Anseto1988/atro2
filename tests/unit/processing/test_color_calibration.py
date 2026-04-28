@@ -432,7 +432,7 @@ class TestQueryGaia:
         assert len(result.ra) == 3
 
     def test_query_gaia_filters_faint_stars(self) -> None:
-        cal = SpectralColorCalibrator()
+        cal = SpectralColorCalibrator(use_cache=False)
         data = {
             "phot_bp_mean_mag": np.array([12.0, 17.0]),
             "phot_rp_mean_mag": np.array([11.5, 16.5]),
@@ -501,7 +501,7 @@ class TestQuery2Mass:
         return mock_vizier_module, mock_astropy_units, mock_astropy_coords
 
     def test_query_2mass_empty_result_returns_empty_catalog(self) -> None:
-        cal = SpectralColorCalibrator(catalog=CatalogSource.TWOMASS)
+        cal = SpectralColorCalibrator(catalog=CatalogSource.TWOMASS, use_cache=False)
         mock_vizier_module, mock_u, mock_coords = self._patch_vizier([])
 
         with patch.dict(sys.modules, {
@@ -651,3 +651,122 @@ class TestFitCorrectionEdgeCases:
         cal = SpectralColorCalibrator(min_stars=3, outlier_sigma=2.0, max_iterations=5)
         correction, rms, final = cal._fit_correction(stars)
         assert len(final) < len(stars)
+
+
+# ---------------------------------------------------------------------------
+# SpectralColorCalibrator.__init__ — CatalogCache import failure (lines 89-90)
+# ---------------------------------------------------------------------------
+
+class TestCacheInitFallback:
+    def test_cache_none_when_import_fails(self) -> None:
+        with patch.dict(sys.modules, {"astroai.core.catalog_cache": None}):
+            cal = SpectralColorCalibrator(use_cache=True)
+        assert cal._cache is None
+
+
+# ---------------------------------------------------------------------------
+# _query_gaia — cache write path (lines 241-253)
+# ---------------------------------------------------------------------------
+
+class TestQueryGaiaCacheWrite:
+    def _make_gaia_mock_with_result(self, n: int = 3):
+        data = {
+            "phot_bp_mean_mag": np.linspace(12.0, 14.0, n),
+            "phot_rp_mean_mag": np.linspace(11.5, 13.5, n),
+            "phot_g_mean_mag": np.linspace(11.8, 13.8, n),
+            "bp_rp": np.full(n, 0.5),
+            "ra": np.linspace(10.1, 10.3, n),
+            "dec": np.linspace(20.1, 20.3, n),
+        }
+
+        class GaiaTable:
+            def __init__(self, d):
+                self._d = d
+
+            def __getitem__(self, key):
+                if isinstance(key, np.ndarray) and key.dtype == bool:
+                    return GaiaTable({k: v[key] for k, v in self._d.items()})
+                return self._d[key]
+
+        fake_table = GaiaTable(data)
+        mock_job = MagicMock()
+        mock_job.get_results.return_value = fake_table
+        mock_gaia_cls = MagicMock()
+        mock_gaia_cls.cone_search_async.return_value = mock_job
+        mock_gaia_module = MagicMock()
+        mock_gaia_module.Gaia = mock_gaia_cls
+        return mock_gaia_module
+
+    def test_gaia_cache_write_executed(self) -> None:
+        cal = SpectralColorCalibrator(use_cache=False)
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None  # force cache miss
+        cal._cache = mock_cache
+
+        mock_gaia_module = self._make_gaia_mock_with_result()
+        mock_astropy_units = MagicMock()
+        mock_astropy_coords = MagicMock()
+
+        with patch.dict(sys.modules, {
+            "astroquery": MagicMock(),
+            "astroquery.gaia": mock_gaia_module,
+            "astropy.units": mock_astropy_units,
+            "astropy.coordinates": mock_astropy_coords,
+        }):
+            result = cal._query_gaia(10.25, 20.25, 0.5)
+
+        mock_cache.put.assert_called_once()
+        assert isinstance(result, CatalogQueryResult)
+        assert len(result.ra) == 3
+
+
+# ---------------------------------------------------------------------------
+# _query_2mass — full data path with cache write (lines 291-332)
+# ---------------------------------------------------------------------------
+
+class TestQuery2MassFullPath:
+    def _make_2mass_table(self, n: int = 3):
+        raw = {
+            "Jmag": np.linspace(13.5, 15.0, n),
+            "Hmag": np.linspace(13.0, 14.5, n),
+            "Kmag": np.linspace(12.5, 14.0, n),
+            "RAJ2000": np.linspace(10.1, 10.3, n),
+            "DEJ2000": np.linspace(20.1, 20.3, n),
+        }
+
+        class Table:
+            def __init__(self, d):
+                self._d = d
+
+            def __getitem__(self, key):
+                if isinstance(key, np.ndarray) and key.dtype == bool:
+                    return Table({k: v[key] for k, v in self._d.items()})
+                return self._d[key]
+
+        return Table(raw)
+
+    def test_2mass_data_path_with_cache_miss(self) -> None:
+        cal = SpectralColorCalibrator(catalog=CatalogSource.TWOMASS, use_cache=False)
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None
+        cal._cache = mock_cache
+
+        fake_table = self._make_2mass_table()
+        mock_vizier_inst = MagicMock()
+        mock_vizier_inst.query_region.return_value = [fake_table]
+        mock_vizier_cls = MagicMock()
+        mock_vizier_cls.return_value = mock_vizier_inst
+        mock_vizier_module = MagicMock()
+        mock_vizier_module.Vizier = mock_vizier_cls
+
+        with patch.dict(sys.modules, {
+            "astroquery": MagicMock(),
+            "astroquery.vizier": mock_vizier_module,
+            "astropy.units": MagicMock(),
+            "astropy.coordinates": MagicMock(),
+        }):
+            result = cal._query_2mass(10.25, 20.25, 0.5)
+
+        mock_cache.put.assert_called_once()
+        assert isinstance(result, CatalogQueryResult)
+        assert len(result.ra) == 3

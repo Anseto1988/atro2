@@ -1187,3 +1187,56 @@ class PipelineModel(QObject):
                 step.progress = 1.0
         if found:
             self.step_changed.emit(key, StepState.ACTIVE.value)
+
+    # -- processing parameter snapshot/restore for undo/redo -------------------
+
+    _SNAPSHOT_ATTRS: tuple[str, ...] = (
+        "_stretch_target_background",
+        "_stretch_shadow_clipping_sigmas",
+        "_stretch_linked_channels",
+        "_curves_enabled",
+        "_curves_rgb_points",
+        "_curves_r_points",
+        "_curves_g_points",
+        "_curves_b_points",
+        "_background_removal_enabled",
+        "_background_removal_tile_size",
+        "_background_removal_method",
+        "_background_removal_preserve_median",
+        "_denoise_strength",
+        "_denoise_tile_size",
+        "_denoise_tile_overlap",
+        "_starless_enabled",
+        "_starless_strength",
+        "_starless_format",
+        "_save_star_mask",
+        "_deconvolution_enabled",
+        "_deconvolution_iterations",
+        "_deconvolution_psf_sigma",
+        "_star_detection_sigma",
+        "_star_min_area",
+        "_star_max_area",
+        "_star_mask_dilation",
+        "_star_reduce_enabled",
+        "_star_reduce_factor",
+        "_color_calibration_enabled",
+        "_color_calibration_catalog",
+        "_color_calibration_sample_radius",
+    )
+
+    def snapshot_processing_params(self) -> dict[str, object]:
+        snap: dict[str, object] = {}
+        for attr in self._SNAPSHOT_ATTRS:
+            val = getattr(self, attr)
+            if isinstance(val, list):
+                val = [tuple(p) if isinstance(p, (list, tuple)) else p for p in val]
+            snap[attr] = val
+        return snap
+
+    def restore_processing_params(self, params: dict[str, object]) -> None:
+        for attr in self._SNAPSHOT_ATTRS:
+            if attr in params:
+                val = params[attr]
+                if isinstance(val, list):
+                    val = [tuple(p) if isinstance(p, (list, tuple)) else p for p in val]
+                setattr(self, attr, val)

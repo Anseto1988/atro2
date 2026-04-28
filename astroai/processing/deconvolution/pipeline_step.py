@@ -95,32 +95,23 @@ class DeconvolutionStep(PipelineStep):
         return self._load_from_registry()
 
     def _load_from_path(self, path: str) -> Any | None:
-        try:
-            import onnxruntime as ort
-            from pathlib import Path as _Path
+        from astroai.core.onnx_registry import OnnxModelRegistry
 
-            model_path = _Path(path)
-            if not model_path.exists():
-                logger.debug("ONNX model path does not exist: %s", path)
-                return None
-            self._onnx_session = ort.InferenceSession(
-                str(model_path), providers=["CPUExecutionProvider"]
-            )
-            return self._onnx_session
-        except Exception as exc:
-            logger.debug("Failed to load ONNX from path (%s): %s", path, exc)
-            return None
+        session = OnnxModelRegistry().load_from_path(path)
+        if session is not None:
+            self._onnx_session = session
+        return session
 
     def _load_from_registry(self) -> Any | None:
         try:
-            from astroai.inference.models.downloader import ModelDownloader
+            from astroai.core.onnx_registry import OnnxModelRegistry
 
-            downloader = ModelDownloader()
-            if not downloader.is_available(_DECONV_MODEL_NAME):
+            registry = OnnxModelRegistry()
+            if not registry.is_available(_DECONV_MODEL_NAME):
                 logger.debug("Blind deconv model not available in registry")
                 return None
-            self._onnx_session = downloader.load_onnx_session(
-                _DECONV_MODEL_NAME, fallback_to_dummy=False
+            self._onnx_session = registry.get_session(
+                _DECONV_MODEL_NAME, fallback_to_dummy=False,
             )
             return self._onnx_session
         except Exception as exc:

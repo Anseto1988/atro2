@@ -1,7 +1,7 @@
 """Intelligent stretch configuration panel."""
 from __future__ import annotations
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
@@ -19,6 +19,9 @@ __all__ = ["StretchPanel"]
 
 class StretchPanel(QWidget):
     """Panel for configuring the intelligent histogram stretch step."""
+
+    PREVIEW_STEP = "stretch"
+    preview_requested = Signal(dict)
 
     def __init__(self, model: PipelineModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -96,14 +99,24 @@ class StretchPanel(QWidget):
         self._linked_cb.setChecked(self._model.stretch_linked_channels)
         self._linked_cb.blockSignals(False)
 
+    def _emit_preview(self) -> None:
+        self.preview_requested.emit({
+            "target_background": self._model.stretch_target_background,
+            "shadow_clipping_sigmas": self._model.stretch_shadow_clipping_sigmas,
+            "linked_channels": self._model.stretch_linked_channels,
+        })
+
     @Slot(float)
     def _on_bg_changed(self, value: float) -> None:
         self._model.stretch_target_background = value
+        self._emit_preview()
 
     @Slot(float)
     def _on_sigma_changed(self, value: float) -> None:
         self._model.stretch_shadow_clipping_sigmas = value
+        self._emit_preview()
 
     @Slot(bool)
     def _on_linked_changed(self, checked: bool) -> None:
         self._model.stretch_linked_channels = checked
+        self._emit_preview()

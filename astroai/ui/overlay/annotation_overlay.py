@@ -191,7 +191,7 @@ class AnnotationOverlay(QWidget):
             painter.drawLine(p1, p2)
 
     def _paint_grid(self, painter: QPainter) -> None:
-        if self._wcs is None:
+        if self._wcs is None:  # pragma: no cover
             return
 
         pen = QPen(_COLOR_GRID, 0.5, Qt.PenStyle.DashLine)

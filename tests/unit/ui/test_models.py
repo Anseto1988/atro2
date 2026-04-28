@@ -2225,3 +2225,42 @@ class TestPipelineModelExportSameValue:
         model.output_filename = "test_output"
         with qtbot.assertNotEmitted(model.export_config_changed):
             model.output_filename = "test_output"
+
+
+# ---------------------------------------------------------------------------
+# snapshot_processing_params / restore_processing_params (lines 1228-1242)
+# ---------------------------------------------------------------------------
+
+class TestSnapshotRestoreProcessingParams:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_snapshot_returns_dict_with_expected_keys(self, model: PipelineModel) -> None:
+        snap = model.snapshot_processing_params()
+        assert isinstance(snap, dict)
+        assert "_stretch_target_background" in snap
+        assert "_curves_rgb_points" in snap
+
+    def test_snapshot_list_values_are_tuples(self, model: PipelineModel) -> None:
+        snap = model.snapshot_processing_params()
+        # rgb_points is a list of tuples; snapshot should preserve as tuples
+        rgb = snap["_curves_rgb_points"]
+        assert all(isinstance(p, tuple) for p in rgb)
+
+    def test_restore_from_snapshot_roundtrip(self, model: PipelineModel) -> None:
+        model._stretch_target_background = 0.35
+        snap = model.snapshot_processing_params()
+
+        model._stretch_target_background = 0.99
+        model.restore_processing_params(snap)
+        assert model._stretch_target_background == pytest.approx(0.35)
+
+    def test_restore_ignores_unknown_keys(self, model: PipelineModel) -> None:
+        params = {"_nonexistent_attr": 42}
+        model.restore_processing_params(params)  # should not raise
+
+    def test_restore_list_values_coerced_to_tuples(self, model: PipelineModel) -> None:
+        params = {"_curves_rgb_points": [[0.0, 0.0], [0.5, 0.7], [1.0, 1.0]]}
+        model.restore_processing_params(params)
+        assert all(isinstance(p, tuple) for p in model._curves_rgb_points)

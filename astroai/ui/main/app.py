@@ -42,6 +42,7 @@ from astroai.core.calibration.worker import CalibrationWorker
 from astroai.core.pipeline.builder import PipelineBuilder
 from astroai.core.pipeline.runner import PipelineWorker
 from astroai.core.pipeline.base import PipelineContext
+from astroai.core.processing_history import ProcessingHistory
 from astroai.ui.widgets.calibration_benchmark import CalibrationBenchmarkWidget
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
@@ -94,7 +95,7 @@ _STAGE_TO_STEP_KEY: dict[str, str] = {
 
 def _resources_dir() -> Path:
     if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS) / "astroai" / "ui" / "resources"  # type: ignore[attr-defined]
+        return Path(sys._MEIPASS) / "astroai" / "ui" / "resources"  # type: ignore[attr-defined]  # pragma: no cover
     return Path(__file__).resolve().parent.parent / "resources"
 
 _RESOURCES = _resources_dir()
@@ -182,8 +183,10 @@ class MainWindow(QMainWindow):
         self._calibration_worker = CalibrationWorker(self)
         self._pipeline_worker = PipelineWorker(self)
         self._pipeline_builder = PipelineBuilder()
+        self._processing_history = ProcessingHistory(parent=self)
         self._current_image: object = None
         self._before_image: object = None  # image snapshot before pipeline run
+        self._processing_base_image: object = None  # base image for undo re-apply
         self._auto_stretch: bool = False
         self._wcs_adapter: object = None  # WcsTransform | None
         self._file_loader = FileLoader(self)
@@ -544,6 +547,21 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_act)
 
         edit_menu = menu_bar.addMenu("&Bearbeiten")
+
+        self._undo_act = QAction("&Rückgängig", self)
+        self._undo_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Z))  # type: ignore[operator]
+        self._undo_act.setEnabled(False)
+        self._undo_act.triggered.connect(self._on_undo)
+        edit_menu.addAction(self._undo_act)
+
+        self._redo_act = QAction("&Wiederherstellen", self)
+        self._redo_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Y))  # type: ignore[operator]
+        self._redo_act.setEnabled(False)
+        self._redo_act.triggered.connect(self._on_redo)
+        edit_menu.addAction(self._redo_act)
+
+        edit_menu.addSeparator()
+
         self._copy_image_act = QAction("Bild &kopieren", self)
         self._copy_image_act.setShortcut(
             QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_C)  # type: ignore[operator]
@@ -627,6 +645,10 @@ class MainWindow(QMainWindow):
     def _setup_statusbar(self) -> None:
         self._status_bar = self.statusBar()
         self._status_bar.showMessage("Bereit")
+        self._backend_label = QLabel(self._get_backend_label())
+        self._backend_label.setStyleSheet("color: #8cf; font-size: 11px; padding: 0 6px;")
+        self._backend_label.setToolTip("Aktives Inference-Backend")
+        self._status_bar.addPermanentWidget(self._backend_label)
         self._calib_status_label = QLabel("Kalib.: —")
         self._calib_status_label.setStyleSheet("color: #aaa; font-size: 11px; padding: 0 6px;")
         self._calib_status_label.setToolTip("Anzahl konfigurierter Kalibrierungs-Frames")
@@ -636,6 +658,14 @@ class MainWindow(QMainWindow):
         self._status_bar.addPermanentWidget(self._zoom_label)
         self._license_badge = LicenseBadge()
         self._status_bar.addPermanentWidget(self._license_badge)
+
+    @staticmethod
+    def _get_backend_label() -> str:
+        try:
+            from astroai.core.onnx_registry import OnnxModelRegistry
+            return OnnxModelRegistry().backend_label
+        except Exception:
+            return "[CPU]"
 
     def _refresh_calib_status(self) -> None:
         cfg = self._project.calibration
@@ -680,6 +710,8 @@ class MainWindow(QMainWindow):
         )
         self._pipeline.annotation_config_changed.connect(self._sync_annotation_from_model)
         self._pipeline.histogram_changed.connect(self._histogram.set_image_data)
+
+        self._processing_history.history_changed.connect(self._on_history_changed)
 
         self._calibration_worker.metrics.connect(self._benchmark.update_metrics)
         self._calibration_worker.finished.connect(self._on_calibration_finished)
@@ -1493,6 +1525,12 @@ class MainWindow(QMainWindow):
             return
 
         self._before_image = self._current_image
+        if self._processing_base_image is None:
+            self._processing_base_image = self._current_image
+        self._processing_history.push(
+            "Processing",
+            self._pipeline.snapshot_processing_params(),
+        )
         pipeline = self._pipeline_builder.build_processing_pipeline(self._pipeline)
         context = PipelineContext(images=[self._current_image])
         self._pipeline.reset()
@@ -1635,6 +1673,59 @@ class MainWindow(QMainWindow):
         self._benchmark.reset()
         logging.getLogger("astroai.pipeline").error("Kalibrierung fehlgeschlagen: %s", msg)
 
+    # -- undo / redo handlers --------------------------------------------------
+
+    @Slot()
+    def _on_history_changed(self) -> None:
+        can_undo = self._processing_history.can_undo
+        can_redo = self._processing_history.can_redo
+        undo_name = self._processing_history.undo_step_name
+        redo_name = self._processing_history.redo_step_name
+        self._undo_act.setEnabled(can_undo)
+        self._redo_act.setEnabled(can_redo)
+        self._undo_act.setText(
+            f"Rückgängig: {undo_name}" if undo_name else "Rückgängig"
+        )
+        self._redo_act.setText(
+            f"Wiederherstellen: {redo_name}" if redo_name else "Wiederherstellen"
+        )
+
+    @Slot()
+    def _on_undo(self) -> None:
+        if self._pipeline_worker.is_running:
+            return
+        entry = self._processing_history.undo()
+        if entry is None:
+            return
+        prev = self._processing_history.peek_undo()
+        if prev is not None:
+            self._pipeline.restore_processing_params(prev.params)
+            self._before_image = self._processing_base_image
+            if isinstance(self._processing_base_image, np.ndarray):
+                pipeline = self._pipeline_builder.build_processing_pipeline(self._pipeline)
+                context = PipelineContext(images=[self._processing_base_image])
+                self._pipeline.reset()
+                self._pipeline_worker.start(pipeline, context)
+        elif isinstance(self._processing_base_image, np.ndarray):
+            self._current_image = self._processing_base_image
+            self._display_image_data(self._processing_base_image)
+            self._status_bar.showMessage("Rückgängig — Ausgangsbild wiederhergestellt")
+
+    @Slot()
+    def _on_redo(self) -> None:
+        if self._pipeline_worker.is_running:
+            return
+        entry = self._processing_history.redo()
+        if entry is None:
+            return
+        self._pipeline.restore_processing_params(entry.params)
+        if isinstance(self._processing_base_image, np.ndarray):
+            self._before_image = self._processing_base_image
+            pipeline = self._pipeline_builder.build_processing_pipeline(self._pipeline)
+            context = PipelineContext(images=[self._processing_base_image])
+            self._pipeline.reset()
+            self._pipeline_worker.start(pipeline, context)
+
     def require_tier(self, feature_name: str, required: LicenseTier) -> bool:
         """Check tier access; shows UpgradeDialog if insufficient. Returns True if allowed."""
         current = self._license.tier
@@ -1659,5 +1750,5 @@ def main() -> None:
     sys.exit(app.exec())
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

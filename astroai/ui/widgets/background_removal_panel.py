@@ -1,7 +1,7 @@
 """Background gradient removal configuration panel."""
 from __future__ import annotations
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +22,9 @@ _METHODS = [("rbf", "RBF (Radial Basis Function)"), ("poly", "Polynom")]
 
 class BackgroundRemovalPanel(QWidget):
     """Panel for configuring background gradient removal."""
+
+    PREVIEW_STEP = "background_removal"
+    preview_requested = Signal(dict)
 
     def __init__(self, model: PipelineModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -112,21 +115,32 @@ class BackgroundRemovalPanel(QWidget):
 
         self._settings_group.setEnabled(self._model.background_removal_enabled)
 
+    def _emit_preview(self) -> None:
+        self.preview_requested.emit({
+            "tile_size": self._model.background_removal_tile_size,
+            "method": self._model.background_removal_method,
+            "preserve_median": self._model.background_removal_preserve_median,
+        })
+
     @Slot(bool)
     def _on_enabled_changed(self, checked: bool) -> None:
         self._model.background_removal_enabled = checked
         self._settings_group.setEnabled(checked)
+        self._emit_preview()
 
     @Slot(int)
     def _on_method_changed(self, index: int) -> None:
         key = self._method_combo.itemData(index)
         if key is not None:
             self._model.background_removal_method = str(key)
+            self._emit_preview()
 
     @Slot(int)
     def _on_tile_size_changed(self, value: int) -> None:
         self._model.background_removal_tile_size = value
+        self._emit_preview()
 
     @Slot(bool)
     def _on_preserve_median_changed(self, checked: bool) -> None:
         self._model.background_removal_preserve_median = checked
+        self._emit_preview()

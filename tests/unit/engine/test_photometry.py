@@ -253,7 +253,7 @@ class TestCatalogClients:
     def test_gaia_query_fail_silently(self):
         from astroai.engine.photometry.catalog import GAIACatalogClient
 
-        client = GAIACatalogClient(fail_silently=True)
+        client = GAIACatalogClient(fail_silently=True, use_cache=False)
         with patch("httpx.Client") as mock_client_cls:
             mock_client_cls.return_value.__enter__.return_value.get.side_effect = Exception("timeout")
             stars = client.query(180.0, 45.0, 0.5)
@@ -289,7 +289,7 @@ class TestCatalogClients:
         """Cover line 48: GAIA exception re-raised when fail_silently=False."""
         from astroai.engine.photometry.catalog import GAIACatalogClient
 
-        client = GAIACatalogClient(fail_silently=False)
+        client = GAIACatalogClient(fail_silently=False, use_cache=False)
         with patch("httpx.Client") as mock_client_cls:
             mock_client_cls.return_value.__enter__.return_value.get.side_effect = Exception("timeout")
             with pytest.raises(Exception, match="timeout"):
@@ -304,6 +304,38 @@ class TestCatalogClients:
             mock_client_cls.return_value.__enter__.return_value.get.side_effect = Exception("network")
             with pytest.raises(Exception, match="network"):
                 client.query(180.0, 45.0, 0.5)
+
+    def test_gaia_cache_init_exception_silently_ignored(self):
+        """Lines 29-30: cache init exception → _cache=None, no crash."""
+        import sys
+        from astroai.engine.photometry.catalog import GAIACatalogClient
+
+        with patch.dict(sys.modules, {"astroai.core.catalog_cache": None}):
+            client = GAIACatalogClient(use_cache=True)
+        assert client._cache is None
+
+    def test_gaia_cache_write_after_successful_query(self):
+        """Lines 62-79: cache write path after successful httpx query."""
+        from astroai.engine.photometry.catalog import GAIACatalogClient
+
+        client = GAIACatalogClient(fail_silently=False, use_cache=False)
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None  # force cache miss
+        client._cache = mock_cache
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "metadata": [{"name": "ra"}, {"name": "dec"}, {"name": "phot_g_mean_mag"}],
+            "data": [[180.1, 45.1, 12.3]],
+        }
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.get.return_value = mock_resp
+            result = client.query(180.0, 45.0, 0.5)
+
+        mock_cache.put.assert_called_once()
+        assert len(result) == 1
 
 
 class TestPhotometryEngine:

@@ -162,32 +162,29 @@ class TestOnnxPaths:
         assert step._try_load_onnx() is mock_session
 
     def test_load_from_path_success(self, tmp_path: Path) -> None:
-        """_load_from_path loads and caches session when model file exists (lines 106-109)."""
+        """_load_from_path loads and caches session via OnnxModelRegistry."""
         fake_model = tmp_path / "starnet.onnx"
         fake_model.write_bytes(b"onnxdata")
 
         mock_session = MagicMock()
-        mock_ort = MagicMock()
-        mock_ort.InferenceSession.return_value = mock_session
 
         step = StarRemovalStep(onnx_model_path=str(fake_model))
-        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            MockReg.return_value.load_from_path.return_value = mock_session
             session = step._load_from_path(str(fake_model))
 
         assert session is mock_session
         assert step._onnx_session is mock_session
 
     def test_load_from_registry_success(self) -> None:
-        """_load_from_registry loads ONNX when model is available in registry (lines 122-125)."""
+        """_load_from_registry loads ONNX when model is available via OnnxModelRegistry."""
         mock_session = MagicMock()
-        mock_dl = MagicMock()
-        mock_dl.is_available.return_value = True
-        mock_dl.load_onnx_session.return_value = mock_session
-        mock_dl_module = MagicMock()
-        mock_dl_module.ModelDownloader.return_value = mock_dl
 
         step = StarRemovalStep()
-        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            registry_instance = MockReg.return_value
+            registry_instance.is_available.return_value = True
+            registry_instance.get_session.return_value = mock_session
             session = step._load_from_registry()
 
         assert session is mock_session
@@ -247,27 +244,118 @@ class TestOnnxPaths:
         assert out.star_mask is not None
         mock_session.run.assert_called_once()
 
-    def test_load_from_path_ort_exception_returns_none(self, tmp_path: Path) -> None:
-        """InferenceSession raises general Exception → returns None (lines 110-112)."""
+    def test_load_from_path_exception_returns_none(self, tmp_path: Path) -> None:
+        """OnnxModelRegistry.load_from_path returns None on failure."""
         fake_model = tmp_path / "starnet.onnx"
         fake_model.write_bytes(b"onnxdata")
 
-        mock_ort = MagicMock()
-        mock_ort.InferenceSession.side_effect = RuntimeError("corrupt model")
-
         step = StarRemovalStep()
-        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            MockReg.return_value.load_from_path.return_value = None
             result = step._load_from_path(str(fake_model))
 
         assert result is None
 
     def test_load_from_registry_exception_returns_none(self) -> None:
-        """ModelDownloader raises general Exception → returns None (lines 126-128)."""
-        mock_dl_module = MagicMock()
-        mock_dl_module.ModelDownloader.side_effect = RuntimeError("registry error")
-
+        """OnnxModelRegistry raises Exception → returns None."""
         step = StarRemovalStep()
-        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+        with patch("astroai.core.onnx_registry.OnnxModelRegistry") as MockReg:
+            MockReg.return_value.is_available.side_effect = RuntimeError("registry error")
             result = step._load_from_registry()
 
         assert result is None
+
+
+class TestReduceEnabledBranch:
+    """Cover lines 72-80: reduce_enabled=True path in StarRemovalStep.execute()."""
+
+    def test_reduce_enabled_returns_context(self) -> None:
+        step = StarRemovalStep(reduce_enabled=True, reduce_factor=0.5)
+        ctx = PipelineContext(result=_make_starfield())
+        out = step.execute(ctx)
+        assert out.result is not None
+
+    def test_reduce_enabled_progress_called(self) -> None:
+        calls: list = []
+        step = StarRemovalStep(reduce_enabled=True)
+        ctx = PipelineContext(result=_make_starfield())
+        step.execute(ctx, progress=lambda p: calls.append(p))
+        assert len(calls) == 2
+        assert "Reducing" in calls[0].message
+        assert "complete" in calls[1].message
+
+    def test_reduce_enabled_no_star_mask_set(self) -> None:
+        step = StarRemovalStep(reduce_enabled=True)
+        ctx = PipelineContext(result=_make_starfield())
+        out = step.execute(ctx)
+        assert out.starless_image is None
+        assert out.star_mask is None
+
+
+class TestTiledOnnxProcessing:
+
+    def test_tiled_onnx_6000x4000_grayscale(self) -> None:
+        h, w = 6000, 4000
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+        onnx_out_shape = lambda inp: np.ones_like(inp) * 0.3
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.side_effect = lambda _, inputs: [
+            np.ones_like(list(inputs.values())[0]) * 0.3
+        ]
+
+        step = StarRemovalStep(tile_size=512, tile_overlap=64)
+        step._onnx_session = mock_session
+
+        ctx = PipelineContext(result=frame)
+        out = step.execute(ctx)
+
+        assert out.starless_image is not None
+        assert out.starless_image.shape == (h, w)
+        assert out.star_mask is not None
+        assert out.star_mask.shape == (h, w)
+
+    def test_tiled_onnx_progress_reports_tiles(self) -> None:
+        h, w = 6000, 4000
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.side_effect = lambda _, inputs: [
+            np.ones_like(list(inputs.values())[0]) * 0.3
+        ]
+
+        step = StarRemovalStep(tile_size=512, tile_overlap=64)
+        step._onnx_session = mock_session
+
+        calls: list = []
+        ctx = PipelineContext(result=frame)
+        step.execute(ctx, progress=lambda p: calls.append(p))
+
+        tile_calls = [c for c in calls if "tile" in c.message]
+        assert len(tile_calls) > 0
+        assert tile_calls[-1].current == tile_calls[-1].total
+
+    def test_small_image_skips_tiling(self) -> None:
+        h, w = 512, 512
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 1, h, w), dtype=np.float32) * 0.3
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = StarRemovalStep(tile_size=512, tile_overlap=64)
+        step._onnx_session = mock_session
+
+        ctx = PipelineContext(result=frame)
+        out = step.execute(ctx)
+
+        assert out.starless_image is not None
+        mock_session.run.assert_called_once()
+
+    def test_tile_size_configurable(self) -> None:
+        step = StarRemovalStep(tile_size=256, tile_overlap=32)
+        assert step._tile_size == 256
+        assert step._tile_overlap == 32

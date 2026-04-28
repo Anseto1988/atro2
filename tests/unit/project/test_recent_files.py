@@ -70,3 +70,10 @@ class TestRecentProjects:
         with patch("sys.platform", "linux"):
             path = _config_path()
         assert ".config" in str(path) and "astroai" in str(path)
+
+    def test_config_path_windows(self) -> None:
+        """_config_path returns AppData/Local/AstroAI path on Windows (line 14)."""
+        with patch("sys.platform", "win32"):
+            path = _config_path()
+        assert "AstroAI" in str(path)
+        assert "AppData" in str(path)

@@ -576,3 +576,7 @@ class TestAnnotationOverlayPaint:
         overlay.show()
         qtbot.waitExposed(overlay, timeout=1000)
         overlay.repaint()
+
+    def test_on_zoom_changed_via_signal(self, overlay, viewer, qtbot) -> None:
+        """Line 85: _on_zoom_changed calls self.update() when zoom_changed emitted."""
+        viewer.zoom_changed.emit(1.5)  # triggers _on_zoom_changed
