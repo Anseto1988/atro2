@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+import pytest
 from astropy.wcs import WCS
 
 from astroai.ui.overlay.sky_objects import (
@@ -389,3 +390,189 @@ class TestSkyObjectCatalogExceptionPaths:
         with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
             boundaries = list(cat.constellation_boundaries)
         assert boundaries == []
+
+
+# ---------------------------------------------------------------------------
+# Qt widget paint tests — require qtbot fixture (pytest-qt)
+# ---------------------------------------------------------------------------
+
+class TestSkyOverlayPaint:
+    @pytest.fixture()
+    def viewer_widget(self, qtbot):  # type: ignore[no-untyped-def]
+        from PySide6.QtWidgets import QWidget
+        w = QWidget()
+        w.resize(400, 300)
+        qtbot.addWidget(w)
+        return w
+
+    @pytest.fixture()
+    def sky_overlay(self, qtbot, viewer_widget):  # type: ignore[no-untyped-def]
+        from astroai.ui.widgets.sky_overlay import SkyOverlay
+        w = SkyOverlay(viewer_widget)
+        w.resize(400, 300)
+        qtbot.addWidget(w)
+        return w
+
+    def _make_solution(self):  # type: ignore[no-untyped-def]
+        from astroai.astrometry.catalog import WcsSolution
+        sol = MagicMock(spec=WcsSolution)
+        sol.ra_center = 180.0
+        sol.dec_center = 45.0
+        sol.fov_width_deg = 2.0
+        sol.fov_height_deg = 1.5
+        sol.pixel_scale_arcsec = 1.2
+        sol.rotation_deg = 0.0
+        return sol
+
+    def test_paint_with_no_solution(self, sky_overlay, viewer_widget, qtbot) -> None:  # type: ignore[no-untyped-def]
+        viewer_widget.show()
+        sky_overlay.show()
+        qtbot.waitExposed(viewer_widget, timeout=1000)
+        sky_overlay.repaint()  # solution is None — early return
+
+    def test_paint_with_solution(self, sky_overlay, viewer_widget, qtbot) -> None:  # type: ignore[no-untyped-def]
+        sky_overlay.set_solution(self._make_solution())
+        viewer_widget.show()
+        sky_overlay.show()
+        qtbot.waitExposed(viewer_widget, timeout=1000)
+        sky_overlay.repaint()
+
+    def test_paint_grid_hidden(self, sky_overlay, viewer_widget, qtbot) -> None:  # type: ignore[no-untyped-def]
+        sky_overlay.set_solution(self._make_solution())
+        sky_overlay.set_grid_visible(False)
+        viewer_widget.show()
+        sky_overlay.show()
+        qtbot.waitExposed(viewer_widget, timeout=1000)
+        sky_overlay.repaint()
+
+
+class TestAnnotationOverlayPaint:
+    @pytest.fixture()
+    def viewer(self, qtbot):  # type: ignore[no-untyped-def]
+        from astroai.ui.widgets.image_viewer import ImageViewer
+        import numpy as np
+        w = ImageViewer()
+        w.resize(400, 300)
+        qtbot.addWidget(w)
+        w.set_image_data(np.random.rand(300, 400).astype(np.float32))
+        return w
+
+    @pytest.fixture()
+    def overlay(self, qtbot, viewer):  # type: ignore[no-untyped-def]
+        from astroai.ui.overlay.annotation_overlay import AnnotationOverlay
+        w = AnnotationOverlay(viewer)
+        w.resize(400, 300)
+        qtbot.addWidget(w)
+        return w
+
+    def _make_wcs_mock(self, world_to_pixel_result=(200.0, 150.0)):  # type: ignore[no-untyped-def]
+        from astroai.ui.overlay.sky_objects import WcsTransform
+        mock_wcs = MagicMock(spec=WcsTransform)
+        mock_wcs.world_to_pixel.return_value = world_to_pixel_result
+        mock_wcs.pixel_to_world.return_value = (180.0, 45.0)
+        mock_wcs.image_size.return_value = (400, 300)
+        return mock_wcs
+
+    def test_has_wcs_false(self, overlay) -> None:
+        assert not overlay.has_wcs
+
+    def test_has_wcs_true(self, overlay) -> None:
+        overlay.set_wcs(self._make_wcs_mock())
+        assert overlay.has_wcs
+
+    def test_set_show_dso_toggle(self, overlay) -> None:
+        overlay.set_show_dso(False)  # _show_dso was True → triggers update
+        assert not overlay._show_dso
+
+    def test_set_show_dso_noop(self, overlay) -> None:
+        overlay.set_show_dso(True)  # already True → no-op
+        assert overlay._show_dso
+
+    def test_on_view_changed_via_signal(self, overlay, viewer, qtbot) -> None:  # type: ignore[no-untyped-def]
+        viewer.view_changed.emit()  # triggers _on_view_changed
+
+    def test_world_to_screen_no_wcs(self, overlay) -> None:
+        from PySide6.QtCore import QPointF
+        result = overlay._world_to_screen(180.0, 45.0)
+        assert result is None
+
+    def test_world_to_screen_pixel_returns_none(self, overlay) -> None:
+        mock_wcs = self._make_wcs_mock(world_to_pixel_result=None)
+        overlay.set_wcs(mock_wcs)
+        result = overlay._world_to_screen(180.0, 45.0)
+        assert result is None
+
+    def test_paint_no_wcs(self, overlay, qtbot) -> None:  # type: ignore[no-untyped-def]
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()  # _wcs is None — early return
+
+    def test_paint_with_wcs(self, overlay, qtbot) -> None:  # type: ignore[no-untyped-def]
+        overlay.set_wcs(self._make_wcs_mock())
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()
+
+    def test_paint_dso_out_of_viewport(self, overlay, viewer, qtbot) -> None:  # type: ignore[no-untyped-def]
+        # world_to_pixel returns coords far outside viewport → continue branch (line 136)
+        mock_wcs = self._make_wcs_mock(world_to_pixel_result=(9999.0, 9999.0))
+        overlay.set_wcs(mock_wcs)
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()
+
+    def test_paint_with_boundaries_and_grid(self, overlay, qtbot) -> None:  # type: ignore[no-untyped-def]
+        overlay.set_wcs(self._make_wcs_mock())
+        overlay.set_show_boundaries(True)
+        overlay.set_show_grid(True)
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()
+
+    def test_paint_dso_only(self, overlay, qtbot) -> None:  # type: ignore[no-untyped-def]
+        overlay.set_wcs(self._make_wcs_mock())
+        overlay.set_show_stars(False)
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()
+
+    def test_paint_grid_no_corners(self, overlay, qtbot) -> None:  # type: ignore[no-untyped-def]
+        # pixel_to_world returns None → len(corners) < 2 → line 209 return
+        mock_wcs = self._make_wcs_mock()
+        mock_wcs.pixel_to_world.return_value = None
+        overlay.set_wcs(mock_wcs)
+        overlay.set_show_grid(True)
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()
+
+    def test_choose_grid_step_large_span(self, overlay) -> None:
+        # span > 360 → returns 30.0
+        result = overlay._choose_grid_step(400.0)
+        assert result == 30.0
+
+    def test_choose_grid_step_small_span(self, overlay) -> None:
+        result = overlay._choose_grid_step(0.5)
+        assert result == pytest.approx(0.1)
+
+    def test_paint_boundaries_null_endpoint(self, overlay, viewer, qtbot) -> None:  # type: ignore[no-untyped-def]
+        # world_to_pixel returns None → p1/p2 is None → line 188 continue
+        mock_wcs = self._make_wcs_mock(world_to_pixel_result=None)
+        overlay.set_wcs(mock_wcs)
+        overlay.set_show_boundaries(True)
+        overlay.set_show_stars(False)
+        overlay.set_show_dso(False)
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()
+
+    def test_paint_boundaries_out_of_viewport(self, overlay, viewer, qtbot) -> None:  # type: ignore[no-untyped-def]
+        # world_to_pixel returns far-out coords → both p1 and p2 outside viewport → line 190 continue
+        mock_wcs = self._make_wcs_mock(world_to_pixel_result=(9999.0, 9999.0))
+        overlay.set_wcs(mock_wcs)
+        overlay.set_show_boundaries(True)
+        overlay.set_show_stars(False)
+        overlay.set_show_dso(False)
+        overlay.show()
+        qtbot.waitExposed(overlay, timeout=1000)
+        overlay.repaint()

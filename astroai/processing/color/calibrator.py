@@ -181,7 +181,7 @@ class SpectralColorCalibrator:
     def _query_gaia(
         self, ra: float, dec: float, radius: float,
     ) -> CatalogQueryResult:
-        from astroquery.gaia import Gaia  # type: ignore[import-untyped]
+        from astroquery.gaia import Gaia
         import astropy.units as u
         from astropy.coordinates import SkyCoord
 
@@ -218,7 +218,7 @@ class SpectralColorCalibrator:
     def _query_2mass(
         self, ra: float, dec: float, radius: float,
     ) -> CatalogQueryResult:
-        from astroquery.vizier import Vizier  # type: ignore[import-untyped]
+        from astroquery.vizier import Vizier
         import astropy.units as u
         from astropy.coordinates import SkyCoord
 
@@ -272,7 +272,7 @@ class SpectralColorCalibrator:
         import astropy.units as u
 
         if len(catalog.ra) == 0:
-            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64), np.array([], dtype=np.intp)
 
         coords = SkyCoord(ra=catalog.ra * u.deg, dec=catalog.dec * u.deg)
         px, py = wcs.world_to_pixel(coords)
@@ -285,7 +285,7 @@ class SpectralColorCalibrator:
             & (py >= margin) & (py < height - margin)
         )
 
-        return px[in_bounds], py[in_bounds], np.where(in_bounds)[0]  # type: ignore[return-value]
+        return px[in_bounds], py[in_bounds], np.where(in_bounds)[0]
 
     def _measure_stars(
         self,

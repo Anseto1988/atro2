@@ -9,6 +9,7 @@ from astroai.ui.widgets.comet_stack_panel import CometStackPanel
 from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.progress_widget import ProgressWidget
+from astroai.ui.widgets.synthetic_flat_panel import SyntheticFlatPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 
 
@@ -62,6 +63,20 @@ class TestImageViewer:
         tile2 = viewer._render_tile(0, 0)
         assert tile1 is tile2
 
+    def test_paint_event_with_data(self, viewer: ImageViewer, qtbot) -> None:  # type: ignore[no-untyped-def]
+        data = np.random.rand(256, 256).astype(np.float32)
+        viewer.set_image_data(data)
+        viewer.resize(400, 300)
+        viewer.show()
+        qtbot.waitExposed(viewer, timeout=1000)
+        viewer.repaint()
+
+    def test_paint_event_no_data(self, viewer: ImageViewer, qtbot) -> None:  # type: ignore[no-untyped-def]
+        viewer.resize(400, 300)
+        viewer.show()
+        qtbot.waitExposed(viewer, timeout=1000)
+        viewer.repaint()  # _raw_data is None — early return
+
 
 class TestHistogramWidget:
     @pytest.fixture()
@@ -89,6 +104,29 @@ class TestHistogramWidget:
         histogram.clear()
         assert histogram._bins is None
 
+    def test_paint_event_with_data(self, histogram: HistogramWidget, qtbot) -> None:  # type: ignore[no-untyped-def]
+        histogram.set_image_data(np.random.rand(50, 50).astype(np.float32))
+        histogram.resize(200, 100)
+        histogram.show()
+        qtbot.waitExposed(histogram, timeout=1000)
+        histogram.repaint()
+
+    def test_paint_event_when_bins_none(self, histogram: HistogramWidget, qtbot) -> None:  # type: ignore[no-untyped-def]
+        histogram.resize(200, 100)
+        histogram.show()
+        qtbot.waitExposed(histogram, timeout=1000)
+        histogram.repaint()  # _bins is None — early return
+
+    def test_paint_event_zero_size(self, histogram: HistogramWidget, qtbot) -> None:  # type: ignore[no-untyped-def]
+        from unittest.mock import patch as _patch
+        histogram.set_image_data(np.random.rand(50, 50).astype(np.float32))
+        histogram.show()
+        qtbot.waitExposed(histogram, timeout=1000)
+        # Call paintEvent directly with patched width/height to cover the w<=0 guard
+        with _patch.object(histogram, "width", return_value=1), \
+             _patch.object(histogram, "height", return_value=1):
+            histogram.paintEvent(None)
+
 
 class TestWorkflowGraph:
     @pytest.fixture()
@@ -111,6 +149,25 @@ class TestWorkflowGraph:
         hint = graph.sizeHint()
         assert hint.width() >= 200
         assert hint.height() > 0
+
+    def test_paint_event_runs_without_error(self, graph: WorkflowGraph, qtbot) -> None:  # type: ignore[no-untyped-def]
+        graph.resize(600, 80)
+        graph.show()
+        qtbot.waitExposed(graph, timeout=1000)
+        graph.repaint()
+
+    def test_paint_event_with_active_step_and_progress(self, graph: WorkflowGraph, qtbot) -> None:  # type: ignore[no-untyped-def]
+        graph._model.set_step_state("calibrate", StepState.ACTIVE)
+        graph._model.step_by_key("calibrate").progress = 0.5  # type: ignore[union-attr]
+        graph.resize(600, 80)
+        graph.show()
+        qtbot.waitExposed(graph, timeout=1000)
+        graph.repaint()
+
+    def test_paint_event_empty_steps(self, graph: WorkflowGraph) -> None:
+        from unittest.mock import patch as _patch
+        with _patch.object(graph, "_visible_steps", return_value=[]):
+            graph.paintEvent(None)  # directly invoke — early return before QPainter
 
 
 class TestProgressWidget:
@@ -261,3 +318,59 @@ class TestCometStackPanel:
         with patch.object(panel._mode_group, "checkedButton", return_value=None):
             panel._on_mode_changed()
         assert model.comet_tracking_mode == original_mode
+
+
+class TestSyntheticFlatPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> SyntheticFlatPanel:  # type: ignore[no-untyped-def]
+        w = SyntheticFlatPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_state_disabled(self, panel: SyntheticFlatPanel) -> None:
+        assert not panel._enabled_cb.isChecked()
+        assert not panel._settings_group.isEnabled()
+
+    def test_enable_toggles_settings_group(
+        self, panel: SyntheticFlatPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.synthetic_flat_enabled
+        assert panel._settings_group.isEnabled()
+
+    def test_tile_size_updates_model(
+        self, panel: SyntheticFlatPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._tile_spin.setValue(128)
+        assert model.synthetic_flat_tile_size == 128
+
+    def test_sigma_updates_model(
+        self, panel: SyntheticFlatPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._sigma_spin.setValue(12.5)
+        assert model.synthetic_flat_smoothing_sigma == pytest.approx(12.5)
+
+    def test_sync_from_model(
+        self, panel: SyntheticFlatPanel, model: PipelineModel
+    ) -> None:
+        model._synthetic_flat_enabled = True
+        model._synthetic_flat_tile_size = 32
+        model._synthetic_flat_smoothing_sigma = 5.0
+        model.synthetic_flat_config_changed.emit()
+        assert panel._enabled_cb.isChecked()
+        assert panel._tile_spin.value() == 32
+        assert panel._sigma_spin.value() == pytest.approx(5.0)
+
+    def test_pipeline_reset_preserves_enabled_state(
+        self, panel: SyntheticFlatPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.synthetic_flat_enabled
+        model.reset()
+        assert panel._enabled_cb.isChecked()  # reset keeps user config, only resets step state

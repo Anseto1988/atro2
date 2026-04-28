@@ -124,6 +124,20 @@ class ColorCalibrationConfig:
 
 
 @dataclass
+class SyntheticFlatConfig:
+    enabled: bool = False
+    tile_size: int = 64
+    smoothing_sigma: float = 8.0
+
+
+@dataclass
+class CometStackConfig:
+    enabled: bool = False
+    tracking_mode: str = "blend"
+    blend_factor: float = 0.5
+
+
+@dataclass
 class AstroProject:
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     input_frames: list[FrameEntry] = field(default_factory=list)
@@ -135,6 +149,8 @@ class AstroProject:
     channel_combine: ChannelCombineConfig = field(default_factory=ChannelCombineConfig)
     stretch: StretchConfig = field(default_factory=StretchConfig)
     color_calibration: ColorCalibrationConfig = field(default_factory=ColorCalibrationConfig)
+    synthetic_flat: SyntheticFlatConfig = field(default_factory=SyntheticFlatConfig)
+    comet_stack: CometStackConfig = field(default_factory=CometStackConfig)
     denoise: DenoiseConfig = field(default_factory=DenoiseConfig)
     deconvolution: DeconvolutionConfig = field(default_factory=DeconvolutionConfig)
     starless: StarlessConfig = field(default_factory=StarlessConfig)
@@ -162,6 +178,8 @@ class AstroProject:
             channel_combine=ChannelCombineConfig(**data.get("channel_combine", {})),
             stretch=StretchConfig(**data.get("stretch", {})),
             color_calibration=ColorCalibrationConfig(**data.get("color_calibration", {})),
+            synthetic_flat=SyntheticFlatConfig(**data.get("synthetic_flat", {})),
+            comet_stack=CometStackConfig(**data.get("comet_stack", {})),
             denoise=DenoiseConfig(**data.get("denoise", {})),
             deconvolution=DeconvolutionConfig(**data.get("deconvolution", {})),
             starless=StarlessConfig(**data.get("starless", {})),

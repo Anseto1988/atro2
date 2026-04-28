@@ -22,14 +22,15 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 13
+        assert len(steps) == 14
         assert steps[0].key == "calibrate"
-        assert steps[3].key == "comet_stacking"
-        assert steps[4].key == "drizzle"
-        assert steps[5].key == "mosaic"
-        assert steps[6].key == "channel_combine"
-        assert steps[7].key == "stretch"
-        assert steps[8].key == "color_calibration"
+        assert steps[1].key == "synthetic_flat"
+        assert steps[4].key == "comet_stacking"
+        assert steps[5].key == "drizzle"
+        assert steps[6].key == "mosaic"
+        assert steps[7].key == "channel_combine"
+        assert steps[8].key == "stretch"
+        assert steps[9].key == "color_calibration"
         assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
@@ -78,20 +79,22 @@ class TestPipelineModel:
     def test_advance_to(self, model: PipelineModel) -> None:
         model.advance_to("stack")
         steps = model.steps
-        assert steps[0].state is StepState.DONE
-        assert steps[1].state is StepState.DONE
-        assert steps[2].state is StepState.ACTIVE
-        # comet_stacking at index 3 is DISABLED (optional, not enabled)
-        assert steps[3].state is StepState.DISABLED
-        # drizzle at index 4 is DISABLED (optional, not enabled)
+        assert steps[0].state is StepState.DONE    # calibrate
+        # synthetic_flat at index 1 is DISABLED (optional, not enabled)
+        assert steps[1].state is StepState.DISABLED
+        assert steps[2].state is StepState.DONE    # register
+        assert steps[3].state is StepState.ACTIVE  # stack
+        # comet_stacking at index 4 is DISABLED (optional, not enabled)
         assert steps[4].state is StepState.DISABLED
-        # mosaic at index 5 is DISABLED (optional, not enabled)
+        # drizzle at index 5 is DISABLED (optional, not enabled)
         assert steps[5].state is StepState.DISABLED
-        # channel_combine at index 6 is DISABLED (optional, not enabled)
+        # mosaic at index 6 is DISABLED (optional, not enabled)
         assert steps[6].state is StepState.DISABLED
-        assert steps[7].state is StepState.PENDING  # stretch
-        # color_calibration at index 8 is DISABLED (optional, not enabled)
-        assert steps[8].state is StepState.DISABLED
+        # channel_combine at index 7 is DISABLED (optional, not enabled)
+        assert steps[7].state is StepState.DISABLED
+        assert steps[8].state is StepState.PENDING  # stretch
+        # color_calibration at index 9 is DISABLED (optional, not enabled)
+        assert steps[9].state is StepState.DISABLED
 
     def test_step_changed_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.step_changed, timeout=500):

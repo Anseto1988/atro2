@@ -124,9 +124,9 @@ class PhotometryEngine:
         ras: NDArray[np.floating],
         decs: NDArray[np.floating],
         instr_mags: NDArray[np.floating],
-        catalog_stars: list[dict],
+        catalog_stars: list[dict[str, Any]],
         wcs: WcsSolution,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         ra_key = "ra" if "ra" in catalog_stars[0] else "ra_icrs"
         dec_key = "dec" if "dec" in catalog_stars[0] else "dec_icrs"
         mag_key = "phot_g_mean_mag"

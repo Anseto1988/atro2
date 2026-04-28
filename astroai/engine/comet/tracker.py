@@ -6,6 +6,7 @@ import logging
 from typing import Sequence
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy.ndimage import label, center_of_mass
 
 __all__ = ["CometTracker", "CometPosition"]
@@ -122,4 +123,5 @@ class CometTracker:
         if frame.ndim == 2:
             return frame.astype(np.float64)
         weights = np.array([0.2989, 0.5870, 0.1140])
-        return np.dot(frame[..., :3], weights).astype(np.float64)
+        out: NDArray[np.float64] = np.dot(frame[..., :3], weights).astype(np.float64)
+        return out

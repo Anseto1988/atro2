@@ -44,9 +44,11 @@ class PipelineModel(QObject):
     color_calibration_config_changed = Signal()
     comet_stack_config_changed = Signal()
     comet_preview_changed = Signal()
+    synthetic_flat_config_changed = Signal()
 
     DEFAULT_STEPS = [
         ("calibrate", "Kalibrierung", False),
+        ("synthetic_flat", "Synth. Flat", True),
         ("register", "Registrierung", False),
         ("stack", "Stacking", False),
         ("comet_stacking", "Komet-Stacking", True),
@@ -88,6 +90,9 @@ class PipelineModel(QObject):
         self._color_calibration_enabled: bool = False
         self._color_calibration_catalog: str = "gaia_dr3"
         self._color_calibration_sample_radius: int = 8
+        self._synthetic_flat_enabled: bool = False
+        self._synthetic_flat_tile_size: int = 64
+        self._synthetic_flat_smoothing_sigma: float = 8.0
         self._comet_stack_enabled: bool = False
         self._comet_tracking_mode: str = "blend"
         self._comet_blend_factor: float = 0.5
@@ -100,6 +105,7 @@ class PipelineModel(QObject):
         self._update_channel_combine_step_state()
         self._update_color_calibration_step_state()
         self._update_comet_stack_step_state()
+        self._update_synthetic_flat_step_state()
 
     # -- starless config properties --
 
@@ -528,6 +534,55 @@ class PipelineModel(QObject):
             step.state = StepState.PENDING
             self.step_changed.emit("comet_stacking", StepState.PENDING.value)
 
+    # -- synthetic flat config properties -------------------------------------
+
+    @property
+    def synthetic_flat_enabled(self) -> bool:
+        return self._synthetic_flat_enabled
+
+    @synthetic_flat_enabled.setter
+    def synthetic_flat_enabled(self, value: bool) -> None:
+        if self._synthetic_flat_enabled == value:
+            return
+        self._synthetic_flat_enabled = value
+        self._update_synthetic_flat_step_state()
+        self.synthetic_flat_config_changed.emit()
+
+    @property
+    def synthetic_flat_tile_size(self) -> int:
+        return self._synthetic_flat_tile_size
+
+    @synthetic_flat_tile_size.setter
+    def synthetic_flat_tile_size(self, value: int) -> None:
+        value = max(16, min(256, value))
+        if self._synthetic_flat_tile_size == value:
+            return
+        self._synthetic_flat_tile_size = value
+        self.synthetic_flat_config_changed.emit()
+
+    @property
+    def synthetic_flat_smoothing_sigma(self) -> float:
+        return self._synthetic_flat_smoothing_sigma
+
+    @synthetic_flat_smoothing_sigma.setter
+    def synthetic_flat_smoothing_sigma(self, value: float) -> None:
+        value = max(0.0, min(50.0, value))
+        if self._synthetic_flat_smoothing_sigma == value:
+            return
+        self._synthetic_flat_smoothing_sigma = value
+        self.synthetic_flat_config_changed.emit()
+
+    def _update_synthetic_flat_step_state(self) -> None:
+        step = self.step_by_key("synthetic_flat")
+        if step is None:
+            return
+        if not self._synthetic_flat_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("synthetic_flat", StepState.DISABLED.value)
+        elif self._synthetic_flat_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("synthetic_flat", StepState.PENDING.value)
+
     # -- export config bridge --
 
     def export_config(self) -> dict[str, Any]:
@@ -573,6 +628,7 @@ class PipelineModel(QObject):
             "channel_combine": self._channel_combine_enabled,
             "color_calibration": self._color_calibration_enabled,
             "comet_stacking": self._comet_stack_enabled,
+            "synthetic_flat": self._synthetic_flat_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):

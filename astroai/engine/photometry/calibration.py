@@ -27,7 +27,8 @@ class MagnitudeCalibrator:
         if not self._fitted:
             raise RuntimeError("Calibrator not fitted yet")
         X = np.asarray(instr_mags, dtype=float).reshape(-1, 1)
-        return self._model.predict(X)
+        result: NDArray[np.floating] = self._model.predict(X)
+        return result
 
     @property
     def r_squared(self) -> float:

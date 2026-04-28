@@ -2,7 +2,27 @@
 
 AI-powered astrophotography processing suite.
 
-**Version:** 2.2.0-alpha
+**Version:** 2.3.0-alpha
+
+## What's New in v2.3
+
+### F-SynFlat: Synthetic Flat Frame Generation
+- Models the optical vignetting pattern from science light frames via tile-sampled RBF / polynomial surface fitting — no dedicated flat frames required
+- Median-combines multi-frame models to suppress astronomical signal contamination
+- Gaussian smoothing pass suppresses tile-grid artefacts before normalisation
+- `SyntheticFlatGenerator` + `SyntheticFlatStep` pipeline integration (CALIBRATION stage)
+- `SyntheticFlatPanel` UI dock with enable/disable toggle, tile-size and smoothing-sigma controls
+- Full project persistence: `SyntheticFlatConfig` stored in `.astroai` project file
+
+### Full Project State Persistence
+- `MainWindow._sync_model_to_project()` / `_sync_project_to_model()` — bidirectional sync for all optional features (drizzle, mosaic, channel_combine, color_calibration, deconvolution, starless, synthetic_flat, comet_stack)
+- Project load/save now restores the complete UI state of all configurable panels
+
+### Code Quality
+- 1900 unit tests — all passing
+- 0 mypy errors across 130 source files
+- 0 ruff lint errors
+- ~100% coverage on all new modules
 
 ## What's New in v2.2
 
@@ -59,6 +79,7 @@ AI-powered astrophotography processing suite.
 - **Mosaic Assembly** (multi-panel WCS stitching with gradient correction)
 - **Photometric Color Calibration** (SPCC via GAIA DR3 / 2MASS stellar catalogs)
 - **Comet Stacking** (Dual-Tracking: simultaneous star- and comet-aligned stacks)
+- **Synthetic Flat Generation** (vignetting model from light frames when real flats are unavailable)
 - Starless separation and star reduction
 - LRGB / Narrowband channel combination
 - Deconvolution (Richardson-Lucy)
@@ -75,6 +96,7 @@ AI-powered astrophotography processing suite.
 | v1.1.0-alpha | [v1.1.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v1.1.0-alpha) | E3–E6, Security S-01–S-04, Licensing API |
 | v2.0.0-alpha | [v2.0.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v2.0.0-alpha) | F-1 Plate Solving, F-2 GPU-Kalibrierung, F-3 Drizzle Super-Resolution, F-4 Mosaic-Assembly |
 | v2.1.0-alpha | [v2.1.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v2.1.0-alpha) | F-5 Photometrische Farbkalibrierung (SPCC) |
+| v2.3.0-alpha | _(in development)_ | F-SynFlat Synthetic Flat Generation, full project persistence, 1900 Tests |
 | v2.2.0-alpha | [v2.2.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v2.2.0-alpha) | F-Comet Dual-Tracking Comet Stacking, Test-Suite 1278 Tests |
 
 ## Requirements

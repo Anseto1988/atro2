@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "astroai-suite"
-version = "0.1.0"
+version = "2.3.0-alpha"
 description = "AI-powered astrophotography processing suite"
 authors = []
 readme = "README.md"

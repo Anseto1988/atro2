@@ -90,7 +90,7 @@ class CometStacker:
         )
 
     def _build_star_stack(self, frames: list[np.ndarray]) -> np.ndarray:
-        kwargs: dict = {}
+        kwargs: dict[str, float] = {}
         if self._stack_method == "sigma_clip":
             kwargs = {"sigma_low": self._sigma_low, "sigma_high": self._sigma_high}
         result = self._stacker.stack(frames, method=self._stack_method, **kwargs)
@@ -119,7 +119,7 @@ class CometStacker:
                     ndimage_shift(frame, shift_vec, order=3, mode="constant", cval=0.0)
                 )
 
-        kwargs: dict = {}
+        kwargs: dict[str, float] = {}
         if self._stack_method == "sigma_clip":
             kwargs = {"sigma_low": self._sigma_low, "sigma_high": self._sigma_high}
         result = self._stacker.stack(shifted, method=self._stack_method, **kwargs)

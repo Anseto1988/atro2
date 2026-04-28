@@ -58,7 +58,7 @@ class AAVSOCatalogClient:
         dec_center: float,
         radius_deg: float,
     ) -> list[dict[str, Any]]:
-        params = {
+        params: dict[str, str | float] = {
             "view": "api.list",
             "ra": ra_center,
             "dec": dec_center,
@@ -71,7 +71,8 @@ class AAVSOCatalogClient:
                 resp = client.get(_AAVSO_VSX_URL, params=params)
                 resp.raise_for_status()
             data = resp.json()
-            return data.get("VSXObjects", {}).get("VSXObject", [])
+            result: list[dict[str, Any]] = data.get("VSXObjects", {}).get("VSXObject", [])
+            return result
         except Exception:
             if self._fail_silently:
                 logger.warning("AAVSO VSX query failed", exc_info=True)

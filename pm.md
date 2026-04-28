@@ -74,7 +74,7 @@ Should Have: Automatisches Kalibrierungs-Matching, Starless-Funktion.
 
 
 
-Could Have: Synthetische Flat-Generierung, Mobile App Companion.
+Could Have: ~~Synthetische Flat-Generierung~~ ✅ (v2.3.0-alpha implementiert), Mobile App Companion.
 
 
 
@@ -90,4 +90,5 @@ Won't Have (v1.0): Cloud-Stacking (alles lokal auf dem Rechner des Users).
 | v2.0.0-alpha | v2.0.0-alpha | [GitHub Release](https://github.com/Anseto1988/atro2/releases/tag/v2.0.0-alpha) | F-1 Plate Solving, F-2 GPU-Kalibrierung, F-3 Drizzle Super-Resolution, F-4 Mosaic-Workflow |
 | v2.1.0-alpha | v2.1.0-alpha | [GitHub Release](https://github.com/Anseto1988/atro2/releases/tag/v2.1.0-alpha) | F-5 Photometrische Farbkalibrierung (SPCC), Fixes |
 | v2.2.0-alpha | v2.2.0-alpha | [GitHub Release](https://github.com/Anseto1988/atro2/releases/tag/v2.2.0-alpha) | F-Comet Dual-Tracking Comet Stacking, Test-Suite 1278 Tests |
+| v2.3.0-alpha | _(in Entwicklung)_ | — | F-SynFlat Synthetic Flat Generation, volle Projekt-Persistenz, 1900 Tests |
 

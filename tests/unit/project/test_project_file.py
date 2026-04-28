@@ -7,6 +7,7 @@ from astroai.project.project_file import (
     CalibrationConfig,
     ChannelCombineConfig,
     ColorCalibrationConfig,
+    CometStackConfig,
     DeconvolutionConfig,
     DenoiseConfig,
     DrizzleConfig,
@@ -18,6 +19,7 @@ from astroai.project.project_file import (
     StarProcessingConfig,
     StarlessConfig,
     StretchConfig,
+    SyntheticFlatConfig,
     PROJECT_FILE_VERSION,
 )
 
@@ -91,6 +93,8 @@ class TestAstroProject:
         assert "color_calibration" in data
         assert "deconvolution" in data
         assert "starless" in data
+        assert "synthetic_flat" in data
+        assert "comet_stack" in data
 
     def test_drizzle_config_defaults(self):
         cfg = DrizzleConfig()
@@ -144,6 +148,10 @@ class TestAstroProject:
         assert proj.color_calibration.catalog == "gaia_dr3"
         assert proj.deconvolution.iterations == 10
         assert proj.starless.format == "xisf"
+        assert proj.synthetic_flat.enabled is False
+        assert proj.synthetic_flat.tile_size == 64
+        assert proj.comet_stack.enabled is False
+        assert proj.comet_stack.tracking_mode == "blend"
 
     def test_full_roundtrip_with_new_configs(self):
         proj = AstroProject(
@@ -153,6 +161,8 @@ class TestAstroProject:
             color_calibration=ColorCalibrationConfig(enabled=True, catalog="gaia_dr3", sample_radius=12),
             deconvolution=DeconvolutionConfig(enabled=True, iterations=20, psf_sigma=1.5),
             starless=StarlessConfig(enabled=True, strength=0.8, format="fits", save_star_mask=False),
+            synthetic_flat=SyntheticFlatConfig(enabled=True, tile_size=128, smoothing_sigma=5.0),
+            comet_stack=CometStackConfig(enabled=True, tracking_mode="comet", blend_factor=0.3),
         )
         data = proj.to_dict()
         restored = AstroProject.from_dict(data)
@@ -166,3 +176,21 @@ class TestAstroProject:
         assert restored.deconvolution.iterations == 20
         assert restored.starless.strength == pytest.approx(0.8)
         assert restored.starless.save_star_mask is False
+        assert restored.synthetic_flat.enabled is True
+        assert restored.synthetic_flat.tile_size == 128
+        assert restored.synthetic_flat.smoothing_sigma == pytest.approx(5.0)
+        assert restored.comet_stack.enabled is True
+        assert restored.comet_stack.tracking_mode == "comet"
+        assert restored.comet_stack.blend_factor == pytest.approx(0.3)
+
+    def test_synthetic_flat_config_defaults(self):
+        cfg = SyntheticFlatConfig()
+        assert cfg.enabled is False
+        assert cfg.tile_size == 64
+        assert cfg.smoothing_sigma == pytest.approx(8.0)
+
+    def test_comet_stack_config_defaults(self):
+        cfg = CometStackConfig()
+        assert cfg.enabled is False
+        assert cfg.tracking_mode == "blend"
+        assert cfg.blend_factor == pytest.approx(0.5)

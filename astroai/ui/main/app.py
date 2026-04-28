@@ -44,6 +44,7 @@ from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.drizzle_panel import DrizzlePanel
 from astroai.ui.widgets.mosaic_panel import MosaicPanel
 from astroai.ui.widgets.color_calibration_panel import ColorCalibrationPanel
+from astroai.ui.widgets.synthetic_flat_panel import SyntheticFlatPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.ui.overlay.annotation_overlay import AnnotationOverlay
@@ -196,6 +197,14 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, color_cal_dock)
+
+        self._synthetic_flat_panel = SyntheticFlatPanel(self._pipeline)
+        synth_flat_dock = QDockWidget("Synth. Flat", self)
+        synth_flat_dock.setWidget(self._synthetic_flat_panel)
+        synth_flat_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, synth_flat_dock)
 
         self._annotation_panel = AnnotationPanel()
         annot_dock = QDockWidget("Annotationen", self)
@@ -476,6 +485,7 @@ class MainWindow(QMainWindow):
             self._save_project(p)
 
     def _save_project(self, path: Path) -> None:
+        self._sync_model_to_project()
         try:
             ProjectSerializer.save(self._project, path)
             self._project_path = path
@@ -492,11 +502,80 @@ class MainWindow(QMainWindow):
             self._project_path = path
             self._recent.add(path)
             self._rebuild_recent_menu()
+            self._sync_project_to_model()
             self._pipeline.reset()
             self._update_title()
             self._status_bar.showMessage(f"Projekt geladen: {path.name}")
         except ProjectSerializerError as exc:
             QMessageBox.warning(self, "Ladefehler", str(exc))
+
+    def _sync_model_to_project(self) -> None:
+        p = self._pipeline
+        self._project.synthetic_flat.enabled = p.synthetic_flat_enabled
+        self._project.synthetic_flat.tile_size = p.synthetic_flat_tile_size
+        self._project.synthetic_flat.smoothing_sigma = p.synthetic_flat_smoothing_sigma
+        self._project.comet_stack.enabled = p.comet_stack_enabled
+        self._project.comet_stack.tracking_mode = p.comet_tracking_mode
+        self._project.comet_stack.blend_factor = p.comet_blend_factor
+        self._project.drizzle.enabled = p.drizzle_enabled
+        self._project.drizzle.drop_size = p.drizzle_drop_size
+        self._project.drizzle.scale = p.drizzle_scale
+        self._project.drizzle.pixfrac = p.drizzle_pixfrac
+        self._project.mosaic.enabled = p.mosaic_enabled
+        self._project.mosaic.blend_mode = p.mosaic_blend_mode
+        self._project.mosaic.gradient_correct = p.mosaic_gradient_correct
+        self._project.mosaic.output_scale = p.mosaic_output_scale
+        self._project.channel_combine.enabled = p.channel_combine_enabled
+        self._project.channel_combine.mode = p.channel_combine_mode
+        self._project.channel_combine.palette = p.channel_combine_palette
+        self._project.color_calibration.enabled = p.color_calibration_enabled
+        self._project.color_calibration.catalog = p.color_calibration_catalog
+        self._project.color_calibration.sample_radius = p.color_calibration_sample_radius
+        self._project.deconvolution.enabled = p.deconvolution_enabled
+        self._project.deconvolution.iterations = p.deconvolution_iterations
+        self._project.deconvolution.psf_sigma = p.deconvolution_psf_sigma
+        self._project.starless.enabled = p.starless_enabled
+        self._project.starless.strength = p.starless_strength
+        self._project.starless.format = p.starless_format
+        self._project.starless.save_star_mask = p.save_star_mask
+
+    def _sync_project_to_model(self) -> None:
+        p = self._pipeline
+        sf = self._project.synthetic_flat
+        p.synthetic_flat_enabled = sf.enabled
+        p.synthetic_flat_tile_size = sf.tile_size
+        p.synthetic_flat_smoothing_sigma = sf.smoothing_sigma
+        cs = self._project.comet_stack
+        p.comet_stack_enabled = cs.enabled
+        p.comet_tracking_mode = cs.tracking_mode
+        p.comet_blend_factor = cs.blend_factor
+        dr = self._project.drizzle
+        p.drizzle_enabled = dr.enabled
+        p.drizzle_drop_size = dr.drop_size
+        p.drizzle_scale = dr.scale
+        p.drizzle_pixfrac = dr.pixfrac
+        mo = self._project.mosaic
+        p.mosaic_enabled = mo.enabled
+        p.mosaic_blend_mode = mo.blend_mode
+        p.mosaic_gradient_correct = mo.gradient_correct
+        p.mosaic_output_scale = mo.output_scale
+        cc = self._project.channel_combine
+        p.channel_combine_enabled = cc.enabled
+        p.channel_combine_mode = cc.mode
+        p.channel_combine_palette = cc.palette
+        cal = self._project.color_calibration
+        p.color_calibration_enabled = cal.enabled
+        p.color_calibration_catalog = cal.catalog
+        p.color_calibration_sample_radius = cal.sample_radius
+        dec = self._project.deconvolution
+        p.deconvolution_enabled = dec.enabled
+        p.deconvolution_iterations = dec.iterations
+        p.deconvolution_psf_sigma = dec.psf_sigma
+        sl = self._project.starless
+        p.starless_enabled = sl.enabled
+        p.starless_strength = sl.strength
+        p.starless_format = sl.format
+        p.save_star_mask = sl.save_star_mask
 
     def _update_title(self) -> None:
         name = self._project.metadata.name

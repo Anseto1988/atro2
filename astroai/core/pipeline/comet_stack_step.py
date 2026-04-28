@@ -132,8 +132,11 @@ class CometStackStep(PipelineStep):
         return context
 
     def _select_primary_result(self, result: Any) -> NDArray[np.floating[Any]]:
+        arr: NDArray[np.floating[Any]]
         if self._tracking_mode == "stars":
-            return result.star_stack
-        if self._tracking_mode == "comet":
-            return result.comet_stack
-        return result.blend if result.blend is not None else result.comet_stack
+            arr = result.star_stack
+        elif self._tracking_mode == "comet":
+            arr = result.comet_stack
+        else:
+            arr = result.blend if result.blend is not None else result.comet_stack
+        return arr

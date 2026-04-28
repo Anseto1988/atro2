@@ -132,9 +132,9 @@ class GradientCorrector:
 
     def correct(
         self,
-        reprojected: list[NDArray[np.floating[Any]]],
+        reprojected: list[NDArray[np.float64]],
         footprints: list[NDArray[np.bool_]],
-    ) -> list[NDArray[np.floating[Any]]]:
+    ) -> list[NDArray[np.float64]]:
         n = len(reprojected)
         if n < 2:
             return list(reprojected)
@@ -173,7 +173,7 @@ class GradientCorrector:
             b[k] = -pairwise[(i, j)]
         A[m, 0] = 1.0
         b[m] = 0.0
-        return np.linalg.lstsq(A, b, rcond=None)[0]
+        return np.linalg.lstsq(A, b, rcond=None)[0].astype(np.float64)
 
 
 class MosaicStitcher:

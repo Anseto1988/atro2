@@ -59,7 +59,7 @@ class TestMainWindowInit:
 
     def test_pipeline_model(self, win: MainWindow) -> None:
         assert win._pipeline is not None
-        assert len(win._pipeline.steps) == 13
+        assert len(win._pipeline.steps) == len(win._pipeline.DEFAULT_STEPS)
 
     def test_statusbar_message(self, win: MainWindow) -> None:
         assert win.statusBar().currentMessage() == "Bereit"
@@ -350,6 +350,21 @@ class TestLoadStylesheet:
             app_mod._RESOURCES = original
         assert "QWidget" in result
 
+    def test_returns_empty_when_qfile_open_fails(self, tmp_path: Path) -> None:
+        import astroai.ui.main.app as app_mod
+        (tmp_path / "dark_theme.qss").write_text("body{}", encoding="utf-8")
+        original = app_mod._RESOURCES
+        app_mod._RESOURCES = tmp_path
+        try:
+            with patch("astroai.ui.main.app.QFile") as mock_qfile_cls:
+                mock_f = MagicMock()
+                mock_f.open.return_value = False
+                mock_qfile_cls.return_value = mock_f
+                result = app_mod._load_stylesheet()
+        finally:
+            app_mod._RESOURCES = original
+        assert result == ""
+
 
 class TestSetWcsSolution:
     def test_set_wcs_none_clears(self, win: MainWindow) -> None:
@@ -391,11 +406,89 @@ class TestSetWcsSolution:
         from astroai.astrometry.catalog import WcsSolution
         from astroai.ui.overlay.sky_objects import WcsTransform
 
+        # Create an object that satisfies both WcsTransform (Protocol) and WcsSolution (class)
+        class DualWcs(WcsSolution):
+            def world_to_pixel(self, ra_deg: float, dec_deg: float) -> tuple[float, float] | None:
+                return (0.0, 0.0)
+            def pixel_to_world(self, x: float, y: float) -> tuple[float, float] | None:
+                return (0.0, 0.0)
+            def image_size(self) -> tuple[int, int]:
+                return (100, 100)
+
+        dual = object.__new__(DualWcs)
+        win.set_wcs_solution(dual)
+        # adapter set via WcsTransform, wcs_solution set via WcsSolution isinstance
+        assert win._sky_overlay._solution is dual
+
+    def test_set_wcs_with_image_shape_astropy_path(self, win: MainWindow) -> None:
+        # Pass an unknown type with image_shape to exercise the astropy WCS block
+        win.set_wcs_solution(object(), image_shape=(100, 200))
+        assert win._annotation_overlay._wcs is None
+
+    def test_set_wcs_astropy_wcs_instance(self, win: MainWindow) -> None:
+        from astropy.wcs import WCS
+
+        wcs = WCS(naxis=2)
+        win.set_wcs_solution(wcs, image_shape=(100, 200))
+        assert win._annotation_overlay._wcs is not None
+
+    def test_set_wcs_engine_overlay_import_error(self, win: MainWindow) -> None:
+        import sys
+        # Make engine overlay import fail → exercises except ImportError (lines 554-555)
+        with patch.dict(sys.modules, {
+            "astroai.engine.platesolving.annotation": None,  # type: ignore[dict-item]
+        }):
+            win.set_wcs_solution(object(), image_shape=(100, 200))
+        assert win._annotation_overlay._wcs is None
+
+    def test_set_wcs_solve_result_import_error(self, win: MainWindow) -> None:
+        import sys
+        # Make SolveResult import fail → exercises except ImportError (lines 563-564)
+        with patch.dict(sys.modules, {
+            "astroai.engine.platesolving.annotation": None,  # type: ignore[dict-item]
+            "astroai.engine.platesolving.solver": None,  # type: ignore[dict-item]
+        }):
+            win.set_wcs_solution(object(), image_shape=(100, 200))
+        assert win._annotation_overlay._wcs is None
+
+    def test_set_wcs_solution_catalog_import_error(self, win: MainWindow) -> None:
+        import sys
+        from astroai.ui.overlay.sky_objects import WcsTransform
         mock_adapter = MagicMock(spec=WcsTransform)
-        # Pass via WcsTransform path to get adapter set, then confirm wcs_solution=None
-        win.set_wcs_solution(mock_adapter)  # adapter set via WcsTransform isinstance
-        # wcs_solution branch: adapter is not None, but wcs is not a WcsSolution → None
-        assert win._sky_overlay._solution is None
+        # Make WcsSolution import fail → exercises except ImportError (lines 586-587)
+        with patch.dict(sys.modules, {
+            "astroai.astrometry.catalog": None,  # type: ignore[dict-item]
+        }):
+            win.set_wcs_solution(mock_adapter)
+        # no exception raised
+
+    def test_set_wcs_astropy_import_error(self, win: MainWindow) -> None:
+        import sys
+        # Make astropy import fail → exercises except ImportError (lines 573-574)
+        with patch.dict(sys.modules, {
+            "astroai.engine.platesolving.annotation": None,  # type: ignore[dict-item]
+            "astroai.engine.platesolving.solver": None,  # type: ignore[dict-item]
+            "astropy": None,  # type: ignore[dict-item]
+            "astropy.wcs": None,  # type: ignore[dict-item]
+        }):
+            win.set_wcs_solution(object(), image_shape=(100, 200))
+        assert win._annotation_overlay._wcs is None
+
+
+class TestMainFunction:
+    def test_main_creates_window_and_exits(self, qtbot) -> None:
+        import sys
+        from astroai.ui.main.app import main
+
+        with patch("astroai.ui.main.app.QApplication.instance") as mock_inst, \
+             patch("astroai.ui.main.app.MainWindow") as MockWin, \
+             patch("astroai.ui.main.app.sys.exit") as mock_exit:
+            mock_app = MagicMock()
+            mock_app.exec.return_value = 0
+            mock_inst.return_value = mock_app
+            MockWin.return_value = MagicMock()
+            main()
+            mock_exit.assert_called_once_with(0)
 
 
 class TestMainWindowLicense:
@@ -412,3 +505,52 @@ class TestMainWindowLicense:
             instance.exec = MagicMock()
             result = win.require_tier("Denoise", LicenseTier.PRO_ANNUAL)
         assert result is False
+
+
+class TestProjectSync:
+    """Tests for _sync_model_to_project and _sync_project_to_model."""
+
+    def test_sync_model_to_project_synthetic_flat(self, win: MainWindow) -> None:
+        win._pipeline.synthetic_flat_enabled = True
+        win._pipeline.synthetic_flat_tile_size = 128
+        win._pipeline.synthetic_flat_smoothing_sigma = 12.0
+        win._sync_model_to_project()
+        assert win._project.synthetic_flat.enabled is True
+        assert win._project.synthetic_flat.tile_size == 128
+        assert win._project.synthetic_flat.smoothing_sigma == 12.0
+
+    def test_sync_model_to_project_comet_stack(self, win: MainWindow) -> None:
+        win._pipeline.comet_stack_enabled = True
+        win._pipeline.comet_tracking_mode = "comet"
+        win._pipeline.comet_blend_factor = 0.3
+        win._sync_model_to_project()
+        assert win._project.comet_stack.enabled is True
+        assert win._project.comet_stack.tracking_mode == "comet"
+        assert win._project.comet_stack.blend_factor == pytest.approx(0.3)
+
+    def test_sync_project_to_model_synthetic_flat(self, win: MainWindow) -> None:
+        win._project.synthetic_flat.enabled = True
+        win._project.synthetic_flat.tile_size = 32
+        win._project.synthetic_flat.smoothing_sigma = 3.5
+        win._sync_project_to_model()
+        assert win._pipeline.synthetic_flat_enabled is True
+        assert win._pipeline.synthetic_flat_tile_size == 32
+        assert win._pipeline.synthetic_flat_smoothing_sigma == pytest.approx(3.5)
+
+    def test_sync_project_to_model_drizzle(self, win: MainWindow) -> None:
+        win._project.drizzle.enabled = True
+        win._project.drizzle.drop_size = 0.5
+        win._sync_project_to_model()
+        assert win._pipeline.drizzle_enabled is True
+        assert win._pipeline.drizzle_drop_size == pytest.approx(0.5)
+
+    def test_sync_roundtrip_preserves_starless(self, win: MainWindow) -> None:
+        win._pipeline.starless_enabled = True
+        win._pipeline.starless_strength = 0.7
+        win._pipeline.starless_format = "fits"
+        win._sync_model_to_project()
+        win._pipeline.starless_enabled = False
+        win._sync_project_to_model()
+        assert win._pipeline.starless_enabled is True
+        assert win._pipeline.starless_strength == pytest.approx(0.7)
+        assert win._pipeline.starless_format == "fits"

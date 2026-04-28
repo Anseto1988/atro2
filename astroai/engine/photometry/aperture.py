@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy import ndimage
 
 
 class AperturePhotometry:
@@ -69,5 +68,5 @@ class AperturePhotometry:
         half_max = peak / 2.0
         above = stamp >= half_max
         n_pixels = float(np.sum(above))
-        fwhm = 2.0 * np.sqrt(n_pixels / np.pi)
+        fwhm = float(2.0 * np.sqrt(n_pixels / np.pi))
         return max(fwhm, 1.5)
