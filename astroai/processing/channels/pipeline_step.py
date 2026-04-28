@@ -66,6 +66,8 @@ class ChannelCombineStep(PipelineStep):
 
     def _combine(self) -> NDArray[np.float32] | None:
         ch = self._channels
+        if not ch or not any(v is not None for v in ch.values()):
+            return None
         if self._mode is CombineMode.LRGB:
             return self._combiner.combine_lrgb(
                 L=ch.get("L"),
