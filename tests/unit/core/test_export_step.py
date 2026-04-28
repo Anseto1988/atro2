@@ -117,3 +117,14 @@ class TestExportStepStarOutputs:
         assert (tmp_path / "m42.xisf").exists()
         assert (tmp_path / "m42_starless.xisf").exists()
         assert (tmp_path / "m42_starmask.xisf").exists()
+
+
+class TestExportStepMetadata:
+    def test_metadata_read_from_context_metadata(self, tmp_path: Path) -> None:
+        """ExportStep picks up metadata from context.metadata['metadata'] when not set directly (line 79)."""
+        data = np.random.default_rng(17).random((16, 16)).astype(np.float32)
+        meta = ImageMetadata(exposure=1.0, gain_iso=100, date_obs="2024-01-01T00:00:00")
+        ctx = PipelineContext(result=data, metadata={"metadata": meta})
+        step = ExportStep(tmp_path, fmt=ExportFormat.FITS, filename="ctx_meta")
+        result = step.execute(ctx)
+        assert (tmp_path / "ctx_meta.fits").exists()

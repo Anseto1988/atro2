@@ -172,3 +172,36 @@ class TestBackgroundRemovalStep:
         assert len(ctx.images) == 2
         for img in ctx.images:
             assert img.shape == (64, 64)
+
+
+class TestBackgroundExtractorEdgeCases:
+    def test_empty_tile_skipped(self) -> None:
+        """tile.size == 0 continues without error (line 90)."""
+        extractor = BackgroundExtractor(tile_size=64)
+        # Tiny 1x1 image with large tile_size -> some tiles will be empty
+        frame = np.ones((1, 1), dtype=np.float64) * 100.0
+        bg = extractor.extract(frame)
+        assert bg.shape == (1, 1)
+
+    def test_below_too_few_samples_returns_none(self) -> None:
+        """_robust_tile_value returns None when < 4 below-threshold pixels (line 112)."""
+        from astroai.processing.background.extractor import BackgroundExtractor
+        extractor = BackgroundExtractor(tile_size=64, star_rejection_percentile=99.9)
+        tile = np.array([1.0, 2.0], dtype=np.float64)
+        result = extractor._robust_tile_value(tile)
+        assert result is None
+
+    def test_clipped_too_few_returns_mean(self) -> None:
+        """_robust_tile_value returns mean when sigma-clipped set has < 2 samples (line 121).
+
+        Values must have std>1e-10 (skip line 117) but be so spread out that
+        a tight sigma_clip=0.0001 leaves clipped.size < 2.
+        """
+        from astroai.processing.background.extractor import BackgroundExtractor
+        extractor = BackgroundExtractor(
+            tile_size=64, sigma_clip=0.0001, star_rejection_percentile=99.9
+        )
+        # Wide spread → std large; sigma_clip*std ≈ 0.04 → no value within 0.04 of mean
+        tile = np.array([1.0, 100.0, 1000.0, 10000.0, 100000.0], dtype=np.float64)
+        result = extractor._robust_tile_value(tile)
+        assert result is not None  # returns mean, not None

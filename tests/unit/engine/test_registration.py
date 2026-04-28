@@ -114,12 +114,16 @@ def test_no_subpixel_align_upsample_factor_1() -> None:
 
 
 def test_no_subpixel_large_vertical_shift_unwraps() -> None:
-    """shift_y > h//2 triggers shift_y -= h in the else branch (line 75)."""
+    """shift_y > h//2 triggers shift_y -= h in the else branch (line 75).
+
+    Phase-correlation peak lands at (N - shift) mod N.  A forward roll of 10
+    gives peak at 64-10=54 > 32=h//2, so the unwrap branch fires.
+    """
     from astroai.engine.registration.aligner import FrameAligner
     rng = np.random.default_rng(77)
     ref = rng.random((64, 64)).astype(np.float64)
-    # Roll by >32 rows so phase correlation peak is in upper half → needs unwrap
-    tgt = np.roll(ref, 40, axis=0)
+    # Roll by 10 → peak at 64-10=54 > 32 → unwrap fires (shift_y -= h)
+    tgt = np.roll(ref, 10, axis=0)
     aligner = FrameAligner(upsample_factor=1)
     aligned, transform = aligner.align(ref, tgt)
     assert aligned.shape == ref.shape

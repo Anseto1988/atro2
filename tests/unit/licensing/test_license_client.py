@@ -87,6 +87,15 @@ class TestLicenseClientRefresh:
             with pytest.raises(LicenseError):
                 client.refresh("jwt")
 
+    def test_non_json_error_uses_status_code(self) -> None:
+        client = LicenseClient(base_url="http://fake")
+        resp = _mock_response(503, content_type="text/plain")
+        resp.json.return_value = {}
+        with patch("astroai.licensing.client.httpx.post", return_value=resp):
+            with pytest.raises(RefreshError) as exc_info:
+                client.refresh("jwt")
+        assert "503" in exc_info.value.code
+
 
 class TestLicenseClientDeactivate:
     def test_success_returns_seats(self) -> None:
@@ -110,6 +119,13 @@ class TestLicenseClientDeactivate:
             with pytest.raises(LicenseError, match="500"):
                 client.deactivate("jwt")
 
+    def test_network_error_raises_license_error(self) -> None:
+        import httpx
+        client = LicenseClient(base_url="http://fake")
+        with patch("astroai.licensing.client.httpx.post", side_effect=httpx.RequestError("conn")):
+            with pytest.raises(LicenseError, match="deactivation"):
+                client.deactivate("jwt")
+
 
 class TestLicenseClientGetModelManifest:
     def test_success(self) -> None:
@@ -125,6 +141,13 @@ class TestLicenseClientGetModelManifest:
         resp = _mock_response(403, {})
         with patch("astroai.licensing.client.httpx.get", return_value=resp):
             with pytest.raises(LicenseError, match="403"):
+                client.get_model_manifest("jwt")
+
+    def test_network_error_raises_license_error(self) -> None:
+        import httpx
+        client = LicenseClient(base_url="http://fake")
+        with patch("astroai.licensing.client.httpx.get", side_effect=httpx.RequestError("timeout")):
+            with pytest.raises(LicenseError, match="manifest"):
                 client.get_model_manifest("jwt")
 
 
@@ -157,4 +180,11 @@ class TestLicenseClientGetDownloadUrl:
         resp = _mock_response(500, {})
         with patch("astroai.licensing.client.httpx.post", return_value=resp):
             with pytest.raises(LicenseError, match="500"):
+                client.get_download_url("jwt", "model")
+
+    def test_network_error_raises_license_error(self) -> None:
+        import httpx
+        client = LicenseClient(base_url="http://fake")
+        with patch("astroai.licensing.client.httpx.post", side_effect=httpx.RequestError("conn")):
+            with pytest.raises(LicenseError, match="download URL"):
                 client.get_download_url("jwt", "model")

@@ -224,3 +224,48 @@ class TestSecureModelDownloaderPathTraversal:
             path = downloader.ensure_model("safe")
 
         assert path == models_dir / "safe_model.onnx"
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap: lines 111-113 – download failure is logged and re-raised
+# ---------------------------------------------------------------------------
+
+class TestSecureModelDownloaderDownloadFailurePropagates:
+    """Cover lines 111-113: except block logs warning and re-raises the exception."""
+
+    def test_download_exception_is_reraised(
+        self, downloader: SecureModelDownloader, mock_client: MagicMock, models_dir: Path
+    ) -> None:
+        content = b"irrelevant"
+        sha = hashlib.sha256(content).hexdigest()
+        mock_client.get_model_manifest.return_value = [
+            {"name": "flaky", "filename": "flaky.onnx", "sha256": sha, "description": ""},
+        ]
+        mock_client.get_download_url.return_value = "https://r2.example.com/flaky.onnx?signed=1"
+        downloader.invalidate_manifest_cache()
+
+        error = IOError("network dropped")
+        with patch.object(downloader, "_download", side_effect=error):
+            with pytest.raises(IOError, match="network dropped"):
+                downloader.ensure_model("flaky")
+
+    def test_download_exception_logs_warning(
+        self, downloader: SecureModelDownloader, mock_client: MagicMock, models_dir: Path
+    ) -> None:
+        """The warning logger call on line 112 is exercised alongside the raise."""
+        content = b"irrelevant"
+        sha = hashlib.sha256(content).hexdigest()
+        mock_client.get_model_manifest.return_value = [
+            {"name": "flaky2", "filename": "flaky2.onnx", "sha256": sha, "description": ""},
+        ]
+        mock_client.get_download_url.return_value = "https://r2.example.com/flaky2.onnx?signed=1"
+        downloader.invalidate_manifest_cache()
+
+        import logging
+        with patch("astroai.inference.models.secure_downloader.logger") as mock_logger:
+            with patch.object(downloader, "_download", side_effect=RuntimeError("boom")):
+                with pytest.raises(RuntimeError):
+                    downloader.ensure_model("flaky2")
+            mock_logger.warning.assert_called_once()
+            call_args = mock_logger.warning.call_args[0]
+            assert "flaky2" in call_args[1]

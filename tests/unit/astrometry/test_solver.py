@@ -191,6 +191,61 @@ class TestAstapSolverSolveArray:
 
         assert sol.ra_center == pytest.approx(50.0)
 
+    def test_solve_array_3d_takes_first_channel(self) -> None:
+        """solve_array selects first channel of 3D input (line 79)."""
+        image = np.zeros((128, 128, 3), dtype=np.float32)
+        expected = _make_wcs_solution(ra=70.0, dec=5.0)
+
+        solver = AstapSolver(executable="/fake/astap")
+        with patch.object(solver, "solve", return_value=expected):
+            sol = solver.solve_array(image)
+
+        assert sol.ra_center == pytest.approx(70.0)
+
+
+# ---------------------------------------------------------------------------
+# AstapSolver._result_to_solution — WCS matrix branches
+# ---------------------------------------------------------------------------
+
+def _make_mock_solve_result(
+    ra: float = 10.0, dec: float = 20.0, fw: float = 1.0, fh: float = 1.0
+) -> "MagicMock":
+    result = MagicMock()
+    result.ra_center = ra
+    result.dec_center = dec
+    result.field_width_deg = fw
+    result.field_height_deg = fh
+    return result
+
+
+class TestResultToSolution:
+    def test_pc_matrix_branch(self) -> None:
+        """_result_to_solution uses PC+CDELT when cd is None (lines 109-113)."""
+        scale = 1.0 / 3600.0
+        result = _make_mock_solve_result()
+        result.wcs.wcs.cd = None
+        result.wcs.wcs.pc = np.array([[1.0, 0.0], [0.0, 1.0]])
+        result.wcs.wcs.cdelt = np.array([-scale, scale])
+        result.wcs.wcs.crpix = np.array([256.5, 256.5])
+
+        sol = AstapSolver._result_to_solution(result, Path("fake.fits"))
+
+        assert sol.ra_center == pytest.approx(10.0)
+        assert sol.pixel_scale_arcsec == pytest.approx(1.0, abs=0.01)
+
+    def test_cdelt_only_branch(self) -> None:
+        """_result_to_solution uses cdelt when both cd and pc are None (lines 114-117)."""
+        scale = 2.0 / 3600.0
+        result = _make_mock_solve_result()
+        result.wcs.wcs.cd = None
+        result.wcs.wcs.pc = None
+        result.wcs.wcs.cdelt = np.array([-scale, scale])
+        result.wcs.wcs.crpix = np.array([256.5, 256.5])
+
+        sol = AstapSolver._result_to_solution(result, Path("fake.fits"))
+
+        assert sol.pixel_scale_arcsec == pytest.approx(2.0, abs=0.01)
+
 
 # ---------------------------------------------------------------------------
 # AstapSolver — retry with expanded radius
@@ -325,3 +380,44 @@ class TestCatalogManager:
             mgr = CatalogManager()
         parts = mgr.catalog_dir.parts
         assert "opt" in parts and "astap" in parts
+
+    def test_download_success(self, tmp_path: Path) -> None:
+        """download fetches zip from URL and extracts to catalog_dir (lines 151-172)."""
+        import io
+        import zipfile
+
+        # Build a minimal zip in memory
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("dummy_catalog.290", b"star data")
+        zip_bytes = buf.getvalue()
+
+        mock_response = MagicMock()
+        mock_response.content = zip_bytes
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+
+        mgr = CatalogManager(catalog_dir=tmp_path)
+        with patch("httpx.Client", return_value=mock_client):
+            result = mgr.download(AstapCatalog.H18)
+
+        assert result == tmp_path
+        assert (tmp_path / "dummy_catalog.290").exists()
+
+    def test_download_http_error_raises_runtime_error(self, tmp_path: Path) -> None:
+        """HTTPError during download raises RuntimeError (lines 165-166)."""
+        import httpx
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = httpx.HTTPError("connection refused")
+
+        mgr = CatalogManager(catalog_dir=tmp_path)
+        with patch("httpx.Client", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="Catalog download failed"):
+                mgr.download(AstapCatalog.H18)

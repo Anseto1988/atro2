@@ -172,3 +172,72 @@ class TestQLicenseAdapterActivateAsync:
         adapter._cleanup()
         assert adapter._thread is None
         assert adapter._worker is None
+
+
+class TestQLicenseAdapterConstructorKwargs:
+    """Cover the store_dir and base_url kwargs branches in __init__ (lines 63-66)."""
+
+    def test_constructor_with_store_dir(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """Passing store_dir should forward it to LicenseManager."""
+        with patch("astroai.ui.license_adapter.LicenseManager") as MockMgr:
+            MockMgr.return_value = MagicMock()
+            QLicenseAdapter(store_dir=tmp_path)
+            call_kwargs = MockMgr.call_args[1]
+            assert "store_dir" in call_kwargs
+            assert call_kwargs["store_dir"] == tmp_path
+
+    def test_constructor_with_base_url(self) -> None:
+        """Passing base_url should forward it to LicenseManager."""
+        with patch("astroai.ui.license_adapter.LicenseManager") as MockMgr:
+            MockMgr.return_value = MagicMock()
+            QLicenseAdapter(base_url="https://example.com")
+            call_kwargs = MockMgr.call_args[1]
+            assert "base_url" in call_kwargs
+            assert call_kwargs["base_url"] == "https://example.com"
+
+    def test_constructor_without_kwargs_passes_empty_dict(self) -> None:
+        """Default constructor should not pass store_dir or base_url."""
+        with patch("astroai.ui.license_adapter.LicenseManager") as MockMgr:
+            MockMgr.return_value = MagicMock()
+            QLicenseAdapter()
+            call_kwargs = MockMgr.call_args[1]
+            assert "store_dir" not in call_kwargs
+            assert "base_url" not in call_kwargs
+
+
+class TestActivateWorkerRun:
+    """Cover _ActivateWorker.run success and failure paths (lines 38-43)."""
+
+    def test_run_success_emits_succeeded(self, qtbot) -> None:  # type: ignore[no-untyped-def]
+        from astroai.ui.license_adapter import _ActivateWorker
+
+        mgr = MagicMock()
+        status = _make_status()
+        mgr.get_status.return_value = status
+
+        worker = _ActivateWorker(mgr, "VALID-KEY")
+        received: list[object] = []
+        worker.succeeded.connect(lambda s: received.append(s))
+
+        worker.run()
+
+        args, _ = mgr.activate.call_args
+        assert args[0] == "VALID-KEY"
+        assert len(received) == 1
+        assert received[0] == status
+
+    def test_run_failure_emits_failed(self, qtbot) -> None:  # type: ignore[no-untyped-def]
+        from astroai.ui.license_adapter import _ActivateWorker
+        from astroai.licensing.exceptions import LicenseError
+
+        mgr = MagicMock()
+        mgr.activate.side_effect = LicenseError("invalid key")
+
+        worker = _ActivateWorker(mgr, "BAD-KEY")
+        errors: list[str] = []
+        worker.failed.connect(lambda e: errors.append(e))
+
+        worker.run()
+
+        assert len(errors) == 1
+        assert "invalid key" in errors[0]

@@ -507,3 +507,53 @@ class TestSolveResult:
         assert result.solver_used == "astap"
         with pytest.raises(AttributeError):
             result.ra_center = 0.0  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: _try_coord_float, line 84, line 170
+# ---------------------------------------------------------------------------
+
+class TestTryCoordFloat:
+    def test_sexagesimal_string_returns_none(self) -> None:
+        """_try_coord_float returns None for non-numeric strings like '12h30m' (lines 44-45)."""
+        from astroai.engine.platesolving.solver import _try_coord_float
+        assert _try_coord_float("12h30m45s") is None
+        assert _try_coord_float("not-a-number") is None
+
+    def test_none_returns_none(self) -> None:
+        from astroai.engine.platesolving.solver import _try_coord_float
+        assert _try_coord_float(None) is None
+
+
+class TestSolveCoordExtraction:
+    @patch("astroai.engine.platesolving.solver.subprocess.run")
+    def test_solve_extracts_coords_from_fits_header(self, mock_run: MagicMock, tmp_fits: Path) -> None:
+        """solve() extracts ra_hint/dec_hint from FITS header when not provided (line 84)."""
+        wcs_path = tmp_fits.with_suffix(".wcs")
+        wcs = WCS(naxis=2)
+        wcs.wcs.crval = [180.0, 45.0]
+        wcs.wcs.crpix = [50.0, 50.0]
+        wcs.wcs.cdelt = [-0.000277, 0.000277]
+        wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+        header = wcs.to_header()
+        fits.PrimaryHDU(header=header).writeto(str(wcs_path), overwrite=True)
+
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok", stderr=""
+        )
+        solver = PlateSolver(astap_path=Path("/mock/astap"), max_retries=1)
+        # No ra_hint/dec_hint — solver should extract from FITS header
+        result = solver.solve(tmp_fits)
+        assert result.ra_center == pytest.approx(180.0, abs=0.1)
+
+
+class TestRunAstapNoWcsFile:
+    @patch("astroai.engine.platesolving.solver.subprocess.run")
+    def test_no_wcs_file_raises_solve_error(self, mock_run: MagicMock, tmp_fits: Path) -> None:
+        """SolveError raised when ASTAP returns 0 but produces no .wcs file (line 170)."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok", stderr=""
+        )
+        solver = PlateSolver(astap_path=Path("/mock/astap"), max_retries=1)
+        with pytest.raises(SolveError, match="did not produce a WCS file"):
+            solver._run_astap_subprocess(tmp_fits, None, None, 30.0)

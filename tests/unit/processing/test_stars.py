@@ -116,3 +116,28 @@ def test_grayscale_passthrough():
     mono = np.random.rand(32, 32).astype(np.float64)
     gray = StarManager._to_grayscale(mono)
     np.testing.assert_array_equal(gray, mono.astype(np.float64))
+
+
+class TestStarManagerEdgeCases:
+    def test_elongated_region_skipped_aspect_gt4(self):
+        # aspect > 4.0 → continue (line 60): vertical stripe filtered out
+        manager = StarManager(detection_sigma=3.0, min_star_area=3, max_star_area=5000)
+        frame = np.zeros((64, 64), dtype=np.float64)
+        frame[10:30, 32] = 10000.0
+        frame += 10.0
+        mask = manager.create_star_mask(frame)
+        assert mask.sum() == 0
+
+    def test_inpaint_channel_all_pixels_masked_returns_unchanged(self):
+        # mask is all True → bg_values.size == 0 → return result unchanged (lines 118-119)
+        ch = np.ones((8, 8), dtype=np.float64) * 77.0
+        mask_all = np.ones((8, 8), dtype=np.bool_)
+        result = StarManager._inpaint_channel(ch, mask_all)
+        np.testing.assert_array_equal(result, ch)
+
+    def test_inpaint_channel_empty_mask_returns_unchanged(self):
+        # mask.any() is False → early return (line 114-115)
+        ch = np.ones((8, 8), dtype=np.float64) * 33.0
+        mask_empty = np.zeros((8, 8), dtype=np.bool_)
+        result = StarManager._inpaint_channel(ch, mask_empty)
+        np.testing.assert_array_equal(result, ch)

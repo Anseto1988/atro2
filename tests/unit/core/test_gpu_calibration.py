@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from unittest.mock import MagicMock, patch
 
 from astroai.core.calibration.calibrate import apply_dark, apply_flat, calibrate_frame
 from astroai.core.calibration.gpu_engine import GPUCalibrationEngine
@@ -327,3 +328,99 @@ class TestBenchmarkMetricsEmission:
         cpu_result = calibrate_frame(light, meta, lib, use_gpu=False)
         assert gpu_result.shape == cpu_result.shape
         assert gpu_result.dtype == cpu_result.dtype
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests: lines 35, 38, 76, 84, 106, 114
+# ---------------------------------------------------------------------------
+
+class TestValidateDeviceCpuPath:
+    """Line 35: _validate_device returns early for cpu device."""
+
+    def test_cpu_device_returned_directly(self) -> None:
+        cpu_device = torch.device("cpu")
+        result = GPUCalibrationEngine._validate_device(cpu_device)
+        assert result.type == "cpu"
+
+    def test_non_cpu_valid_device_returned(self) -> None:
+        """Line 38: torch.zeros succeeds -> non-cpu device returned."""
+        cuda_device = torch.device("cuda")
+        with patch("astroai.core.calibration.gpu_engine.torch.zeros") as mock_zeros:
+            mock_zeros.return_value = torch.tensor([0.0])
+            result = GPUCalibrationEngine._validate_device(cuda_device)
+        assert result is cuda_device
+
+    def test_non_cpu_failing_device_falls_back_to_cpu(self) -> None:
+        """Lines 39-40: torch.zeros raises -> fallback to cpu."""
+        cuda_device = torch.device("cuda")
+        with patch("astroai.core.calibration.gpu_engine.torch.zeros", side_effect=RuntimeError("no gpu")):
+            result = GPUCalibrationEngine._validate_device(cuda_device)
+        assert result.type == "cpu"
+
+
+class TestCalibrateFrameGpuLoadData:
+    """Lines 76 and 84: load_data called when CalibrationFrame.data is None."""
+
+    def test_load_data_called_for_dark_when_data_none(self, rng: np.random.Generator, engine: GPUCalibrationEngine) -> None:
+        """Line 76: dark_frame.data is None -> load_data(dark_frame.path) called."""
+        meta = _meta()
+        light = rng.random((64, 64), dtype=np.float32)
+        dark_arr = rng.random((64, 64), dtype=np.float32) * 0.1
+
+        dark_frame = CalibrationFrame(path=Path("dark.fits"), metadata=meta, data=None)
+        lib = CalibrationLibrary(darks=[dark_frame], flats=[], bias=[])
+
+        load_data_mock = MagicMock(return_value=dark_arr)
+        result = engine.calibrate_frame_gpu(light, meta, lib, load_data=load_data_mock)
+
+        load_data_mock.assert_called_once_with(Path("dark.fits"))
+        assert result.shape == (64, 64)
+
+    def test_load_data_called_for_flat_when_data_none(self, rng: np.random.Generator, engine: GPUCalibrationEngine) -> None:
+        """Line 84: flat_frame.data is None -> load_data(flat_frame.path) called."""
+        meta = _meta()
+        light = rng.random((64, 64), dtype=np.float32)
+        flat_arr = rng.random((64, 64), dtype=np.float32) + 0.5
+
+        flat_frame = CalibrationFrame(path=Path("flat.fits"), metadata=meta, data=None)
+        lib = CalibrationLibrary(darks=[], flats=[flat_frame], bias=[])
+
+        load_data_mock = MagicMock(return_value=flat_arr)
+        result = engine.calibrate_frame_gpu(light, meta, lib, load_data=load_data_mock)
+
+        load_data_mock.assert_called_once_with(Path("flat.fits"))
+        assert result.shape == (64, 64)
+
+
+class TestCalibrateBatchGpuLoadData:
+    """Lines 106 and 114: load_data called in calibrate_batch_gpu when data is None."""
+
+    def test_batch_load_data_called_for_dark(self, rng: np.random.Generator, engine: GPUCalibrationEngine) -> None:
+        """Line 106: dark_frame.data is None -> load_data called in batch path."""
+        meta = _meta()
+        dark_arr = rng.random((64, 64), dtype=np.float32) * 0.1
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(3)]
+
+        dark_frame = CalibrationFrame(path=Path("batch_dark.fits"), metadata=meta, data=None)
+        lib = CalibrationLibrary(darks=[dark_frame], flats=[], bias=[])
+
+        load_data_mock = MagicMock(return_value=dark_arr)
+        results = engine.calibrate_batch_gpu(frames, meta, lib, load_data=load_data_mock)
+
+        load_data_mock.assert_called_once_with(Path("batch_dark.fits"))
+        assert len(results) == 3
+
+    def test_batch_load_data_called_for_flat(self, rng: np.random.Generator, engine: GPUCalibrationEngine) -> None:
+        """Line 114: flat_frame.data is None -> load_data called in batch path."""
+        meta = _meta()
+        flat_arr = rng.random((64, 64), dtype=np.float32) + 0.5
+        frames = [rng.random((64, 64), dtype=np.float32) for _ in range(3)]
+
+        flat_frame = CalibrationFrame(path=Path("batch_flat.fits"), metadata=meta, data=None)
+        lib = CalibrationLibrary(darks=[], flats=[flat_frame], bias=[])
+
+        load_data_mock = MagicMock(return_value=flat_arr)
+        results = engine.calibrate_batch_gpu(frames, meta, lib, load_data=load_data_mock)
+
+        load_data_mock.assert_called_once_with(Path("batch_flat.fits"))
+        assert len(results) == 3

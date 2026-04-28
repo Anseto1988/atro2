@@ -311,3 +311,81 @@ class TestSkyObjectCatalogCustomCSV:
         assert len(stars) == 1
         assert stars[0].name == "Sirius"
         assert stars[0].magnitude == pytest.approx(-1.46)
+
+    def test_loads_custom_boundaries_csv(self, tmp_path: Path) -> None:
+        """Covers the constellation_boundaries property and _load_boundaries path (lines 95-96, 153-160)."""
+        dso_file = tmp_path / "dso_catalog.csv"
+        dso_file.write_text("designation,ra_deg,dec_deg\n")
+        star_file = tmp_path / "named_stars.csv"
+        star_file.write_text("hip_id,name,ra_deg,dec_deg,mag\n")
+        bound_file = tmp_path / "constellation_boundaries.csv"
+        bound_file.write_text(
+            "ra1_deg,dec1_deg,ra2_deg,dec2_deg,constellation\n"
+            "10.0,20.0,11.0,21.0,ORI\n"
+            "30.0,40.0,31.0,41.0,UMA\n"
+        )
+
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            boundaries = list(cat.constellation_boundaries)
+        assert len(boundaries) == 2
+        assert boundaries[0].constellation == "ORI"
+        assert boundaries[0].ra1_deg == pytest.approx(10.0)
+        assert boundaries[1].constellation == "UMA"
+
+
+class TestSkyObjectCatalogExceptionPaths:
+    """Cover exception handlers in _load_stars and _load_boundaries (lines 143-144, 162-163)."""
+
+    def test_corrupt_stars_csv_does_not_crash(self, tmp_path: Path) -> None:
+        """Corrupt named_stars.csv should be silently caught."""
+        dso_file = tmp_path / "dso_catalog.csv"
+        dso_file.write_text("designation,ra_deg,dec_deg\n")
+        star_file = tmp_path / "named_stars.csv"
+        # hip_id and mag are not parseable as int/float
+        star_file.write_text("hip_id,name,ra_deg,dec_deg,mag\nNOT_INT,Sirius,101.2,-16.7,NOT_FLOAT\n")
+        bound_file = tmp_path / "constellation_boundaries.csv"
+        bound_file.write_text("ra1_deg,dec1_deg,ra2_deg,dec2_deg\n")
+
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            stars = list(cat.named_stars)
+        assert list(stars) == []
+
+    def test_corrupt_boundaries_csv_does_not_crash(self, tmp_path: Path) -> None:
+        """Corrupt constellation_boundaries.csv should be silently caught."""
+        dso_file = tmp_path / "dso_catalog.csv"
+        dso_file.write_text("designation,ra_deg,dec_deg\n")
+        star_file = tmp_path / "named_stars.csv"
+        star_file.write_text("hip_id,name,ra_deg,dec_deg,mag\n")
+        bound_file = tmp_path / "constellation_boundaries.csv"
+        # ra1_deg is not parseable as float
+        bound_file.write_text("ra1_deg,dec1_deg,ra2_deg,dec2_deg\nBAD,20.0,11.0,21.0\n")
+
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            boundaries = list(cat.constellation_boundaries)
+        assert list(boundaries) == []
+
+    def test_missing_boundaries_file_returns_empty(self, tmp_path: Path) -> None:
+        """No crash if constellation_boundaries.csv is absent."""
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            boundaries = list(cat.constellation_boundaries)
+        assert boundaries == []

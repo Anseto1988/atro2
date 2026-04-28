@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -86,3 +86,48 @@ class TestReadRaw:
             use_camera_wb=True,
             no_auto_bright=True,
         )
+
+
+class TestExtractRawMetadataExif:
+    def test_exif_all_fields_extracted(self, monkeypatch) -> None:
+        """PIL EXIF ExposureTime/ISOSpeedRatings/DateTimeOriginal extracted (lines 31-40)."""
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        _setup_raw_context(mock_rawpy, 100, 200, 3)
+
+        # PIL TAGS maps int → str; tag IDs from TIFF/EXIF spec
+        # ExposureTime=33434, ISOSpeedRatings=34855, DateTimeOriginal=36867
+        from PIL.ExifTags import TAGS
+        name_to_id = {v: k for k, v in TAGS.items()}
+        exif_id_exp = name_to_id.get("ExposureTime", 33434)
+        exif_id_iso = name_to_id.get("ISOSpeedRatings", 34855)
+        exif_id_date = name_to_id.get("DateTimeOriginal", 36867)
+
+        fake_exif = {exif_id_exp: 0.005, exif_id_iso: 1600, exif_id_date: "2024:01:01 12:00:00"}
+        mock_img = MagicMock()
+        mock_img.__enter__ = MagicMock(return_value=mock_img)
+        mock_img.__exit__ = MagicMock(return_value=False)
+        mock_img.getexif.return_value = fake_exif
+
+        with patch("PIL.Image.open", return_value=mock_img):
+            _data, meta = mod.read_raw(Path("/fake/image.cr2"))
+
+        assert meta.exposure == pytest.approx(0.005)
+        assert meta.gain_iso == 1600
+        assert meta.date_obs == "2024:01:01 12:00:00"
+
+    def test_empty_exif_leaves_fields_none(self, monkeypatch) -> None:
+        """Empty EXIF dict leaves exposure/gain/date as None (line 32 falsy branch)."""
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        _setup_raw_context(mock_rawpy, 50, 50, 3)
+
+        mock_img = MagicMock()
+        mock_img.__enter__ = MagicMock(return_value=mock_img)
+        mock_img.__exit__ = MagicMock(return_value=False)
+        mock_img.getexif.return_value = {}  # falsy
+
+        with patch("PIL.Image.open", return_value=mock_img):
+            _data, meta = mod.read_raw(Path("/fake/image.cr2"))
+
+        assert meta.exposure is None
+        assert meta.gain_iso is None
+        assert meta.date_obs is None

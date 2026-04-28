@@ -308,6 +308,20 @@ class TestGetStatus:
         assert status.token is not None
         assert status.token.tier.value == "pro_annual"
 
+    def test_returns_empty_status_when_decode_token_raises(
+        self, rsa_keypair: tuple[str, str], tmp_store: Path,
+    ) -> None:
+        private_key, public_key = rsa_keypair
+        raw_jwt = _make_token(private_key)
+        mgr = LicenseManager(store_dir=tmp_store, public_key=public_key)
+        mgr._store.save(raw_jwt, datetime.now(timezone.utc))
+
+        with patch("astroai.licensing.decode_token", side_effect=LicenseError("bad token")):
+            status = mgr.get_status()
+
+        assert status.activated is False
+        assert status.token is None
+
 
 # ---------------------------------------------------------------------------
 # Deactivate

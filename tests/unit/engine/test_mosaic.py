@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from astropy.io import fits
 from astropy.wcs import WCS
 
 from astroai.engine.mosaic.engine import (
@@ -16,6 +17,7 @@ from astroai.engine.mosaic.engine import (
     MosaicStitcher,
     OverlapDetector,
     OverlapInfo,
+    PanelSolver,
     _inside,
     _intersect,
     _pixel_scale_from_wcs,
@@ -237,6 +239,14 @@ class TestMosaicStitcher:
         w = MosaicStitcher._cosine_weight(mask)
         assert np.all(w == 0.0)
 
+    def test_cosine_weight_max_d_zero_returns_zeros(self) -> None:
+        """_cosine_weight returns zeros when distance_transform_edt gives max_d=0 (line 261)."""
+        mask = np.ones((4, 4), dtype=bool)
+        with patch("scipy.ndimage.distance_transform_edt") as mock_edt:
+            mock_edt.return_value = np.zeros((4, 4), dtype=np.float64)
+            w = MosaicStitcher._cosine_weight(mask)
+        assert np.all(w == 0.0)
+
     def test_distance_weight_full_mask_normalized(self) -> None:
         mask = np.ones((8, 8), dtype=bool)
         w = MosaicStitcher._distance_weight(mask)
@@ -344,6 +354,143 @@ class TestMosaicStep:
 
         assert result.metadata["mosaic_output_path"] == fake_result
         instance.stitch.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# PanelSolver
+# ---------------------------------------------------------------------------
+
+class TestPanelSolver:
+    def _make_mock_plate_solver(self, ra: float = 10.0, dec: float = 20.0) -> MagicMock:
+        mock_solver = MagicMock()
+        mock_result = MagicMock()
+        mock_result.wcs = _make_wcs(ra=ra, dec=dec)
+        mock_result.ra_center = ra
+        mock_result.dec_center = dec
+        mock_solver.solve.return_value = mock_result
+        return mock_solver
+
+    def test_solve_all_single_panel(self, tmp_path: Path) -> None:
+        """solve_all reads FITS and returns MosaicPanel list (lines 65-79)."""
+        fits_path = tmp_path / "panel.fits"
+        fits.PrimaryHDU(data=np.ones((64, 64), dtype=np.float32)).writeto(fits_path)
+
+        solver = PanelSolver(plate_solver=self._make_mock_plate_solver())
+        panels = solver.solve_all([fits_path])
+
+        assert len(panels) == 1
+        assert panels[0].path == fits_path
+        assert panels[0].image.dtype == np.float32
+
+    def test_solve_all_updates_ra_dec_hint(self, tmp_path: Path) -> None:
+        """solve_all passes ra/dec from previous panel as hint to next (lines 77-78)."""
+        p1 = tmp_path / "p1.fits"
+        p2 = tmp_path / "p2.fits"
+        for fp in (p1, p2):
+            fits.PrimaryHDU(data=np.ones((32, 32), dtype=np.float32)).writeto(fp)
+
+        call_kwargs: list[dict] = []
+
+        def _fake_solve(path, ra_hint=None, dec_hint=None):
+            call_kwargs.append({"ra_hint": ra_hint, "dec_hint": dec_hint})
+            m = MagicMock()
+            m.wcs = _make_wcs(ra=15.0, dec=25.0)
+            m.ra_center = 15.0
+            m.dec_center = 25.0
+            return m
+
+        mock_solver = MagicMock()
+        mock_solver.solve.side_effect = _fake_solve
+        solver = PanelSolver(plate_solver=mock_solver)
+        solver.solve_all([p1, p2], ra_hint=5.0, dec_hint=10.0)
+
+        assert call_kwargs[0] == {"ra_hint": 5.0, "dec_hint": 10.0}
+        assert call_kwargs[1] == {"ra_hint": 15.0, "dec_hint": 25.0}
+
+
+# ---------------------------------------------------------------------------
+# MosaicStitcher — additional coverage
+# ---------------------------------------------------------------------------
+
+class TestMosaicStitcherAdditional:
+    def test_stitch_with_gradient_correct_two_panels(self) -> None:
+        """gradient_correct=True with 2+ panels triggers GradientCorrector (line 197)."""
+        stitcher = MosaicStitcher()
+        panels = [_make_panel(), _make_panel(ra=10.1)]
+        out_wcs = _make_wcs()
+        out_shape = (32, 32)
+
+        with patch("reproject.reproject_interp", _fake_reproject):
+            result = stitcher.stitch(panels, out_wcs, out_shape, gradient_correct=True)
+
+        assert result.shape == out_shape
+        assert result.dtype == np.float32
+
+    def test_write_fits_creates_file(self, tmp_path: Path) -> None:
+        """write_fits writes mosaic to FITS with WCS header (lines 270-276)."""
+        mosaic = np.ones((32, 32), dtype=np.float32) * 0.5
+        wcs = _make_wcs()
+        out_path = tmp_path / "mosaic.fits"
+
+        result = MosaicStitcher.write_fits(out_path, mosaic, wcs, n_panels=2)
+
+        assert result == out_path
+        assert out_path.exists()
+        with fits.open(str(out_path)) as hdul:
+            assert hdul[0].header["NPANELS"] == 2
+            assert hdul[0].header.get("MOSAIC") is True
+
+
+# ---------------------------------------------------------------------------
+# MosaicEngine — property accessors and high-level methods
+# ---------------------------------------------------------------------------
+
+class TestMosaicEngineHighLevel:
+    def test_property_accessors(self) -> None:
+        """panel_solver, overlap_detector, stitcher properties (lines 296, 300, 304)."""
+        with patch("astroai.engine.mosaic.engine.PlateSolver"):
+            engine = MosaicEngine()
+        assert isinstance(engine.panel_solver, PanelSolver)
+        assert isinstance(engine.overlap_detector, OverlapDetector)
+        assert isinstance(engine.stitcher, MosaicStitcher)
+
+    def test_analyze_panels(self, tmp_path: Path) -> None:
+        """analyze_panels delegates to solver + overlap detector (lines 337-345)."""
+        fits_path = tmp_path / "p.fits"
+        fits.PrimaryHDU(data=np.ones((64, 64), dtype=np.float32)).writeto(fits_path)
+
+        with patch("astroai.engine.mosaic.engine.PlateSolver"):
+            engine = MosaicEngine()
+
+        panel = _make_panel()
+        with patch.object(engine._panel_solver, "solve_all", return_value=[panel, panel]):
+            with patch.object(engine._overlap_detector, "compute_footprints", return_value=[]):
+                with patch.object(engine._overlap_detector, "build_overlap_graph", return_value={}):
+                    panels, overlaps = engine.analyze_panels([fits_path, fits_path])
+
+        assert len(panels) == 2
+        assert overlaps == {}
+
+    def test_stitch_produces_output_file(self, tmp_path: Path) -> None:
+        """MosaicEngine.stitch calls subcomponents and writes result (lines 313-329)."""
+        fits_path = tmp_path / "p.fits"
+        fits.PrimaryHDU(data=np.ones((64, 64), dtype=np.float32)).writeto(fits_path)
+        out_path = tmp_path / "mosaic.fits"
+
+        with patch("astroai.engine.mosaic.engine.PlateSolver"):
+            engine = MosaicEngine()
+
+        panel = _make_panel()
+        out_wcs = _make_wcs()
+        mosaic_data = np.ones((32, 32), dtype=np.float32)
+
+        with patch.object(engine, "analyze_panels", return_value=([panel, panel], {})):
+            with patch.object(engine, "compute_output_wcs", return_value=(out_wcs, (32, 32))):
+                with patch.object(engine._stitcher, "stitch", return_value=mosaic_data):
+                    with patch.object(engine._stitcher, "write_fits", return_value=out_path):
+                        result = engine.stitch([fits_path, fits_path], out_path)
+
+        assert result == out_path
 
     def test_execute_uses_default_output_path_from_metadata(self) -> None:
         step = MosaicStep()

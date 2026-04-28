@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-from astroai.project.recent_files import RecentProjects
+from astroai.project.recent_files import RecentProjects, _config_path
 
 
 @pytest.fixture
@@ -49,3 +50,23 @@ class TestRecentProjects:
         r1.add(tmp_path / "x.astroai")
         r2 = RecentProjects(config_path=cfg)
         assert len(r2.entries) == 1
+
+    def test_load_invalid_json_returns_empty(self, tmp_path: Path) -> None:
+        """_load silently returns [] on invalid JSON (lines 54-56)."""
+        cfg = tmp_path / "recent.json"
+        cfg.write_text("{not valid json}", encoding="utf-8")
+        r = RecentProjects(config_path=cfg)
+        assert r.entries == []
+
+    def test_persist_oserror_swallowed(self, tmp_path: Path) -> None:
+        """_persist OSError is silently ignored (lines 62-63)."""
+        cfg = tmp_path / "recent.json"
+        r = RecentProjects(config_path=cfg)
+        with patch.object(type(cfg), "write_text", side_effect=OSError("no space")):
+            r.add(tmp_path / "a.astroai")  # should not raise
+
+    def test_config_path_non_windows(self) -> None:
+        """_config_path returns ~/.config/astroai path on non-Windows (line 16)."""
+        with patch("sys.platform", "linux"):
+            path = _config_path()
+        assert ".config" in str(path) and "astroai" in str(path)

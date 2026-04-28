@@ -114,3 +114,33 @@ class TestTierInsufficientError:
         exc = TierInsufficientError(model_name="denoise_pro", required_tier="founding_member")
         assert "denoise_pro" in str(exc)
         assert "founding_member" in str(exc)
+
+
+class TestLicenseTokenIsExpired:
+    """Tests for LicenseToken.is_expired property (licensing/models.py line 36)."""
+
+    def _make_token(self, exp: "datetime") -> "LicenseToken":
+        from astroai.licensing.models import LicenseToken, LicenseTier
+        from datetime import timezone
+        now = __import__("datetime").datetime.now(timezone.utc)
+        return LicenseToken(
+            sub="u@test.com",
+            jti="jti-x",
+            iat=now,
+            exp=exp,
+            tier=LicenseTier.PRO_ANNUAL,
+            plugins=(),
+            machine_id="test-machine",
+            seats_used=1,
+            seats_max=1,
+        )
+
+    def test_not_expired_when_exp_in_future(self) -> None:
+        from datetime import datetime, timedelta, timezone
+        token = self._make_token(datetime.now(timezone.utc) + timedelta(days=30))
+        assert token.is_expired is False
+
+    def test_expired_when_exp_in_past(self) -> None:
+        from datetime import datetime, timedelta, timezone
+        token = self._make_token(datetime.now(timezone.utc) - timedelta(seconds=1))
+        assert token.is_expired is True

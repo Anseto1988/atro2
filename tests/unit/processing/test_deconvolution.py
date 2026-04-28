@@ -316,3 +316,28 @@ class TestOnnxPaths:
 
         assert result.shape == (h, w)
         mock_session.run.assert_called_once()
+
+    def test_load_from_path_ort_exception_returns_none(self, tmp_path: Path) -> None:
+        """InferenceSession raises general Exception → returns None (lines 110-112)."""
+        fake_model = tmp_path / "model.onnx"
+        fake_model.write_bytes(b"onnxdata")
+
+        mock_ort = MagicMock()
+        mock_ort.InferenceSession.side_effect = RuntimeError("corrupt model")
+
+        step = DeconvolutionStep()
+        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+            result = step._load_from_path(str(fake_model))
+
+        assert result is None
+
+    def test_load_from_registry_exception_returns_none(self) -> None:
+        """ModelDownloader raises general Exception → returns None (lines 126-128)."""
+        mock_dl_module = MagicMock()
+        mock_dl_module.ModelDownloader.side_effect = RuntimeError("registry error")
+
+        step = DeconvolutionStep()
+        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+            result = step._load_from_registry()
+
+        assert result is None

@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from astroai.ui.models import PipelineModel, StepState
+from astroai.ui.widgets.comet_stack_panel import CometStackPanel
 from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.progress_widget import ProgressWidget
@@ -53,6 +54,13 @@ class TestImageViewer:
     def test_zoom_signal(self, viewer: ImageViewer, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(viewer.zoom_changed, timeout=500):
             viewer.set_zoom(3.0)
+
+    def test_render_tile_uses_cache_on_second_call(self, viewer: ImageViewer) -> None:
+        data = np.random.rand(256, 256).astype(np.float32)
+        viewer.set_image_data(data)
+        tile1 = viewer._render_tile(0, 0)
+        tile2 = viewer._render_tile(0, 0)
+        assert tile1 is tile2
 
 
 class TestHistogramWidget:
@@ -151,3 +159,105 @@ class TestProgressWidget:
         progress.set_indeterminate()
         progress.set_determinate()
         assert progress._bar.maximum() == 1000
+
+
+class TestCometStackPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> CometStackPanel:  # type: ignore[no-untyped-def]
+        w = CometStackPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_state_disabled(self, panel: CometStackPanel) -> None:
+        assert not panel._enabled_cb.isChecked()
+        assert not panel._settings_group.isEnabled()
+
+    def test_initial_tracking_mode_blend(self, panel: CometStackPanel) -> None:
+        assert panel._mode_buttons["blend"].isChecked()
+
+    def test_blend_row_visible_in_blend_mode(self, panel: CometStackPanel) -> None:
+        assert not panel._blend_row.isHidden()
+
+    def test_enable_toggles_settings_group(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.comet_stack_enabled
+        assert panel._settings_group.isEnabled()
+
+    def test_mode_change_updates_model(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        panel._mode_buttons["stars"].setChecked(True)
+        panel._on_mode_changed()
+        assert model.comet_tracking_mode == "stars"
+
+    def test_blend_row_hidden_for_non_blend_mode(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        panel._mode_buttons["comet"].setChecked(True)
+        panel._on_mode_changed()
+        assert panel._blend_row.isHidden()
+
+    def test_blend_slider_updates_model(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        panel._blend_slider.setValue(75)
+        assert model.comet_blend_factor == pytest.approx(0.75)
+
+    def test_blend_value_label_updates(self, panel: CometStackPanel) -> None:
+        panel._blend_slider.setValue(30)
+        assert panel._blend_value.text() == "0.30"
+
+    def test_sync_from_model(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        model._comet_stack_enabled = True
+        model._comet_tracking_mode = "comet"
+        model._comet_blend_factor = 0.2
+        model.comet_stack_config_changed.emit()
+        assert panel._enabled_cb.isChecked()
+        assert panel._mode_buttons["comet"].isChecked()
+        assert panel._blend_slider.value() == 20
+        assert panel._blend_row.isHidden()
+
+    def test_config_signal_emitted(
+        self, panel: CometStackPanel, model: PipelineModel, qtbot  # type: ignore[no-untyped-def]
+    ) -> None:
+        with qtbot.waitSignal(model.comet_stack_config_changed, timeout=500):
+            panel._enabled_cb.setChecked(True)
+
+    def test_step_state_disabled_by_default(self, model: PipelineModel) -> None:
+        step = model.step_by_key("comet_stacking")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_step_state_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.comet_stack_enabled = True
+        step = model.step_by_key("comet_stacking")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+    def test_pipeline_reset_syncs_panel(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        model._comet_stack_enabled = True
+        model._comet_tracking_mode = "stars"
+        model.pipeline_reset.emit()
+        assert panel._enabled_cb.isChecked()
+        assert panel._mode_buttons["stars"].isChecked()
+
+    def test_on_mode_changed_no_checked_button_is_noop(
+        self, panel: CometStackPanel, model: PipelineModel
+    ) -> None:
+        """line 128: return when checkedButton() is None."""
+        from unittest.mock import patch
+
+        original_mode = model.comet_tracking_mode
+        with patch.object(panel._mode_group, "checkedButton", return_value=None):
+            panel._on_mode_changed()
+        assert model.comet_tracking_mode == original_mode

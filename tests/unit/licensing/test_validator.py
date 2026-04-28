@@ -23,6 +23,7 @@ from astroai.licensing.models import LicenseTier
 from astroai.licensing.validator import (
     GRACE_PERIOD_DAYS,
     MAX_OFFLINE_STARTS,
+    _load_public_key,
     decode_attestation,
     decode_token,
     validate_offline,
@@ -82,6 +83,21 @@ def _make_attestation(
         "iat": ts,
     }
     return pyjwt.encode(payload, private_key, algorithm="RS256")
+
+
+class TestLoadPublicKey:
+    def test_missing_key_file_raises_license_error(self, tmp_path: Path) -> None:
+        """_load_public_key raises LicenseError when key file absent (lines 29-30)."""
+        missing = tmp_path / "nonexistent" / "public.pem"
+        with pytest.raises(LicenseError, match="Public key not found"):
+            _load_public_key(missing)
+
+    def test_existing_key_file_returns_content(self, tmp_path: Path) -> None:
+        """_load_public_key reads and returns key file content (line 31)."""
+        key_file = tmp_path / "public.pem"
+        key_file.write_text("-----BEGIN PUBLIC KEY-----\ntest\n", encoding="utf-8")
+        content = _load_public_key(key_file)
+        assert "BEGIN PUBLIC KEY" in content
 
 
 class TestDecodeToken:

@@ -99,6 +99,38 @@ class TestModelRegistryLoad:
             _mod.ort = orig_ort
 
 
+class TestModelRegistryImportEdgeCases:
+    def test_ort_none_when_onnxruntime_missing(self) -> None:
+        # lines 11-12: except ImportError → ort = None
+        import sys
+        import importlib
+        for key in list(sys.modules.keys()):
+            if "astroai.inference.models.registry" in key:
+                del sys.modules[key]
+        sys.modules["onnxruntime"] = None
+        try:
+            import astroai.inference.models.registry as fresh
+            assert fresh.ort is None
+        finally:
+            del sys.modules["onnxruntime"]
+            for key in list(sys.modules.keys()):
+                if "astroai.inference.models.registry" in key:
+                    del sys.modules[key]
+            import astroai.inference.models.registry  # reload canonical
+
+    def test_load_onnx_calls_inference_session(self, tmp_path: Path) -> None:
+        # line 32: ort.InferenceSession(str(path)) when ort is available
+        import astroai.inference.models.registry as mod
+        reg = mod.ModelRegistry()
+        p = tmp_path / "model.onnx"
+        p.write_bytes(b"fake onnx")
+        mock_session = MagicMock()
+        with patch.object(mod.ort, "InferenceSession", return_value=mock_session) as mock_cls:
+            result = reg._load(p)
+        mock_cls.assert_called_once_with(str(p))
+        assert result is mock_session
+
+
 class TestModelRegistryThreadSafety:
     def test_concurrent_register_and_list(self, tmp_path: Path) -> None:
         reg = ModelRegistry()

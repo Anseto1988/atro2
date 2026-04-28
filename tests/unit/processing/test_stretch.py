@@ -114,3 +114,32 @@ def test_custom_target_background():
     result = stretcher.stretch(frame)
     assert result.min() >= 0.0
     assert result.max() <= 1.0
+
+
+class TestStretcherEdgeCases:
+    def test_normalize_uniform_rgb_returns_zeros(self):
+        # _normalize: rng < 1e-10 → return zeros_like (line 95)
+        # triggered by a perfectly uniform RGB frame via _stretch_linked
+        stretcher = IntelligentStretcher(linked_channels=True)
+        frame = np.full((16, 16, 3), 0.5, dtype=np.float64)
+        result = stretcher.stretch(frame)
+        assert result.shape == (16, 16, 3)
+        assert np.all(result == 0.0)
+
+    def test_normalize_uniform_rgb_independent_returns_zeros(self):
+        # _normalize also called from _stretch_independent (line 95)
+        stretcher = IntelligentStretcher(linked_channels=False)
+        frame = np.full((16, 16, 3), 0.5, dtype=np.float64)
+        result = stretcher.stretch(frame)
+        assert result.shape == (16, 16, 3)
+        assert np.all(result == 0.0)
+
+    def test_mtf_balance_bg_near_zero_returns_half(self):
+        # bg < 1e-10 → return 0.5 (line 137)
+        result = IntelligentStretcher._mtf_balance(0.0, 0.25)
+        assert result == 0.5
+
+    def test_mtf_balance_bg_near_one_returns_half(self):
+        # bg > 1 - 1e-10 → return 0.5 (line 137)
+        result = IntelligentStretcher._mtf_balance(1.0, 0.25)
+        assert result == 0.5

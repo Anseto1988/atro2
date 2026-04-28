@@ -123,3 +123,58 @@ class TestResultStructure:
         atlas = SkyAtlas(use_online=False, max_results=3)
         result = atlas.query(ra_deg=83.82, dec_deg=-5.39, radius_arcmin=600.0)
         assert len(result.objects) <= 3
+
+
+class TestSimbadNon200Response:
+    @patch("astroai.inference.sky_atlas.httpx.Client")
+    def test_simbad_non_200_returns_empty(self, mock_client_cls):
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        atlas = SkyAtlas(timeout=5.0, use_online=True)
+        result = atlas._simbad_cone_search(50.0, -10.0, 30.0)
+        assert result == []
+
+
+class TestParseTapResponse:
+    def test_empty_response_returns_empty(self):
+        result = SkyAtlas._parse_tap_response("", 10.0, 20.0)
+        assert result == []
+
+    def test_header_only_returns_empty(self):
+        text = "main_id\tra\tdec\totype_txt\tV"
+        result = SkyAtlas._parse_tap_response(text, 10.0, 20.0)
+        assert result == []
+
+    def test_row_with_too_few_columns_is_skipped(self):
+        text = "main_id\tra\tdec\n" "NGC 999\t10.0\n"
+        result = SkyAtlas._parse_tap_response(text, 10.0, 20.0)
+        assert result == []
+
+    def test_row_with_invalid_ra_is_skipped(self):
+        text = "main_id\tra\tdec\totype_txt\tV\n" "NGC 999\tnot_a_float\t20.0\tGalaxy\t12.0\n"
+        result = SkyAtlas._parse_tap_response(text, 10.0, 20.0)
+        assert result == []
+
+    def test_row_with_invalid_magnitude_skips_mag(self):
+        text = "main_id\tra\tdec\totype_txt\tV\n" "NGC 999\t10.0\t20.0\tGalaxy\tnot_a_mag\n"
+        result = SkyAtlas._parse_tap_response(text, 10.0, 20.0)
+        assert len(result) == 1
+        assert result[0].magnitude is None
+
+    def test_row_without_magnitude_column(self):
+        text = "main_id\tra\tdec\totype_txt\n" "NGC 999\t10.0\t20.0\tGalaxy\n"
+        result = SkyAtlas._parse_tap_response(text, 10.0, 20.0)
+        assert len(result) == 1
+        assert result[0].magnitude is None
+
+
+class TestSolveQualityInterpolation:
+    def test_intermediate_rms_interpolates(self):
+        quality = SkyAtlas._compute_solve_quality(5.25)
+        assert 0.1 < quality < 1.0

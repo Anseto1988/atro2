@@ -184,3 +184,103 @@ class TestPlateSolvingStepImport:
     def test_importable_from_pipeline_package(self) -> None:
         from astroai.core.pipeline import PlateSolvingStep as PS
         assert PS is PlateSolvingStep
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests
+# ---------------------------------------------------------------------------
+
+class TestPlateSolvingStepCoverageGaps:
+    """Tests targeting uncovered lines 93, 143, 147-152."""
+
+    @patch("astroai.engine.platesolving.solver.subprocess.run")
+    def test_uses_first_image_when_result_is_none(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Line 93: image = context.images[0] when context.result is None."""
+        step = PlateSolvingStep(
+            astap_path=Path("/mock/astap"),
+            max_retries=1,
+            timeout_s=10.0,
+            fail_silently=True,
+        )
+        image = np.ones((100, 100), dtype=np.float32) * 500.0
+        ctx = PipelineContext(images=[image])
+        # result is None by default, images has one entry
+        assert ctx.result is None
+
+        wcs = _make_wcs()
+        hdu = fits.PrimaryHDU(header=wcs.to_header())
+
+        def side_effect(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            fits_arg = cmd[cmd.index("-f") + 1]
+            wcs_path = Path(fits_arg).with_suffix(".wcs")
+            hdu.writeto(str(wcs_path), overwrite=True)
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+        mock_run.side_effect = side_effect
+        result_ctx = step.execute(ctx)
+        assert "solve_result" in result_ctx.metadata
+
+    @patch("astroai.engine.platesolving.solver.subprocess.run")
+    def test_3d_image_first_channel_used(
+        self,
+        mock_run: MagicMock,
+    ) -> None:
+        """Line 143: arr = arr[..., 0] when input is 3D (H, W, C)."""
+        step = PlateSolvingStep(
+            astap_path=Path("/mock/astap"),
+            max_retries=1,
+            timeout_s=10.0,
+            fail_silently=True,
+        )
+        image_3d = np.ones((100, 100, 3), dtype=np.float32) * 500.0
+        ctx = PipelineContext(images=[image_3d])
+        ctx.result = image_3d
+
+        wcs = _make_wcs()
+        hdu = fits.PrimaryHDU(header=wcs.to_header())
+
+        def side_effect(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            fits_arg = cmd[cmd.index("-f") + 1]
+            wcs_path = Path(fits_arg).with_suffix(".wcs")
+            hdu.writeto(str(wcs_path), overwrite=True)
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+        mock_run.side_effect = side_effect
+        result_ctx = step.execute(ctx)
+        assert "solve_result" in result_ctx.metadata
+
+    @patch("astroai.engine.platesolving.solver.subprocess.run")
+    def test_pixel_scale_computed_from_metadata(
+        self,
+        mock_run: MagicMock,
+    ) -> None:
+        """Lines 147-152: SCALE header set when pixel_size_um and focal_length_mm present."""
+        step = PlateSolvingStep(
+            astap_path=Path("/mock/astap"),
+            max_retries=1,
+            timeout_s=10.0,
+            fail_silently=True,
+        )
+        image = np.ones((100, 100), dtype=np.float32) * 500.0
+        ctx = PipelineContext(images=[image])
+        ctx.result = image
+        ctx.metadata["pixel_size_um"] = 3.76
+        ctx.metadata["focal_length_mm"] = 500.0
+
+        wcs = _make_wcs()
+        hdu = fits.PrimaryHDU(header=wcs.to_header())
+
+        def side_effect(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            fits_arg = cmd[cmd.index("-f") + 1]
+            wcs_path = Path(fits_arg).with_suffix(".wcs")
+            hdu.writeto(str(wcs_path), overwrite=True)
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+        mock_run.side_effect = side_effect
+        result_ctx = step.execute(ctx)
+        # Should have solved without error; scale = 206.265 * 3.76 / 500.0 ≈ 1.55
+        assert "solve_result" in result_ctx.metadata

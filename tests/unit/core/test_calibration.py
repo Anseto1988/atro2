@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -245,3 +246,37 @@ class TestMatcherFromConfig:
 
         lib = CalibrationLibrary.from_config(_Cfg())
         assert lib.darks == []
+
+
+class TestCalibrateFrameGpuPaths:
+    def test_gpu_engine_used_when_non_cpu_device(self) -> None:
+        """calibrate_frame uses GPU engine when device_type != 'cpu' (lines 45-46)."""
+        light = np.full((8, 8), 100.0, dtype=np.float32)
+        light_meta = _meta()
+        lib = CalibrationLibrary(darks=[], flats=[], bias=[])
+        expected = np.full((8, 8), 50.0, dtype=np.float32)
+
+        mock_engine = MagicMock()
+        mock_engine.device_type = "cuda"
+        mock_engine.calibrate_frame_gpu.return_value = expected
+
+        with patch("astroai.core.calibration.gpu_engine.GPUCalibrationEngine", return_value=mock_engine):
+            result = calibrate_frame(light, light_meta, lib, use_gpu=True)
+
+        np.testing.assert_array_equal(result, expected)
+        mock_engine.calibrate_frame_gpu.assert_called_once()
+
+    def test_gpu_engine_exception_falls_back_to_cpu(self) -> None:
+        """Exception from GPU engine falls back to CPU path (lines 47-48)."""
+        light = np.full((8, 8), 100.0, dtype=np.float32)
+        light_meta = _meta()
+        lib = CalibrationLibrary(darks=[], flats=[], bias=[])
+
+        mock_engine = MagicMock()
+        mock_engine.device_type = "cuda"
+        mock_engine.calibrate_frame_gpu.side_effect = RuntimeError("GPU OOM")
+
+        with patch("astroai.core.calibration.gpu_engine.GPUCalibrationEngine", return_value=mock_engine):
+            result = calibrate_frame(light, light_meta, lib, use_gpu=True)
+
+        np.testing.assert_array_equal(result, light)
