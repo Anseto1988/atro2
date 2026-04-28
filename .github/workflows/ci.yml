@@ -72,13 +72,18 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev --sync
       - name: pytest + coverage (min 95%)
+        env:
+          # Offscreen Qt platform: no display server required in CI.
+          QT_QPA_PLATFORM: offscreen
+          # Suppress harmless Qt font/theme warnings that pollute test output.
+          QT_LOGGING_RULES: "*.debug=false;qt.qpa.*=false"
         run: |
-          poetry run pytest tests/unit/ \
-            --cov=astroai \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --cov-fail-under=95 \
-            -q
+          # Use `coverage run -m pytest` instead of `pytest --cov` to avoid the
+          # pytest-cov atexit/Qt teardown race that causes a ~96% segfault with
+          # large suites (VER-361).
+          poetry run coverage run -m pytest tests/unit/ -q
+          poetry run coverage xml
+          poetry run coverage report --fail-under=95
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
