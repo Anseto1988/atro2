@@ -144,3 +144,17 @@ class TestNarrowbandMapper:
         assert NarrowbandPalette.SHO.value == "sho"
         assert NarrowbandPalette.HOO.value == "hoo"
         assert NarrowbandPalette.NHO.value == "nho"
+
+    def test_3d_channel_uses_first_slice_narrowband(self) -> None:
+        """3D channel (H,W,C) uses first slice via arr[...,0] (line 41 coverage)."""
+        mapper = NarrowbandMapper()
+        ha_3d = np.stack([_ch(0.5), _ch(0.0), _ch(0.0)], axis=-1)  # (16,16,3)
+        out = mapper.map(Ha=ha_3d, OIII=_ch(0.2), SII=_ch(0.3))
+        # SHO: G = Ha[...,0] = 0.5
+        np.testing.assert_allclose(out[..., 1], 0.5, atol=1e-5)
+
+    def test_unknown_palette_raises(self) -> None:
+        """Passing an unknown palette value raises ValueError (line 55 coverage)."""
+        mapper = NarrowbandMapper()
+        with pytest.raises(ValueError, match="Unknown palette"):
+            mapper.map(Ha=_ch(0.5), OIII=_ch(0.3), SII=_ch(0.4), palette="invalid")  # type: ignore[arg-type]

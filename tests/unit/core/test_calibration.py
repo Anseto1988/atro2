@@ -197,3 +197,51 @@ class TestCalibrateFrameLoadData:
 
         result = calibrate_frame(light, light_meta, lib, load_data=_load)
         np.testing.assert_array_almost_equal(result, np.full((8, 8), 200.0))
+
+
+class TestMatcherFromConfig:
+    def test_from_config_loads_valid_fits(self, tmp_path: "Path") -> None:
+        """from_config reads valid FITS and stores frame (lines 41-45 coverage)."""
+        from astropy.io import fits as astrofits
+        fits_path = tmp_path / "dark.fits"
+        data = np.zeros((64, 64), dtype=np.float32)
+        astrofits.PrimaryHDU(data=data).writeto(fits_path)
+
+        class _Cfg:
+            dark_frames = [str(fits_path)]
+            flat_frames: list[str] = []
+            bias_frames: list[str] = []
+
+        lib = CalibrationLibrary.from_config(_Cfg(), load_data=False)
+        assert len(lib.darks) == 1
+        assert lib.darks[0].path == fits_path
+        assert lib.darks[0].data is None  # load_data=False
+
+    def test_from_config_load_data_true_includes_array(self, tmp_path: "Path") -> None:
+        """from_config with load_data=True stores array in frame."""
+        from astropy.io import fits as astrofits
+        fits_path = tmp_path / "dark.fits"
+        data = np.full((16, 16), 42.0, dtype=np.float32)
+        astrofits.PrimaryHDU(data=data).writeto(fits_path)
+
+        class _Cfg:
+            dark_frames = [str(fits_path)]
+            flat_frames: list[str] = []
+            bias_frames: list[str] = []
+
+        lib = CalibrationLibrary.from_config(_Cfg(), load_data=True)
+        assert len(lib.darks) == 1
+        assert lib.darks[0].data is not None
+
+    def test_from_config_invalid_fits_skipped(self, tmp_path: "Path") -> None:
+        """from_config skips files that fail to read (exception branch lines 43-45)."""
+        bad_path = tmp_path / "corrupt.fits"
+        bad_path.write_bytes(b"not a fits file at all")
+
+        class _Cfg:
+            dark_frames = [str(bad_path)]
+            flat_frames: list[str] = []
+            bias_frames: list[str] = []
+
+        lib = CalibrationLibrary.from_config(_Cfg())
+        assert lib.darks == []

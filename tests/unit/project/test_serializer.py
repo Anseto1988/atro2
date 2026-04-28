@@ -56,3 +56,19 @@ class TestProjectSerializer:
         deep_path = tmp_path / "a" / "b" / "project.astroai"
         ProjectSerializer.save(AstroProject(), deep_path)
         assert deep_path.exists()
+
+    def test_save_os_error_raises_serializer_error(self, tmp_path: Path) -> None:
+        """OSError during write raises ProjectSerializerError (lines 23-24)."""
+        from unittest.mock import patch
+        proj = AstroProject()
+        with patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
+            with pytest.raises(ProjectSerializerError, match="Speichern fehlgeschlagen"):
+                ProjectSerializer.save(proj, tmp_path / "proj.astroai")
+
+    def test_is_compatible_non_numeric_version_returns_false(self) -> None:
+        """Non-numeric version string returns False via ValueError (lines 49-50)."""
+        assert ProjectSerializer._is_compatible("not.a.version") is False
+
+    def test_is_compatible_empty_string_returns_false(self) -> None:
+        """Empty version string returns False (lines 49-50)."""
+        assert ProjectSerializer._is_compatible("") is False
