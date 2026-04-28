@@ -9,8 +9,6 @@ from PySide6.QtWidgets import QWidget
 
 from astroai.ui.overlay.sky_objects import (
     CatalogObject,
-    ConstellationBoundarySegment,
-    NamedStar,
     SkyObjectCatalog,
     WcsTransform,
 )
