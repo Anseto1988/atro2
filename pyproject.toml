@@ -47,6 +47,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "gpu: requires real GPU hardware (CUDA or MPS)",
     "benchmark: performance benchmark (excluded from CI)",

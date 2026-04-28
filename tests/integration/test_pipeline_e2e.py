@@ -28,7 +28,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.engine.registration.aligner import FrameAligner
 from astroai.engine.stacking.stacker import FrameStacker
@@ -380,7 +380,7 @@ class CalibrationStep(PipelineStep):
         return PipelineStage.CALIBRATION
 
     def execute(
-        self, context: PipelineContext, progress: ProgressCallback = _noop_callback
+        self, context: PipelineContext, progress: ProgressCallback = noop_callback
     ) -> PipelineContext:
         calibrated = []
         for i, img in enumerate(context.images):
@@ -400,7 +400,7 @@ class ScoringStep(PipelineStep):
         return "Frame Scoring"
 
     def execute(
-        self, context: PipelineContext, progress: ProgressCallback = _noop_callback
+        self, context: PipelineContext, progress: ProgressCallback = noop_callback
     ) -> PipelineContext:
         scores = self._scorer.score_batch(context.images)
         context.metadata["scores"] = scores
@@ -425,7 +425,7 @@ class RegistrationStep(PipelineStep):
         return PipelineStage.REGISTRATION
 
     def execute(
-        self, context: PipelineContext, progress: ProgressCallback = _noop_callback
+        self, context: PipelineContext, progress: ProgressCallback = noop_callback
     ) -> PipelineContext:
         if len(context.images) < 2:
             return context
@@ -449,7 +449,7 @@ class StackingStep(PipelineStep):
         return PipelineStage.STACKING
 
     def execute(
-        self, context: PipelineContext, progress: ProgressCallback = _noop_callback
+        self, context: PipelineContext, progress: ProgressCallback = noop_callback
     ) -> PipelineContext:
         stacked = self._stacker.stack(context.images, method=self._method)
         context.result = stacked
@@ -466,7 +466,7 @@ class DenoisingStep(PipelineStep):
         return "Denoising"
 
     def execute(
-        self, context: PipelineContext, progress: ProgressCallback = _noop_callback
+        self, context: PipelineContext, progress: ProgressCallback = noop_callback
     ) -> PipelineContext:
         if context.result is not None:
             context.result = self._denoiser.denoise(context.result)
@@ -482,7 +482,7 @@ class StretchStep(PipelineStep):
         return "Stretch"
 
     def execute(
-        self, context: PipelineContext, progress: ProgressCallback = _noop_callback
+        self, context: PipelineContext, progress: ProgressCallback = noop_callback
     ) -> PipelineContext:
         if context.result is not None:
             context.result = self._stretcher.stretch(context.result)
