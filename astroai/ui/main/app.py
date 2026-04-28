@@ -39,6 +39,7 @@ from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.annotation_panel import AnnotationPanel
 from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
+from astroai.ui.widgets.comet_stack_panel import CometStackPanel
 from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.drizzle_panel import DrizzlePanel
 from astroai.ui.widgets.mosaic_panel import MosaicPanel
@@ -139,6 +140,14 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.TopDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea
         )
         self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, wf_dock)
+
+        self._comet_stack_panel = CometStackPanel(self._pipeline)
+        comet_dock = QDockWidget("Komet-Stacking", self)
+        comet_dock.setWidget(self._comet_stack_panel)
+        comet_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, comet_dock)
 
         self._drizzle_panel = DrizzlePanel(self._pipeline)
         drizzle_dock = QDockWidget("Drizzle", self)
@@ -316,6 +325,8 @@ class MainWindow(QMainWindow):
         self._calibration_worker.metrics.connect(self._benchmark.update_metrics)
         self._calibration_worker.finished.connect(self._on_calibration_finished)
         self._calibration_worker.error.connect(self._on_calibration_error)
+
+        self._pipeline.comet_preview_changed.connect(self._on_comet_preview_changed)
 
     @Slot()
     def _on_open_image(self) -> None:
@@ -575,6 +586,16 @@ class MainWindow(QMainWindow):
             except ImportError:
                 pass
         self._sky_overlay.set_solution(wcs_solution)
+
+    @Slot()
+    def _on_comet_preview_changed(self) -> None:
+        preview = self._pipeline.comet_preview_image
+        if preview is not None:
+            self._viewer.set_image_data(preview)
+            self._histogram.set_image_data(preview)
+            mode_labels = {"stars": "Sterne", "comet": "Kometenkopf", "blend": "Blend"}
+            label = mode_labels.get(self._pipeline.comet_tracking_mode, "")
+            self._status_bar.showMessage(f"Komet-Vorschau: {label}")
 
     @Slot(object)
     def _on_calibration_finished(self, _results: object) -> None:

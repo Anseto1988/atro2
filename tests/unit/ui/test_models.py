@@ -22,13 +22,14 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 12
+        assert len(steps) == 13
         assert steps[0].key == "calibrate"
-        assert steps[3].key == "drizzle"
-        assert steps[4].key == "mosaic"
-        assert steps[5].key == "channel_combine"
-        assert steps[6].key == "stretch"
-        assert steps[7].key == "color_calibration"
+        assert steps[3].key == "comet_stacking"
+        assert steps[4].key == "drizzle"
+        assert steps[5].key == "mosaic"
+        assert steps[6].key == "channel_combine"
+        assert steps[7].key == "stretch"
+        assert steps[8].key == "color_calibration"
         assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
@@ -80,15 +81,17 @@ class TestPipelineModel:
         assert steps[0].state is StepState.DONE
         assert steps[1].state is StepState.DONE
         assert steps[2].state is StepState.ACTIVE
-        # drizzle at index 3 is DISABLED (optional, not enabled)
+        # comet_stacking at index 3 is DISABLED (optional, not enabled)
         assert steps[3].state is StepState.DISABLED
-        # mosaic at index 4 is DISABLED (optional, not enabled)
+        # drizzle at index 4 is DISABLED (optional, not enabled)
         assert steps[4].state is StepState.DISABLED
-        # channel_combine at index 5 is DISABLED (optional, not enabled)
+        # mosaic at index 5 is DISABLED (optional, not enabled)
         assert steps[5].state is StepState.DISABLED
-        assert steps[6].state is StepState.PENDING  # stretch
-        # color_calibration at index 7 is DISABLED (optional, not enabled)
-        assert steps[7].state is StepState.DISABLED
+        # channel_combine at index 6 is DISABLED (optional, not enabled)
+        assert steps[6].state is StepState.DISABLED
+        assert steps[7].state is StepState.PENDING  # stretch
+        # color_calibration at index 8 is DISABLED (optional, not enabled)
+        assert steps[8].state is StepState.DISABLED
 
     def test_step_changed_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.step_changed, timeout=500):
@@ -371,3 +374,729 @@ class TestPipelineModelChannelCombine:
         step = model.step_by_key("channel_combine")
         assert step is not None
         assert step.state is StepState.PENDING
+
+
+class TestPipelineModelDeconvolution:
+    """Tests for PipelineModel deconvolution configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    # -- deconvolution_enabled --
+
+    def test_deconvolution_enabled_default(self, model: PipelineModel) -> None:
+        assert model.deconvolution_enabled is False
+
+    def test_deconvolution_enabled_setter(self, model: PipelineModel) -> None:
+        model.deconvolution_enabled = True
+        assert model.deconvolution_enabled is True
+
+    def test_deconvolution_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.deconvolution_config_changed, timeout=500):
+            model.deconvolution_enabled = True
+
+    def test_deconvolution_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.deconvolution_config_changed.connect(lambda: signals.append(True))
+        model.deconvolution_enabled = False  # default
+        assert len(signals) == 0
+
+    def test_deconvolution_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        step = model.step_by_key("deconvolution")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+        model.deconvolution_enabled = True
+        assert step.state is StepState.PENDING
+
+    def test_deconvolution_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.deconvolution_enabled = True
+        step = model.step_by_key("deconvolution")
+        assert step is not None
+        assert step.state is StepState.PENDING
+        model.deconvolution_enabled = False
+        assert step.state is StepState.DISABLED
+
+    def test_deconvolution_enabled_emits_step_changed_pending(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.deconvolution_enabled = True
+        assert blocker.args == ["deconvolution", StepState.PENDING.value]
+
+    def test_deconvolution_enabled_emits_step_changed_disabled(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.deconvolution_enabled = True
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.deconvolution_enabled = False
+        assert blocker.args == ["deconvolution", StepState.DISABLED.value]
+
+    # -- deconvolution_iterations --
+
+    def test_deconvolution_iterations_default(self, model: PipelineModel) -> None:
+        assert model.deconvolution_iterations == 10
+
+    def test_deconvolution_iterations_setter(self, model: PipelineModel) -> None:
+        model.deconvolution_iterations = 50
+        assert model.deconvolution_iterations == 50
+
+    def test_deconvolution_iterations_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.deconvolution_config_changed, timeout=500):
+            model.deconvolution_iterations = 20
+
+    def test_deconvolution_iterations_clamps_below_one(self, model: PipelineModel) -> None:
+        model.deconvolution_iterations = 0
+        assert model.deconvolution_iterations == 1
+
+    def test_deconvolution_iterations_clamps_above_100(self, model: PipelineModel) -> None:
+        model.deconvolution_iterations = 200
+        assert model.deconvolution_iterations == 100
+
+    def test_deconvolution_iterations_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.deconvolution_config_changed.connect(lambda: signals.append(True))
+        model.deconvolution_iterations = 10  # default
+        assert len(signals) == 0
+
+    # -- deconvolution_psf_sigma --
+
+    def test_deconvolution_psf_sigma_default(self, model: PipelineModel) -> None:
+        assert model.deconvolution_psf_sigma == pytest.approx(1.0)
+
+    def test_deconvolution_psf_sigma_setter(self, model: PipelineModel) -> None:
+        model.deconvolution_psf_sigma = 2.5
+        assert model.deconvolution_psf_sigma == pytest.approx(2.5)
+
+    def test_deconvolution_psf_sigma_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.deconvolution_config_changed, timeout=500):
+            model.deconvolution_psf_sigma = 3.0
+
+    def test_deconvolution_psf_sigma_clamps_below_min(self, model: PipelineModel) -> None:
+        model.deconvolution_psf_sigma = 0.0
+        assert model.deconvolution_psf_sigma == pytest.approx(0.1)
+
+    def test_deconvolution_psf_sigma_clamps_above_max(self, model: PipelineModel) -> None:
+        model.deconvolution_psf_sigma = 99.0
+        assert model.deconvolution_psf_sigma == pytest.approx(10.0)
+
+    def test_deconvolution_psf_sigma_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.deconvolution_config_changed.connect(lambda: signals.append(True))
+        model.deconvolution_psf_sigma = 1.0  # default
+        assert len(signals) == 0
+
+    # -- _update_deconvolution_step_state: step is None guard --
+
+    def test_update_deconvolution_step_state_missing_step(self, model: PipelineModel) -> None:
+        """_update_deconvolution_step_state returns early when step not found."""
+        model._steps = [s for s in model._steps if s.key != "deconvolution"]
+        # Should not raise
+        model._update_deconvolution_step_state()
+
+    def test_reset_keeps_deconvolution_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("deconvolution", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("deconvolution")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_deconvolution_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.deconvolution_enabled = True
+        model.set_step_state("deconvolution", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("deconvolution")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+
+class TestPipelineModelDrizzle:
+    """Tests for PipelineModel drizzle configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    # -- drizzle_enabled --
+
+    def test_drizzle_enabled_default(self, model: PipelineModel) -> None:
+        assert model.drizzle_enabled is False
+
+    def test_drizzle_enabled_setter(self, model: PipelineModel) -> None:
+        model.drizzle_enabled = True
+        assert model.drizzle_enabled is True
+
+    def test_drizzle_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.drizzle_config_changed, timeout=500):
+            model.drizzle_enabled = True
+
+    def test_drizzle_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.drizzle_config_changed.connect(lambda: signals.append(True))
+        model.drizzle_enabled = False  # default
+        assert len(signals) == 0
+
+    def test_drizzle_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        step = model.step_by_key("drizzle")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+        model.drizzle_enabled = True
+        assert step.state is StepState.PENDING
+
+    def test_drizzle_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.drizzle_enabled = True
+        model.drizzle_enabled = False
+        step = model.step_by_key("drizzle")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_drizzle_enabled_emits_step_changed_pending(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.drizzle_enabled = True
+        assert blocker.args == ["drizzle", StepState.PENDING.value]
+
+    def test_drizzle_enabled_emits_step_changed_disabled(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.drizzle_enabled = True
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.drizzle_enabled = False
+        assert blocker.args == ["drizzle", StepState.DISABLED.value]
+
+    # -- drizzle_drop_size --
+
+    def test_drizzle_drop_size_default(self, model: PipelineModel) -> None:
+        assert model.drizzle_drop_size == pytest.approx(0.7)
+
+    def test_drizzle_drop_size_setter(self, model: PipelineModel) -> None:
+        model.drizzle_drop_size = 0.9
+        assert model.drizzle_drop_size == pytest.approx(0.9)
+
+    def test_drizzle_drop_size_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.drizzle_config_changed, timeout=500):
+            model.drizzle_drop_size = 0.5
+
+    def test_drizzle_drop_size_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.drizzle_config_changed.connect(lambda: signals.append(True))
+        model.drizzle_drop_size = 0.7  # default
+        assert len(signals) == 0
+
+    # -- drizzle_scale --
+
+    def test_drizzle_scale_default(self, model: PipelineModel) -> None:
+        assert model.drizzle_scale == pytest.approx(1.0)
+
+    def test_drizzle_scale_setter(self, model: PipelineModel) -> None:
+        model.drizzle_scale = 2.0
+        assert model.drizzle_scale == pytest.approx(2.0)
+
+    def test_drizzle_scale_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.drizzle_config_changed, timeout=500):
+            model.drizzle_scale = 1.5
+
+    def test_drizzle_scale_clamps_below_min(self, model: PipelineModel) -> None:
+        model.drizzle_scale = 0.1
+        assert model.drizzle_scale == pytest.approx(0.5)
+
+    def test_drizzle_scale_clamps_above_max(self, model: PipelineModel) -> None:
+        model.drizzle_scale = 10.0
+        assert model.drizzle_scale == pytest.approx(3.0)
+
+    def test_drizzle_scale_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.drizzle_config_changed.connect(lambda: signals.append(True))
+        model.drizzle_scale = 1.0  # default
+        assert len(signals) == 0
+
+    # -- drizzle_pixfrac --
+
+    def test_drizzle_pixfrac_default(self, model: PipelineModel) -> None:
+        assert model.drizzle_pixfrac == pytest.approx(1.0)
+
+    def test_drizzle_pixfrac_setter(self, model: PipelineModel) -> None:
+        model.drizzle_pixfrac = 0.8
+        assert model.drizzle_pixfrac == pytest.approx(0.8)
+
+    def test_drizzle_pixfrac_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.drizzle_config_changed, timeout=500):
+            model.drizzle_pixfrac = 0.5
+
+    def test_drizzle_pixfrac_clamps_below_min(self, model: PipelineModel) -> None:
+        model.drizzle_pixfrac = 0.0
+        assert model.drizzle_pixfrac == pytest.approx(0.1)
+
+    def test_drizzle_pixfrac_clamps_above_max(self, model: PipelineModel) -> None:
+        model.drizzle_pixfrac = 2.0
+        assert model.drizzle_pixfrac == pytest.approx(1.0)
+
+    def test_drizzle_pixfrac_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.drizzle_config_changed.connect(lambda: signals.append(True))
+        model.drizzle_pixfrac = 1.0  # default
+        assert len(signals) == 0
+
+    # -- _update_drizzle_step_state: step is None guard --
+
+    def test_update_drizzle_step_state_missing_step(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "drizzle"]
+        model._update_drizzle_step_state()  # should not raise
+
+    def test_reset_keeps_drizzle_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("drizzle", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("drizzle")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_drizzle_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.drizzle_enabled = True
+        model.set_step_state("drizzle", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("drizzle")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+
+class TestPipelineModelMosaic:
+    """Tests for PipelineModel mosaic configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_mosaic_enabled_default(self, model: PipelineModel) -> None:
+        assert model.mosaic_enabled is False
+
+    def test_mosaic_enabled_setter(self, model: PipelineModel) -> None:
+        model.mosaic_enabled = True
+        assert model.mosaic_enabled is True
+
+    def test_mosaic_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.mosaic_config_changed, timeout=500):
+            model.mosaic_enabled = True
+
+    def test_mosaic_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.mosaic_config_changed.connect(lambda: signals.append(True))
+        model.mosaic_enabled = False
+        assert len(signals) == 0
+
+    def test_mosaic_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        step = model.step_by_key("mosaic")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+        model.mosaic_enabled = True
+        assert step.state is StepState.PENDING
+
+    def test_mosaic_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.mosaic_enabled = True
+        model.mosaic_enabled = False
+        step = model.step_by_key("mosaic")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_mosaic_enabled_emits_step_changed_pending(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.mosaic_enabled = True
+        assert blocker.args == ["mosaic", StepState.PENDING.value]
+
+    def test_mosaic_blend_mode_default(self, model: PipelineModel) -> None:
+        assert model.mosaic_blend_mode == "average"
+
+    def test_mosaic_blend_mode_setter(self, model: PipelineModel) -> None:
+        model.mosaic_blend_mode = "overlay"
+        assert model.mosaic_blend_mode == "overlay"
+
+    def test_mosaic_blend_mode_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.mosaic_config_changed, timeout=500):
+            model.mosaic_blend_mode = "overlay"
+
+    def test_mosaic_blend_mode_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.mosaic_config_changed.connect(lambda: signals.append(True))
+        model.mosaic_blend_mode = "average"
+        assert len(signals) == 0
+
+    def test_mosaic_gradient_correct_default(self, model: PipelineModel) -> None:
+        assert model.mosaic_gradient_correct is True
+
+    def test_mosaic_gradient_correct_setter(self, model: PipelineModel) -> None:
+        model.mosaic_gradient_correct = False
+        assert model.mosaic_gradient_correct is False
+
+    def test_mosaic_gradient_correct_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.mosaic_config_changed, timeout=500):
+            model.mosaic_gradient_correct = False
+
+    def test_mosaic_output_scale_default(self, model: PipelineModel) -> None:
+        assert model.mosaic_output_scale == pytest.approx(1.0)
+
+    def test_mosaic_output_scale_setter(self, model: PipelineModel) -> None:
+        model.mosaic_output_scale = 2.0
+        assert model.mosaic_output_scale == pytest.approx(2.0)
+
+    def test_mosaic_output_scale_clamps_below_min(self, model: PipelineModel) -> None:
+        model.mosaic_output_scale = 0.1
+        assert model.mosaic_output_scale == pytest.approx(0.25)
+
+    def test_mosaic_output_scale_clamps_above_max(self, model: PipelineModel) -> None:
+        model.mosaic_output_scale = 10.0
+        assert model.mosaic_output_scale == pytest.approx(4.0)
+
+    # -- mosaic_panels --
+
+    def test_mosaic_panels_default_empty(self, model: PipelineModel) -> None:
+        assert model.mosaic_panels == []
+
+    def test_mosaic_panels_setter(self, model: PipelineModel) -> None:
+        model.mosaic_panels = ["/a/b.fit", "/c/d.fit"]
+        assert model.mosaic_panels == ["/a/b.fit", "/c/d.fit"]
+
+    def test_mosaic_panels_setter_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.mosaic_config_changed, timeout=500):
+            model.mosaic_panels = ["/x.fit"]
+
+    def test_mosaic_panels_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.mosaic_config_changed.connect(lambda: signals.append(True))
+        model.mosaic_panels = []  # default
+        assert len(signals) == 0
+
+    def test_mosaic_panels_returns_copy(self, model: PipelineModel) -> None:
+        model.mosaic_panels = ["/a.fit"]
+        copy = model.mosaic_panels
+        copy.append("/b.fit")
+        assert model.mosaic_panels == ["/a.fit"]
+
+    def test_add_mosaic_panel(self, model: PipelineModel) -> None:
+        model.add_mosaic_panel("/a.fit")
+        assert "/a.fit" in model.mosaic_panels
+
+    def test_add_mosaic_panel_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.mosaic_config_changed, timeout=500):
+            model.add_mosaic_panel("/a.fit")
+
+    def test_add_mosaic_panel_no_duplicate(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.add_mosaic_panel("/a.fit")
+        model.mosaic_config_changed.connect(lambda: signals.append(True))
+        model.add_mosaic_panel("/a.fit")
+        assert len(signals) == 0
+        assert model.mosaic_panels.count("/a.fit") == 1
+
+    def test_remove_mosaic_panel(self, model: PipelineModel) -> None:
+        model.add_mosaic_panel("/a.fit")
+        model.remove_mosaic_panel("/a.fit")
+        assert "/a.fit" not in model.mosaic_panels
+
+    def test_remove_mosaic_panel_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.add_mosaic_panel("/b.fit")
+        with qtbot.waitSignal(model.mosaic_config_changed, timeout=500):
+            model.remove_mosaic_panel("/b.fit")
+
+    def test_remove_mosaic_panel_absent_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.mosaic_config_changed.connect(lambda: signals.append(True))
+        model.remove_mosaic_panel("/nonexistent.fit")
+        assert len(signals) == 0
+
+    # -- _update_mosaic_step_state: step is None guard --
+
+    def test_update_mosaic_step_state_missing_step(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "mosaic"]
+        model._update_mosaic_step_state()  # should not raise
+
+    def test_reset_keeps_mosaic_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("mosaic", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("mosaic")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_mosaic_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.mosaic_enabled = True
+        model.set_step_state("mosaic", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("mosaic")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+
+class TestPipelineModelColorCalibration:
+    """Tests for PipelineModel color_calibration configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    # -- color_calibration_enabled --
+
+    def test_color_calibration_enabled_default(self, model: PipelineModel) -> None:
+        assert model.color_calibration_enabled is False
+
+    def test_color_calibration_enabled_setter(self, model: PipelineModel) -> None:
+        model.color_calibration_enabled = True
+        assert model.color_calibration_enabled is True
+
+    def test_color_calibration_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.color_calibration_config_changed, timeout=500):
+            model.color_calibration_enabled = True
+
+    def test_color_calibration_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.color_calibration_config_changed.connect(lambda: signals.append(True))
+        model.color_calibration_enabled = False
+        assert len(signals) == 0
+
+    def test_color_calibration_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        step = model.step_by_key("color_calibration")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+        model.color_calibration_enabled = True
+        assert step.state is StepState.PENDING
+
+    def test_color_calibration_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.color_calibration_enabled = True
+        model.color_calibration_enabled = False
+        step = model.step_by_key("color_calibration")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_color_calibration_enabled_emits_step_changed_pending(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.color_calibration_enabled = True
+        assert blocker.args == ["color_calibration", StepState.PENDING.value]
+
+    def test_color_calibration_enabled_emits_step_changed_disabled(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.color_calibration_enabled = True
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.color_calibration_enabled = False
+        assert blocker.args == ["color_calibration", StepState.DISABLED.value]
+
+    # -- color_calibration_catalog --
+
+    def test_color_calibration_catalog_default(self, model: PipelineModel) -> None:
+        assert model.color_calibration_catalog == "gaia_dr3"
+
+    def test_color_calibration_catalog_setter(self, model: PipelineModel) -> None:
+        model.color_calibration_catalog = "tycho2"
+        assert model.color_calibration_catalog == "tycho2"
+
+    def test_color_calibration_catalog_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.color_calibration_config_changed, timeout=500):
+            model.color_calibration_catalog = "tycho2"
+
+    def test_color_calibration_catalog_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.color_calibration_config_changed.connect(lambda: signals.append(True))
+        model.color_calibration_catalog = "gaia_dr3"
+        assert len(signals) == 0
+
+    # -- color_calibration_sample_radius --
+
+    def test_color_calibration_sample_radius_default(self, model: PipelineModel) -> None:
+        assert model.color_calibration_sample_radius == 8
+
+    def test_color_calibration_sample_radius_setter(self, model: PipelineModel) -> None:
+        model.color_calibration_sample_radius = 12
+        assert model.color_calibration_sample_radius == 12
+
+    def test_color_calibration_sample_radius_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.color_calibration_config_changed, timeout=500):
+            model.color_calibration_sample_radius = 10
+
+    def test_color_calibration_sample_radius_clamps_below_min(self, model: PipelineModel) -> None:
+        model.color_calibration_sample_radius = 1
+        assert model.color_calibration_sample_radius == 3
+
+    def test_color_calibration_sample_radius_clamps_above_max(self, model: PipelineModel) -> None:
+        model.color_calibration_sample_radius = 100
+        assert model.color_calibration_sample_radius == 20
+
+    def test_color_calibration_sample_radius_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.color_calibration_config_changed.connect(lambda: signals.append(True))
+        model.color_calibration_sample_radius = 8
+        assert len(signals) == 0
+
+    # -- _update_color_calibration_step_state: step is None guard --
+
+    def test_update_color_calibration_step_state_missing_step(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "color_calibration"]
+        model._update_color_calibration_step_state()  # should not raise
+
+    def test_reset_keeps_color_calibration_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("color_calibration", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("color_calibration")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_color_calibration_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.color_calibration_enabled = True
+        model.set_step_state("color_calibration", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("color_calibration")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+
+class TestPipelineModelCometStack:
+    """Tests for PipelineModel comet_stack configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    # -- comet_stack_enabled --
+
+    def test_comet_stack_enabled_default(self, model: PipelineModel) -> None:
+        assert model.comet_stack_enabled is False
+
+    def test_comet_stack_enabled_setter(self, model: PipelineModel) -> None:
+        model.comet_stack_enabled = True
+        assert model.comet_stack_enabled is True
+
+    def test_comet_stack_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.comet_stack_config_changed, timeout=500):
+            model.comet_stack_enabled = True
+
+    def test_comet_stack_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.comet_stack_config_changed.connect(lambda: signals.append(True))
+        model.comet_stack_enabled = False
+        assert len(signals) == 0
+
+    def test_comet_stack_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        step = model.step_by_key("comet_stacking")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+        model.comet_stack_enabled = True
+        assert step.state is StepState.PENDING
+
+    def test_comet_stack_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.comet_stack_enabled = True
+        model.comet_stack_enabled = False
+        step = model.step_by_key("comet_stacking")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_comet_stack_enabled_emits_step_changed_pending(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.comet_stack_enabled = True
+        assert blocker.args == ["comet_stacking", StepState.PENDING.value]
+
+    def test_comet_stack_enabled_emits_step_changed_disabled(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.comet_stack_enabled = True
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.comet_stack_enabled = False
+        assert blocker.args == ["comet_stacking", StepState.DISABLED.value]
+
+    # -- comet_tracking_mode --
+
+    def test_comet_tracking_mode_default(self, model: PipelineModel) -> None:
+        assert model.comet_tracking_mode == "blend"
+
+    def test_comet_tracking_mode_setter(self, model: PipelineModel) -> None:
+        model.comet_tracking_mode = "stars"
+        assert model.comet_tracking_mode == "stars"
+
+    def test_comet_tracking_mode_emits_config_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.comet_stack_config_changed, timeout=500):
+            model.comet_tracking_mode = "stars"
+
+    def test_comet_tracking_mode_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.comet_stack_config_changed.connect(lambda: signals.append(True))
+        model.comet_tracking_mode = "blend"
+        assert len(signals) == 0
+
+    # -- comet_blend_factor --
+
+    def test_comet_blend_factor_default(self, model: PipelineModel) -> None:
+        assert model.comet_blend_factor == pytest.approx(0.5)
+
+    def test_comet_blend_factor_setter(self, model: PipelineModel) -> None:
+        model.comet_blend_factor = 0.8
+        assert model.comet_blend_factor == pytest.approx(0.8)
+
+    def test_comet_blend_factor_emits_config_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.comet_stack_config_changed, timeout=500):
+            model.comet_blend_factor = 0.3
+
+    def test_comet_blend_factor_clamps_below_zero(self, model: PipelineModel) -> None:
+        model.comet_blend_factor = -0.5
+        assert model.comet_blend_factor == pytest.approx(0.0)
+
+    def test_comet_blend_factor_clamps_above_one(self, model: PipelineModel) -> None:
+        model.comet_blend_factor = 2.0
+        assert model.comet_blend_factor == pytest.approx(1.0)
+
+    def test_comet_blend_factor_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.comet_stack_config_changed.connect(lambda: signals.append(True))
+        model.comet_blend_factor = 0.5
+        assert len(signals) == 0
+
+    # -- _update_comet_stack_step_state: step is None guard --
+
+    def test_update_comet_stack_step_state_missing_step(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "comet_stacking"]
+        model._update_comet_stack_step_state()  # should not raise
+
+    # -- set_step_state / set_step_progress with unknown key --
+
+    def test_set_step_state_unknown_key_no_crash(self, model: PipelineModel) -> None:
+        model.set_step_state("nonexistent_key", StepState.ACTIVE)  # should not raise
+
+    def test_set_step_progress_unknown_key_no_crash(self, model: PipelineModel) -> None:
+        model.set_step_progress("nonexistent_key", 0.5)  # should not raise
+
+    # -- advance_to without finding the key --
+
+    def test_advance_to_unknown_key_no_crash(self, model: PipelineModel) -> None:
+        """advance_to with an unknown key sets nothing ACTIVE."""
+        model.advance_to("nonexistent_key")
+        active = model.active_step()
+        assert active is None
+
+    def test_reset_keeps_comet_stack_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("comet_stacking", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("comet_stacking")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_comet_stack_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.comet_stack_enabled = True
+        model.set_step_state("comet_stacking", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("comet_stacking")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+    # -- _update_starless_step_state: step is None guard --
+
+    def test_update_starless_step_state_missing_step(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "starless"]
+        model._update_starless_step_state()  # should not raise
+
+
+class TestPipelineModelChannelCombineNoOps:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_channel_combine_mode_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:
+        """line 233: return when mode unchanged."""
+        signals: list[bool] = []
+        model.channel_combine_config_changed.connect(lambda: signals.append(True))
+        model.channel_combine_mode = model.channel_combine_mode
+        assert len(signals) == 0
+
+    def test_channel_combine_palette_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:
+        """line 244: return when palette unchanged."""
+        signals: list[bool] = []
+        model.channel_combine_config_changed.connect(lambda: signals.append(True))
+        model.channel_combine_palette = model.channel_combine_palette
+        assert len(signals) == 0
+
+    def test_update_channel_combine_missing_step_no_raise(self, model: PipelineModel) -> None:
+        """line 251: step is None guard in _update_channel_combine_step_state."""
+        model._steps = [s for s in model._steps if s.key != "channel_combine"]
+        model._update_channel_combine_step_state()  # should not raise

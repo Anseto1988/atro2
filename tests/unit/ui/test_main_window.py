@@ -59,7 +59,7 @@ class TestMainWindowInit:
 
     def test_pipeline_model(self, win: MainWindow) -> None:
         assert win._pipeline is not None
-        assert len(win._pipeline.steps) == 12
+        assert len(win._pipeline.steps) == 13
 
     def test_statusbar_message(self, win: MainWindow) -> None:
         assert win.statusBar().currentMessage() == "Bereit"
@@ -223,6 +223,179 @@ class TestMainWindowOpenImage:
         with patch("astroai.ui.main.app.QFileDialog.getOpenFileName") as mock_dlg:
             win._on_open_image()
             mock_dlg.assert_not_called()
+
+
+class TestMainWindowImportFrames:
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=([], ""))
+    def test_on_import_lights_cancelled(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_lights()
+        assert len(win._project.input_frames) == 0
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=(["/a.fits", "/b.fits"], ""))
+    def test_on_import_lights_adds_frames(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_lights()
+        assert len(win._project.input_frames) == 2
+        assert "2 Light" in win.statusBar().currentMessage()
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=(["/a.fits"], ""))
+    def test_on_import_lights_no_duplicate(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_lights()
+        win._on_import_lights()
+        assert len(win._project.input_frames) == 1
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=([], ""))
+    def test_on_import_darks_cancelled(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_darks()
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=(["/d1.fits", "/d2.fits"], ""))
+    def test_on_import_darks_adds(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_darks()
+        assert len(win._project.calibration.dark_frames) == 2
+        assert "Dark" in win.statusBar().currentMessage()
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=([], ""))
+    def test_on_import_flats_cancelled(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_flats()
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=(["/f1.fits"], ""))
+    def test_on_import_flats_adds(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_flats()
+        assert "/f1.fits" in win._project.calibration.flat_frames
+        assert "Flat" in win.statusBar().currentMessage()
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=([], ""))
+    def test_on_import_bias_cancelled(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_bias()
+
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileNames", return_value=(["/b1.fits"], ""))
+    def test_on_import_bias_adds(self, mock_dlg, win: MainWindow) -> None:
+        win._on_import_bias()
+        assert "/b1.fits" in win._project.calibration.bias_frames
+        assert "Bias" in win.statusBar().currentMessage()
+
+
+class TestMainWindowOpenImagePath:
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileName")
+    def test_on_open_image_starts_load(self, mock_dlg, win: MainWindow, tmp_path: Path) -> None:
+        img_path = tmp_path / "test.fits"
+        img_path.write_bytes(b"")
+        mock_dlg.return_value = (str(img_path), "")
+        with patch.object(win._file_loader, "load") as mock_load:
+            win._on_open_image()
+            mock_load.assert_called_once_with(img_path)
+        assert win._progress._bar.maximum() == 0  # indeterminate
+
+
+class TestMainWindowOpenProjectPath:
+    @patch("astroai.ui.main.app.QFileDialog.getOpenFileName")
+    def test_on_open_project_with_path(self, mock_dlg, win: MainWindow, tmp_path: Path) -> None:
+        from astroai.project import AstroProject
+
+        proj_path = tmp_path / "p.astroai"
+        mock_dlg.return_value = (str(proj_path), "")
+        with patch("astroai.ui.main.app.ProjectSerializer.load", return_value=AstroProject()):
+            win._on_open_project()
+        assert win._project_path == proj_path
+
+
+class TestMainWindowMiscSlots:
+    def test_on_calibration_finished(self, win: MainWindow) -> None:
+        win._benchmark.start()
+        win._on_calibration_finished(None)
+
+    def test_on_calibration_error(self, win: MainWindow) -> None:
+        win._on_calibration_error("GPU exploded")
+        # no exception — benchmark reset, log written
+
+    def test_on_comet_preview_changed_with_image(self, win: MainWindow) -> None:
+        data = np.ones((32, 32), dtype=np.float32)
+        win._pipeline._comet_star_stack = data
+        win._pipeline._comet_nucleus_stack = data
+        win._pipeline._comet_tracking_mode = "blend"
+        win._on_comet_preview_changed()
+        assert win._viewer._raw_data is not None
+        assert "Komet" in win.statusBar().currentMessage()
+
+    def test_on_comet_preview_changed_no_image(self, win: MainWindow) -> None:
+        win._pipeline._comet_preview_image = None
+        win._on_comet_preview_changed()  # no-op, no exception
+
+    def test_on_manage_license(self, win: MainWindow) -> None:
+        with patch("astroai.ui.main.app.ActivationDialog") as MockDlg:
+            instance = MockDlg.return_value
+            instance.exec = MagicMock()
+            win._on_manage_license()
+            instance.exec.assert_called_once()
+
+
+class TestLoadStylesheet:
+    def test_returns_empty_when_no_qss(self, tmp_path: Path) -> None:
+        import astroai.ui.main.app as app_mod
+        original = app_mod._RESOURCES
+        app_mod._RESOURCES = tmp_path
+        try:
+            result = app_mod._load_stylesheet()
+        finally:
+            app_mod._RESOURCES = original
+        assert result == ""
+
+    def test_returns_content_when_qss_exists(self, tmp_path: Path) -> None:
+        import astroai.ui.main.app as app_mod
+        (tmp_path / "dark_theme.qss").write_text("QWidget { color: white; }", encoding="utf-8")
+        original = app_mod._RESOURCES
+        app_mod._RESOURCES = tmp_path
+        try:
+            result = app_mod._load_stylesheet()
+        finally:
+            app_mod._RESOURCES = original
+        assert "QWidget" in result
+
+
+class TestSetWcsSolution:
+    def test_set_wcs_none_clears(self, win: MainWindow) -> None:
+        win.set_wcs_solution(None)
+        assert win._annotation_overlay._wcs is None
+
+    def test_set_wcs_with_wcs_transform_protocol(self, win: MainWindow) -> None:
+        from astroai.ui.overlay.sky_objects import WcsTransform
+
+        mock_wcs = MagicMock(spec=WcsTransform)
+        win.set_wcs_solution(mock_wcs)
+        assert win._annotation_overlay._wcs is mock_wcs
+
+    def test_set_wcs_unknown_type_no_image_shape(self, win: MainWindow) -> None:
+        win.set_wcs_solution(object())
+        assert win._annotation_overlay._wcs is None
+
+    def test_set_wcs_engine_overlay(self, win: MainWindow) -> None:
+        from astroai.engine.platesolving.annotation import AnnotationOverlay as EngineOverlay
+        from astroai.ui.overlay.wcs_adapter import WcsAdapter
+
+        mock_overlay = MagicMock(spec=EngineOverlay)
+        fake_adapter = MagicMock(spec=WcsAdapter)
+        with patch("astroai.ui.overlay.wcs_adapter.WcsAdapter.from_engine_overlay", return_value=fake_adapter):
+            win.set_wcs_solution(mock_overlay)
+        assert win._annotation_overlay._wcs is fake_adapter
+
+    def test_set_wcs_solve_result(self, win: MainWindow) -> None:
+        from astroai.engine.platesolving.solver import SolveResult
+        from astroai.ui.overlay.wcs_adapter import WcsAdapter
+
+        mock_result = MagicMock(spec=SolveResult)
+        fake_adapter = MagicMock(spec=WcsAdapter)
+        with patch("astroai.ui.overlay.wcs_adapter.WcsAdapter.from_solve_result", return_value=fake_adapter):
+            win.set_wcs_solution(mock_result, image_shape=(100, 200))
+        assert win._annotation_overlay._wcs is fake_adapter
+
+    def test_set_wcs_wcs_solution_sets_sky_overlay(self, win: MainWindow) -> None:
+        from astroai.astrometry.catalog import WcsSolution
+        from astroai.ui.overlay.sky_objects import WcsTransform
+
+        mock_adapter = MagicMock(spec=WcsTransform)
+        # Pass via WcsTransform path to get adapter set, then confirm wcs_solution=None
+        win.set_wcs_solution(mock_adapter)  # adapter set via WcsTransform isinstance
+        # wcs_solution branch: adapter is not None, but wcs is not a WcsSolution → None
+        assert win._sky_overlay._solution is None
 
 
 class TestMainWindowLicense:

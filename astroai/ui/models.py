@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from PySide6.QtCore import QObject, Signal
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 class StepState(Enum):
@@ -38,11 +42,14 @@ class PipelineModel(QObject):
     drizzle_config_changed = Signal()
     mosaic_config_changed = Signal()
     color_calibration_config_changed = Signal()
+    comet_stack_config_changed = Signal()
+    comet_preview_changed = Signal()
 
     DEFAULT_STEPS = [
         ("calibrate", "Kalibrierung", False),
         ("register", "Registrierung", False),
         ("stack", "Stacking", False),
+        ("comet_stacking", "Komet-Stacking", True),
         ("drizzle", "Drizzle", True),
         ("mosaic", "Mosaic", True),
         ("channel_combine", "Kanal-Kombination", True),
@@ -81,12 +88,18 @@ class PipelineModel(QObject):
         self._color_calibration_enabled: bool = False
         self._color_calibration_catalog: str = "gaia_dr3"
         self._color_calibration_sample_radius: int = 8
+        self._comet_stack_enabled: bool = False
+        self._comet_tracking_mode: str = "blend"
+        self._comet_blend_factor: float = 0.5
+        self._comet_star_stack: NDArray[np.floating[Any]] | None = None
+        self._comet_nucleus_stack: NDArray[np.floating[Any]] | None = None
         self._update_starless_step_state()
         self._update_deconvolution_step_state()
         self._update_drizzle_step_state()
         self._update_mosaic_step_state()
         self._update_channel_combine_step_state()
         self._update_color_calibration_step_state()
+        self._update_comet_stack_step_state()
 
     # -- starless config properties --
 
@@ -431,6 +444,90 @@ class PipelineModel(QObject):
             step.state = StepState.PENDING
             self.step_changed.emit("color_calibration", StepState.PENDING.value)
 
+    # -- comet stack config properties -----------------------------------------
+
+    @property
+    def comet_stack_enabled(self) -> bool:
+        return self._comet_stack_enabled
+
+    @comet_stack_enabled.setter
+    def comet_stack_enabled(self, value: bool) -> None:
+        if self._comet_stack_enabled == value:
+            return
+        self._comet_stack_enabled = value
+        self._update_comet_stack_step_state()
+        self.comet_stack_config_changed.emit()
+
+    @property
+    def comet_tracking_mode(self) -> str:
+        return self._comet_tracking_mode
+
+    @comet_tracking_mode.setter
+    def comet_tracking_mode(self, value: str) -> None:
+        if self._comet_tracking_mode == value:
+            return
+        self._comet_tracking_mode = value
+        self.comet_stack_config_changed.emit()
+        if self._has_comet_stacks():
+            self.comet_preview_changed.emit()
+
+    @property
+    def comet_blend_factor(self) -> float:
+        return self._comet_blend_factor
+
+    @comet_blend_factor.setter
+    def comet_blend_factor(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._comet_blend_factor == value:
+            return
+        self._comet_blend_factor = value
+        self.comet_stack_config_changed.emit()
+        if self._comet_tracking_mode == "blend" and self._has_comet_stacks():
+            self.comet_preview_changed.emit()
+
+    def _has_comet_stacks(self) -> bool:
+        return self._comet_star_stack is not None and self._comet_nucleus_stack is not None
+
+    def set_comet_stacks(
+        self,
+        star_stack: NDArray[np.floating[Any]],
+        nucleus_stack: NDArray[np.floating[Any]],
+    ) -> None:
+        self._comet_star_stack = star_stack
+        self._comet_nucleus_stack = nucleus_stack
+        self.comet_preview_changed.emit()
+
+    def clear_comet_stacks(self) -> None:
+        self._comet_star_stack = None
+        self._comet_nucleus_stack = None
+
+    @property
+    def comet_preview_image(self) -> NDArray[np.floating[Any]] | None:
+        if not self._has_comet_stacks():
+            return None
+        assert self._comet_star_stack is not None
+        assert self._comet_nucleus_stack is not None
+        mode = self._comet_tracking_mode
+        if mode == "stars":
+            return self._comet_star_stack
+        if mode == "comet":
+            return self._comet_nucleus_stack
+        f = self._comet_blend_factor
+        return ((1.0 - f) * self._comet_star_stack + f * self._comet_nucleus_stack).astype(
+            self._comet_star_stack.dtype
+        )
+
+    def _update_comet_stack_step_state(self) -> None:
+        step = self.step_by_key("comet_stacking")
+        if step is None:
+            return
+        if not self._comet_stack_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("comet_stacking", StepState.DISABLED.value)
+        elif self._comet_stack_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("comet_stacking", StepState.PENDING.value)
+
     # -- export config bridge --
 
     def export_config(self) -> dict[str, Any]:
@@ -475,6 +572,7 @@ class PipelineModel(QObject):
             "mosaic": self._mosaic_enabled,
             "channel_combine": self._channel_combine_enabled,
             "color_calibration": self._color_calibration_enabled,
+            "comet_stacking": self._comet_stack_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):

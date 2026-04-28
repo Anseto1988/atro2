@@ -92,3 +92,26 @@ class TestCometTracker:
         positions = tracker.track(frames)
         for p in positions:
             assert 0.0 <= p.confidence <= 1.0
+
+
+class TestCometTrackerEdgeCases:
+    def test_no_blob_no_fallback_raises(self) -> None:
+        """RuntimeError when threshold <= 0 and fallback_to_peak=False (line 87)."""
+        diff = np.zeros((32, 32), dtype=np.float64)  # all zero -> threshold=0
+        tracker = CometTracker(fallback_to_peak=False)
+        with pytest.raises(RuntimeError):
+            tracker._find_nucleus(diff, frame_idx=0)
+
+    def test_blob_too_small_no_fallback_raises(self) -> None:
+        """RuntimeError when blob smaller than min_blob_area and fallback_to_peak=False (line 109).
+
+        Need >=n_top positive pixels so threshold>0 (avoids line-87 raise),
+        but each isolated single-pixel blob is smaller than min_blob_area.
+        """
+        diff = np.zeros((64, 64), dtype=np.float64)
+        # 25 isolated bright pixels → top-fraction threshold=1.0>0, all blobs area=1
+        for i in range(25):
+            diff[i * 2, 0] = 1.0
+        tracker = CometTracker(fallback_to_peak=False, min_blob_area=100)
+        with pytest.raises(RuntimeError, match="kein gültiger Blob"):
+            tracker._find_nucleus(diff, frame_idx=0)
