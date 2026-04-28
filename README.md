@@ -2,7 +2,21 @@
 
 AI-powered astrophotography processing suite.
 
-**Version:** 2.0.0-alpha
+**Version:** 2.1.0-alpha
+
+## What's New in v2.1
+
+### F-3: Drizzle Super-Resolution
+- WCS-based sub-pixel alignment using plate-solving output from F-1
+- Configurable drop-size (0.5 / 0.7 / 1.0), pixfrac and scale parameters
+- `DrizzleEngine` + `DrizzleStep` pipeline integration after stacking
+- `DrizzlePanel` UI widget for drop-size and pixfrac configuration
+
+### F-4: Mosaic Assembly
+- Multi-panel WCS-based stitching with automatic overlap detection
+- Linear/average blend modes with gradient correction
+- `MosaicEngine` + `MosaicStep` pipeline integration
+- `MosaicPanel` UI widget for panel management and blend configuration
 
 ## What's New in v2.0
 
@@ -25,6 +39,8 @@ AI-powered astrophotography processing suite.
 - GPU-accelerated denoising (NAFNet, CUDA/MPS/CPU)
 - Plate solving (ASTAP) with sky overlay and annotation
 - GPU-accelerated calibration (Dark/Flat correction) with benchmark metrics
+- **Drizzle Super-Resolution** (WCS sub-pixel stacking, configurable drop-size)
+- **Mosaic Assembly** (multi-panel WCS stitching with gradient correction)
 - Starless separation and star reduction
 - LRGB / Narrowband channel combination
 - Deconvolution (Richardson-Lucy)
