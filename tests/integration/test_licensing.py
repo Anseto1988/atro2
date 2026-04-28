@@ -123,7 +123,7 @@ class TestOfflineGracePeriod:
         now = datetime.now(timezone.utc)
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = refreshed_jwt
+        client.refresh.return_value = (refreshed_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(raw_jwt, now), client_mock=client
@@ -222,7 +222,7 @@ class TestOfflineGracePeriod:
         refreshed_jwt = _sign_jwt(priv, jti_suffix="-restored")
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = refreshed_jwt
+        client.refresh.return_value = (refreshed_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(raw_jwt, last_online), client_mock=client
@@ -327,7 +327,7 @@ class TestSeatLimits:
         jwt_token = _sign_jwt(priv, tier="pro_annual", seats_used=1, seats_max=1)
 
         client = MagicMock(spec=LicenseClient)
-        client.activate.return_value = jwt_token
+        client.activate.return_value = (jwt_token, None)
 
         manager = LicenseManager(store_dir=tmp_path, public_key=pub)
         manager._client = client
@@ -362,7 +362,7 @@ class TestSeatLimits:
         jwt_token = _sign_jwt(priv, tier="founding_member", seats_used=1, seats_max=2)
 
         client = MagicMock(spec=LicenseClient)
-        client.activate.return_value = jwt_token
+        client.activate.return_value = (jwt_token, None)
 
         manager = LicenseManager(store_dir=tmp_path, public_key=pub)
         manager._client = client
@@ -380,7 +380,7 @@ class TestSeatLimits:
         jwt_token = _sign_jwt(priv, tier="founding_member", seats_used=2, seats_max=2)
 
         client = MagicMock(spec=LicenseClient)
-        client.activate.return_value = jwt_token
+        client.activate.return_value = (jwt_token, None)
 
         manager = LicenseManager(store_dir=tmp_path / "machine_b", public_key=pub)
         manager._client = client
@@ -441,7 +441,7 @@ class TestSeatLimits:
         assert manager._store.load() is None
 
         new_jwt = _sign_jwt(priv, seats_used=1, seats_max=1)
-        client.activate.return_value = new_jwt
+        client.activate.return_value = (new_jwt, None)
         token = manager.activate("ASTRO-TEST-KEY1-0001", "0.2.0")
         assert token.tier == LicenseTier.PRO_ANNUAL
 
@@ -453,7 +453,7 @@ class TestSeatLimits:
         jwt_token = _sign_jwt(priv, tier="free", plugins=[], seats_used=1, seats_max=1)
 
         client = MagicMock(spec=LicenseClient)
-        client.activate.return_value = jwt_token
+        client.activate.return_value = (jwt_token, None)
 
         manager = LicenseManager(store_dir=tmp_path, public_key=pub)
         manager._client = client
@@ -487,7 +487,7 @@ class TestTierEnforcement:
         now = datetime.now(timezone.utc)
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = refreshed_jwt
+        client.refresh.return_value = (refreshed_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(raw_jwt, now), client_mock=client
@@ -509,7 +509,7 @@ class TestTierEnforcement:
         now = datetime.now(timezone.utc)
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = refreshed_jwt
+        client.refresh.return_value = (refreshed_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(raw_jwt, now), client_mock=client
@@ -532,7 +532,7 @@ class TestTierEnforcement:
         now = datetime.now(timezone.utc)
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = refreshed_jwt
+        client.refresh.return_value = (refreshed_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(raw_jwt, now), client_mock=client
@@ -595,7 +595,7 @@ class TestTierEnforcement:
         now = datetime.now(timezone.utc)
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = refreshed_jwt
+        client.refresh.return_value = (refreshed_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(raw_jwt, now), client_mock=client
@@ -615,7 +615,7 @@ class TestTierEnforcement:
         now = datetime.now(timezone.utc)
 
         client = MagicMock(spec=LicenseClient)
-        client.refresh.return_value = downgraded_jwt
+        client.refresh.return_value = (downgraded_jwt, None)
 
         manager = _make_manager_with_mocks(
             tmp_path, pub, store_data=(original_jwt, now), client_mock=client
