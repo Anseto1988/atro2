@@ -160,7 +160,7 @@ if IS_MAC:
         icon=None,
         bundle_identifier="com.astroai.suite",
         info_plist={
-            "CFBundleShortVersionString": "2.1.0-alpha",
+            "CFBundleShortVersionString": "2.3.0-alpha",
             "CFBundleDisplayName": "AstroAI Suite",
             "CFBundleName": "AstroAI",
             "CFBundlePackageType": "APPL",

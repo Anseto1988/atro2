@@ -29,13 +29,18 @@ jobs:
           body: |
             ## AstroAI Suite v${{ steps.version.outputs.version }}
 
-            ### Neue Features seit v1.1.0-alpha
+            ### Neu in v2.3.0-alpha
 
-            - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay, AI-Koordinaten-Extraktion + Sky-Atlas
-            - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback), CalibrationBenchmarkWidget
-            - **F-3** Drizzle Super-Resolution — Sub-Pixel-Upscaling (reproject-basiert), Drop-Size/Pixfrac konfigurierbar
-            - **F-4** Mosaic-Workflow — WCS-basiertes Multi-Panel-Stitching, Gradientenkorrektur, blend modes
-            - **F-5** Photometrische Farbkalibrierung — GAIA DR3 + 2MASS Sternkatalog, Apertur-Photometrie, Sigma-Clipping, SPCC-äquivalent
+            - **F-SynFlat** Synthetic Flat Frame Generation — SyntheticFlatGenerator, SyntheticFlatStep, SyntheticFlatPanel
+            - **Projekt-Persistenz** Vollständige bidirektionale Persistenz für alle Features
+            - **mypy-Typ-Fixes** in 9 Modulen
+            - **Bug-Fix** `calibrator.py` `_catalog_to_pixels` 2-tuple → 3-tuple Korrektur
+            - **F-Comet** Comet-Stacking Panel, Model-Integration und Preview
+            - **F-5** Photometrie-Engine und UI-Panel
+
+            ### Qualität
+
+            - 1900 Tests, 99.75 % Coverage
 
             ### Alle Features
 
@@ -49,6 +54,8 @@ jobs:
             - **F-3** Drizzle Super-Resolution (reproject-basiert)
             - **F-4** Mosaic-Workflow (MosaicStep + MosaicPanel)
             - **F-5** Photometrische Farbkalibrierung (SpectralColorCalibrator + GAIA DR3)
+            - **F-Comet** Comet-Stacking (Tracking, Stacking, Preview)
+            - **F-SynFlat** Synthetic Flat Frame Generation
             - Cloudflare Workers Licensing API
             - Security Hardening S-01 bis S-04
 
