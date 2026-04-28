@@ -88,4 +88,5 @@ Won't Have (v1.0): Cloud-Stacking (alles lokal auf dem Rechner des Users).
 |---------|-----|------|----------|
 | v1.1.0-alpha | v1.1.0-alpha | [GitHub Release](https://github.com/Anseto1988/atro2/releases/tag/v1.1.0-alpha) | E3–E6, Security S-01–S-04, Licensing API |
 | v2.0.0-alpha | v2.0.0-alpha | [GitHub Release](https://github.com/Anseto1988/atro2/releases/tag/v2.0.0-alpha) | F-1 Plate Solving, F-2 GPU-Kalibrierung, F-3 Drizzle Super-Resolution, F-4 Mosaic-Workflow |
+| v2.1.0-alpha | v2.1.0-alpha | [GitHub Release](https://github.com/Anseto1988/atro2/releases/tag/v2.1.0-alpha) | F-5 Photometrische Farbkalibrierung (SPCC), Fixes |
 
