@@ -77,6 +77,52 @@ class TestWorkflowGraphLayout:
         assert graph.minimumWidth() >= 200
 
 
+class TestWorkflowGraphPaintForced:
+    """Uses show()+grab() to force synchronous paintEvent execution."""
+
+    @pytest.fixture()
+    def shown_graph(self, qtbot, model):
+        w = WorkflowGraph(model)
+        w.resize(800, 100)
+        qtbot.addWidget(w)
+        w.show()
+        return w
+
+    def test_grab_all_pending(self, shown_graph):
+        shown_graph.grab()
+
+    def test_grab_with_disabled_step(self, shown_graph, model):
+        model.set_step_state("calibrate", StepState.DISABLED)
+        shown_graph.grab()
+
+    def test_grab_active_with_progress(self, shown_graph, model):
+        model.set_step_state("stack", StepState.ACTIVE)
+        model.set_step_progress("stack", 0.6)
+        shown_graph.grab()
+
+    def test_grab_active_zero_progress(self, shown_graph, model):
+        model.set_step_state("stack", StepState.ACTIVE)
+        model.set_step_progress("stack", 0.0)
+        shown_graph.grab()
+
+    def test_grab_error_state(self, shown_graph, model):
+        model.set_step_state("register", StepState.ERROR)
+        shown_graph.grab()
+
+    def test_grab_all_done(self, shown_graph, model):
+        for step in model.steps:
+            model.set_step_state(step.key, StepState.DONE)
+        shown_graph.grab()
+
+    def test_grab_empty_steps_no_crash(self, qtbot, model, monkeypatch):
+        monkeypatch.setattr(type(model), "steps", property(lambda self: []))
+        w = WorkflowGraph(model)
+        w.resize(800, 100)
+        qtbot.addWidget(w)
+        w.show()
+        w.grab()
+
+
 class TestWorkflowGraphSignals:
     def test_step_changed_triggers_update(self, graph: WorkflowGraph, model: PipelineModel) -> None:
         model.set_step_state("calibrate", StepState.ACTIVE)

@@ -250,7 +250,7 @@ def verify_astap(path: Path | None = None) -> str | None:
         return None
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import sys
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")

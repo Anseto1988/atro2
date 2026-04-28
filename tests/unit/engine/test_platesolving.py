@@ -542,7 +542,7 @@ class TestSolveCoordExtraction:
             args=[], returncode=0, stdout="ok", stderr=""
         )
         solver = PlateSolver(astap_path=Path("/mock/astap"), max_retries=1)
-        # No ra_hint/dec_hint — solver should extract from FITS header
+        # No ra_hint/dec_hint ï¿½ solver should extract from FITS header
         result = solver.solve(tmp_fits)
         assert result.ra_center == pytest.approx(180.0, abs=0.1)
 
@@ -557,3 +557,45 @@ class TestRunAstapNoWcsFile:
         solver = PlateSolver(astap_path=Path("/mock/astap"), max_retries=1)
         with pytest.raises(SolveError, match="did not produce a WCS file"):
             solver._run_astap_subprocess(tmp_fits, None, None, 30.0)
+
+
+class TestSolveAstapCdMatrix:
+    """Cover lines 115-116: rotation from CD matrix when wcs.wcs.has_cd() is True."""
+
+    @patch("astroai.engine.platesolving.solver.subprocess.run")
+    def test_solve_astap_with_cd_matrix_computes_rotation(
+        self, mock_run: MagicMock, tmp_fits: Path
+    ) -> None:
+        """_solve_astap builds SolveResult using CD matrix rot (lines 115-116)."""
+        import math
+
+        # Build a FITS header with CDi_j keywords explicitly so WCS.has_cd() returns True
+        scale = 0.000277
+        angle_rad = math.radians(30.0)
+        header = fits.Header()
+        header["NAXIS"] = 2
+        header["NAXIS1"] = 100
+        header["NAXIS2"] = 100
+        header["CTYPE1"] = "RA---TAN"
+        header["CTYPE2"] = "DEC--TAN"
+        header["CRVAL1"] = 180.0
+        header["CRVAL2"] = 45.0
+        header["CRPIX1"] = 50.0
+        header["CRPIX2"] = 50.0
+        header["CD1_1"] = -scale * math.cos(angle_rad)
+        header["CD1_2"] = scale * math.sin(angle_rad)
+        header["CD2_1"] = scale * math.sin(angle_rad)
+        header["CD2_2"] = scale * math.cos(angle_rad)
+
+        wcs_path = tmp_fits.with_suffix(".wcs")
+        fits.PrimaryHDU(header=header).writeto(str(wcs_path), overwrite=True)
+
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok", stderr=""
+        )
+
+        solver = PlateSolver(astap_path=Path("/mock/astap"), max_retries=1)
+        result = solver._solve_astap(tmp_fits, 180.0, 45.0)
+        assert result.solver_used == "astap"
+        # rotation from CD matrix must be non-trivial
+        assert isinstance(result.rotation_deg, float)

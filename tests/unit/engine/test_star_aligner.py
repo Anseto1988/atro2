@@ -160,3 +160,35 @@ class TestRegistrationStepMethod:
         from astroai.engine.registration.star_aligner import StarAligner
         step = RegistrationStep(method="star")
         assert isinstance(step._aligner, StarAligner)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers: _normalize and _match_shift edge cases
+# ---------------------------------------------------------------------------
+
+class TestNormalizeHelper:
+    def test_flat_image_returns_zeros(self) -> None:
+        """Cover line 121: _normalize returns zeros when hi == lo (constant image)."""
+        from astroai.engine.registration.star_aligner import _normalize
+        img = np.full((16, 16), 5.0, dtype=np.float64)
+        result = _normalize(img)
+        np.testing.assert_array_equal(result, np.zeros_like(img))
+
+    def test_normal_image_normalized_to_0_1(self) -> None:
+        from astroai.engine.registration.star_aligner import _normalize
+        img = np.array([[0.0, 0.5], [1.0, 0.25]])
+        result = _normalize(img)
+        assert result.min() == pytest.approx(0.0)
+        assert result.max() == pytest.approx(1.0)
+
+
+class TestMatchShiftHelper:
+    def test_fewer_than_min_stars_returns_zero_shift(self) -> None:
+        """Cover line 113: _match_shift returns (0.0, 0.0) when fewer than 3 shifts found."""
+        from astroai.engine.registration.star_aligner import StarAligner
+        # Only 2 stars in ref, 2 in tgt → at most 2 shifts found → < _MIN_STARS(3)
+        ref_stars = np.array([[10.0, 10.0], [50.0, 50.0]])
+        tgt_stars = np.array([[11.0, 11.0], [51.0, 51.0]])
+        dy, dx = StarAligner._match_shift(ref_stars, tgt_stars)
+        assert dy == pytest.approx(0.0)
+        assert dx == pytest.approx(0.0)

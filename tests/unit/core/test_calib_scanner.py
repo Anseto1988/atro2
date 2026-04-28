@@ -189,3 +189,20 @@ class TestBuildCalibrationLibrary:
         assert len(lib.darks) == 1
         assert len(lib.flats) == 1
         assert len(lib.bias) == 1
+
+    def test_load_data_corrupt_file_skipped(self, tmp_path: Path) -> None:
+        """load_data=True with a corrupt FITS silently skips and stores data=None (lines 101-102)."""
+        from unittest.mock import patch
+        from astroai.core.io.fits_io import ImageMetadata
+        from astroai.core.calibration.scanner import ScannedFrame
+
+        bad_path = tmp_path / "bad.fits"
+        bad_path.write_bytes(b"not-fits-data")
+
+        # Manually create a ScannedFrame pointing to the corrupt file
+        frame = ScannedFrame(path=bad_path, frame_type="dark", metadata=ImageMetadata())
+
+        # build_calibration_library with load_data=True hits read_fits, which raises → data=None
+        lib = build_calibration_library([frame], load_data=True)
+        assert len(lib.darks) == 1
+        assert lib.darks[0].data is None

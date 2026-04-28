@@ -113,6 +113,12 @@ class TestPresetManager:
             path = _preset_dir()
         assert ".config" in str(path) and "presets" in str(path)
 
+    def test_preset_dir_windows(self) -> None:
+        """Cover line 45: Windows branch uses AppData/Local/AstroAI."""
+        with patch("sys.platform", "win32"):
+            path = _preset_dir()
+        assert "AppData" in str(path) and "AstroAI" in str(path) and "presets" in str(path)
+
 
 class TestPresetModelIntegration:
     class _MockModel:
@@ -147,6 +153,18 @@ class TestPresetModelIntegration:
         model = self._MockModel()
         preset = PipelinePreset(name="P", config={"nonexistent_key": 42})
         manager.apply_to_model(preset, model)  # should not raise
+
+    def test_apply_skips_read_only_attribute(self, manager: PresetManager) -> None:
+        """Cover lines 129-130: setattr raises AttributeError or TypeError — silently skipped."""
+
+        class _ReadOnlyModel:
+            @property
+            def stacking_method(self) -> str:
+                return "sigma_clip"
+
+        model = _ReadOnlyModel()
+        preset = PipelinePreset(name="P", config={"stacking_method": "mean"})
+        manager.apply_to_model(preset, model)  # must not raise
 
     def test_save_capture_load_apply_roundtrip(self, manager: PresetManager) -> None:
         model = self._MockModel()

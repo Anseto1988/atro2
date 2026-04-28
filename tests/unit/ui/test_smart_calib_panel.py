@@ -52,6 +52,25 @@ class TestInitialState:
         assert not panel._recursive_cb.isChecked()
 
 
+class TestBrowse:
+    def test_browse_sets_dir_edit(self, panel: SmartCalibPanel, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "astroai.ui.widgets.smart_calib_panel.QFileDialog.getExistingDirectory",
+            lambda *a, **kw: "/chosen/dir",
+        )
+        panel._on_browse()
+        assert panel._dir_edit.text() == "/chosen/dir"
+
+    def test_browse_cancelled_leaves_dir_unchanged(self, panel: SmartCalibPanel, monkeypatch) -> None:
+        panel._dir_edit.setText("/original/dir")
+        monkeypatch.setattr(
+            "astroai.ui.widgets.smart_calib_panel.QFileDialog.getExistingDirectory",
+            lambda *a, **kw: "",
+        )
+        panel._on_browse()
+        assert panel._dir_edit.text() == "/original/dir"
+
+
 class TestScan:
     def test_invalid_directory_shows_error(self, panel: SmartCalibPanel) -> None:
         panel._dir_edit.setText("/nonexistent/path/xyz_doesnotexist")

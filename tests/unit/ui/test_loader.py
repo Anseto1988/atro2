@@ -329,3 +329,67 @@ class TestFITSMetadataPanel:
             "TELESCOP": "Celestron C8",
         })
         assert panel._table.rowCount() == 4
+
+
+class TestLoadWorkerRawBranch:
+    """Cover the RAW DSLR loading path (lines 71-84) of _LoadWorker.run()."""
+
+    def _make_meta(self, exposure=None, gain_iso=None, date_obs=None, width=64, height=64):
+        m = MagicMock()
+        m.exposure = exposure
+        m.gain_iso = gain_iso
+        m.date_obs = date_obs
+        m.width = width
+        m.height = height
+        return m
+
+    def test_raw_cr2_emits_finished(self, qtbot) -> None:
+        rgb = np.ones((64, 64, 3), dtype=np.float32) * 0.5
+        meta = self._make_meta(exposure=120.0, gain_iso=800, date_obs="2026-01-01T00:00:00", width=64, height=64)
+        worker = _LoadWorker(Path("/data/frame.cr2"))
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(rgb, meta)):
+            with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
+                worker.run()
+
+        img, name, header = blocker.args
+        assert img.dtype == np.float32
+        assert img.ndim == 2
+        assert name == "frame.cr2"
+        assert header["Format"] == "CR2"
+        assert header["EXPTIME"] == "120.0"
+        assert header["GAIN"] == "800"
+        assert header["DATE-OBS"] == "2026-01-01T00:00:00"
+        assert header["NAXIS1"] == "64"
+        assert header["NAXIS2"] == "64"
+
+    def test_raw_nef_no_optional_fields(self, qtbot) -> None:
+        """Lines 77-82: None optional meta fields are skipped."""
+        rgb = np.ones((32, 32, 3), dtype=np.float32)
+        meta = self._make_meta(exposure=None, gain_iso=None, date_obs=None, width=32, height=32)
+        worker = _LoadWorker(Path("/data/shot.nef"))
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(rgb, meta)):
+            with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
+                worker.run()
+
+        img, name, header = blocker.args
+        assert name == "shot.nef"
+        assert "EXPTIME" not in header
+        assert "GAIN" not in header
+        assert "DATE-OBS" not in header
+        assert header["NAXIS1"] == "32"
+
+    def test_raw_arw_collapses_rgb_to_2d(self, qtbot) -> None:
+        """Line 75: mean over axis=2 yields 2-D grayscale."""
+        rgb = np.arange(64 * 64 * 3, dtype=np.float32).reshape(64, 64, 3)
+        meta = self._make_meta(width=64, height=64)
+        worker = _LoadWorker(Path("/sensor/raw.arw"))
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(rgb, meta)):
+            with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
+                worker.run()
+
+        img, _, _hdr = blocker.args
+        assert img.ndim == 2
+        assert img.shape == (64, 64)

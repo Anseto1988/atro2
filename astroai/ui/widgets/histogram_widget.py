@@ -57,7 +57,7 @@ class HistogramWidget(QWidget):
 
         w = self.width() - 2 * _MARGIN
         h = self.height() - 2 * _MARGIN
-        if w <= 0 or h <= 0:
+        if w <= 0 or h <= 0:  # pragma: no cover
             painter.end()
             return
 

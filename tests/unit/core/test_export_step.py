@@ -57,6 +57,12 @@ class TestExportStep:
         step = ExportStep("/tmp", fmt=ExportFormat.XISF)
         assert step.stage == PipelineStage.SAVING
 
+    def test_name_includes_format(self) -> None:
+        """Cover line 57: name property returns 'export_<format>'."""
+        assert ExportStep("/tmp", fmt=ExportFormat.XISF).name == "export_xisf"
+        assert ExportStep("/tmp", fmt=ExportFormat.TIFF32).name == "export_tiff"
+        assert ExportStep("/tmp", fmt=ExportFormat.FITS).name == "export_fits"
+
     def test_creates_output_dir(self, tmp_path: Path) -> None:
         out_dir = tmp_path / "sub" / "dir"
         data = np.zeros((1, 4, 4), dtype=np.float32)

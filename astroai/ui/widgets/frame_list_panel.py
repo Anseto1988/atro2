@@ -276,7 +276,7 @@ class FrameListPanel(QWidget):
             self.remove_requested.emit(selected_rows)
 
     def _exec_menu(self, menu: QMenu, pos: QPoint) -> QAction | None:
-        return menu.exec(self._table.mapToGlobal(pos))
+        return menu.exec(self._table.mapToGlobal(pos))  # pragma: no cover
 
     # ------------------------------------------------------------------
     # Frame notes

@@ -1863,3 +1863,365 @@ class TestPipelineModelCurves:
         step = model.step_by_key("curves")
         assert step is not None
         assert step.state is StepState.PENDING
+
+
+class TestPipelineModelMosaicSameValue:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_mosaic_gradient_correct_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.mosaic_gradient_correct = False
+        with qtbot.assertNotEmitted(model.mosaic_config_changed):
+            model.mosaic_gradient_correct = False
+
+    def test_mosaic_output_scale_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.mosaic_output_scale = 1.0
+        with qtbot.assertNotEmitted(model.mosaic_config_changed):
+            model.mosaic_output_scale = 1.0
+
+
+class TestPipelineModelCometStacks:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_has_comet_stacks_false_by_default(self, model: PipelineModel) -> None:
+        assert not model._has_comet_stacks()
+
+    def test_set_comet_stacks_emits_preview_changed(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        import numpy as np
+        arr = np.zeros((4, 4), dtype=np.float32)
+        with qtbot.waitSignal(model.comet_preview_changed):
+            model.set_comet_stacks(arr, arr.copy())
+
+    def test_set_comet_stacks_has_comet_stacks_true(self, model: PipelineModel) -> None:
+        import numpy as np
+        arr = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(arr, arr.copy())
+        assert model._has_comet_stacks()
+
+    def test_clear_comet_stacks_resets(self, model: PipelineModel) -> None:
+        import numpy as np
+        arr = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(arr, arr.copy())
+        model.clear_comet_stacks()
+        assert not model._has_comet_stacks()
+
+    def test_comet_preview_image_none_when_no_stacks(self, model: PipelineModel) -> None:
+        assert model.comet_preview_image is None
+
+    def test_comet_preview_image_stars_mode(self, model: PipelineModel) -> None:
+        import numpy as np
+        star = np.ones((4, 4), dtype=np.float32)
+        nucleus = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(star, nucleus)
+        model.comet_tracking_mode = "stars"
+        result = model.comet_preview_image
+        assert result is not None
+        assert np.all(result == 1.0)
+
+    def test_comet_preview_image_comet_mode(self, model: PipelineModel) -> None:
+        import numpy as np
+        star = np.ones((4, 4), dtype=np.float32)
+        nucleus = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(star, nucleus)
+        model.comet_tracking_mode = "comet"
+        result = model.comet_preview_image
+        assert result is not None
+        assert np.all(result == 0.0)
+
+    def test_comet_preview_image_blend_mode(self, model: PipelineModel) -> None:
+        import numpy as np
+        star = np.ones((4, 4), dtype=np.float32)
+        nucleus = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(star, nucleus)
+        model.comet_tracking_mode = "blend"
+        model.comet_blend_factor = 0.5
+        result = model.comet_preview_image
+        assert result is not None
+        assert np.allclose(result, 0.5)
+
+    def test_comet_tracking_mode_emits_preview_when_stacks_set(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        import numpy as np
+        arr = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(arr, arr.copy())
+        model.comet_tracking_mode = "stars"
+        with qtbot.waitSignal(model.comet_preview_changed):
+            model.comet_tracking_mode = "comet"
+
+    def test_comet_blend_factor_emits_preview_in_blend_mode(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        import numpy as np
+        arr = np.zeros((4, 4), dtype=np.float32)
+        model.set_comet_stacks(arr, arr.copy())
+        model.comet_tracking_mode = "blend"
+        model.comet_blend_factor = 0.3
+        with qtbot.waitSignal(model.comet_preview_changed):
+            model.comet_blend_factor = 0.7
+
+
+class TestPipelineModelBackgroundRemovalSameValue:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_tile_size_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.background_removal_tile_size = 64
+        with qtbot.assertNotEmitted(model.background_removal_config_changed):
+            model.background_removal_tile_size = 64
+
+    def test_method_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.background_removal_config_changed):
+            model.background_removal_method = model.background_removal_method
+
+    def test_preserve_median_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.background_removal_config_changed):
+            model.background_removal_preserve_median = model.background_removal_preserve_median
+
+
+class TestPipelineModelDenoise:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_denoise_strength_default(self, model: PipelineModel) -> None:
+        assert 0.0 <= model.denoise_strength <= 1.0
+
+    def test_denoise_strength_setter(self, model: PipelineModel) -> None:
+        model.denoise_strength = 0.7
+        assert model.denoise_strength == pytest.approx(0.7)
+
+    def test_denoise_strength_clamps_low(self, model: PipelineModel) -> None:
+        model.denoise_strength = -1.0
+        assert model.denoise_strength == pytest.approx(0.0)
+
+    def test_denoise_strength_clamps_high(self, model: PipelineModel) -> None:
+        model.denoise_strength = 2.0
+        assert model.denoise_strength == pytest.approx(1.0)
+
+    def test_denoise_strength_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.denoise_strength = 0.1
+        with qtbot.waitSignal(model.denoise_config_changed):
+            model.denoise_strength = 0.9
+
+    def test_denoise_strength_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.denoise_strength = 0.5
+        with qtbot.assertNotEmitted(model.denoise_config_changed):
+            model.denoise_strength = 0.5
+
+    def test_denoise_tile_size_default(self, model: PipelineModel) -> None:
+        assert 64 <= model.denoise_tile_size <= 1024
+
+    def test_denoise_tile_size_setter(self, model: PipelineModel) -> None:
+        model.denoise_tile_size = 128
+        assert model.denoise_tile_size == 128
+
+    def test_denoise_tile_size_clamps_low(self, model: PipelineModel) -> None:
+        model.denoise_tile_size = 10
+        assert model.denoise_tile_size == 64
+
+    def test_denoise_tile_size_clamps_high(self, model: PipelineModel) -> None:
+        model.denoise_tile_size = 9999
+        assert model.denoise_tile_size == 1024
+
+    def test_denoise_tile_size_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.denoise_tile_size = 64
+        with qtbot.waitSignal(model.denoise_config_changed):
+            model.denoise_tile_size = 256
+
+    def test_denoise_tile_size_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.denoise_tile_size = 256
+        with qtbot.assertNotEmitted(model.denoise_config_changed):
+            model.denoise_tile_size = 256
+
+    def test_denoise_tile_overlap_default(self, model: PipelineModel) -> None:
+        assert 0 <= model.denoise_tile_overlap <= 256
+
+    def test_denoise_tile_overlap_setter(self, model: PipelineModel) -> None:
+        model.denoise_tile_overlap = 32
+        assert model.denoise_tile_overlap == 32
+
+    def test_denoise_tile_overlap_clamps_low(self, model: PipelineModel) -> None:
+        model.denoise_tile_overlap = -5
+        assert model.denoise_tile_overlap == 0
+
+    def test_denoise_tile_overlap_clamps_high(self, model: PipelineModel) -> None:
+        model.denoise_tile_overlap = 9999
+        assert model.denoise_tile_overlap == 256
+
+    def test_denoise_tile_overlap_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.denoise_tile_overlap = 0
+        with qtbot.waitSignal(model.denoise_config_changed):
+            model.denoise_tile_overlap = 32
+
+    def test_denoise_tile_overlap_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.denoise_tile_overlap = 16
+        with qtbot.assertNotEmitted(model.denoise_config_changed):
+            model.denoise_tile_overlap = 16
+
+
+class TestPipelineModelStretch:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_stretch_target_background_default(self, model: PipelineModel) -> None:
+        assert 0.0 <= model.stretch_target_background <= 1.0
+
+    def test_stretch_target_background_setter(self, model: PipelineModel) -> None:
+        model.stretch_target_background = 0.2
+        assert model.stretch_target_background == pytest.approx(0.2)
+
+    def test_stretch_target_background_clamps(self, model: PipelineModel) -> None:
+        model.stretch_target_background = 5.0
+        assert model.stretch_target_background == pytest.approx(1.0)
+
+    def test_stretch_target_background_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.stretch_target_background = 0.1
+        with qtbot.waitSignal(model.stretch_config_changed):
+            model.stretch_target_background = 0.3
+
+    def test_stretch_target_background_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.stretch_target_background = 0.2
+        with qtbot.assertNotEmitted(model.stretch_config_changed):
+            model.stretch_target_background = 0.2
+
+    def test_stretch_shadow_clipping_sigmas_default(self, model: PipelineModel) -> None:
+        assert -10.0 <= model.stretch_shadow_clipping_sigmas <= 0.0
+
+    def test_stretch_shadow_clipping_sigmas_setter(self, model: PipelineModel) -> None:
+        model.stretch_shadow_clipping_sigmas = -2.0
+        assert model.stretch_shadow_clipping_sigmas == pytest.approx(-2.0)
+
+    def test_stretch_shadow_clipping_sigmas_clamps(self, model: PipelineModel) -> None:
+        model.stretch_shadow_clipping_sigmas = -100.0
+        assert model.stretch_shadow_clipping_sigmas == pytest.approx(-10.0)
+
+    def test_stretch_shadow_clipping_sigmas_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.stretch_shadow_clipping_sigmas = -1.0
+        with qtbot.waitSignal(model.stretch_config_changed):
+            model.stretch_shadow_clipping_sigmas = -3.0
+
+    def test_stretch_shadow_clipping_sigmas_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.stretch_shadow_clipping_sigmas = -2.0
+        with qtbot.assertNotEmitted(model.stretch_config_changed):
+            model.stretch_shadow_clipping_sigmas = -2.0
+
+    def test_stretch_linked_channels_default(self, model: PipelineModel) -> None:
+        assert isinstance(model.stretch_linked_channels, bool)
+
+    def test_stretch_linked_channels_setter(self, model: PipelineModel) -> None:
+        original = model.stretch_linked_channels
+        model.stretch_linked_channels = not original
+        assert model.stretch_linked_channels is not original
+
+    def test_stretch_linked_channels_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        original = model.stretch_linked_channels
+        with qtbot.waitSignal(model.stretch_config_changed):
+            model.stretch_linked_channels = not original
+
+    def test_stretch_linked_channels_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.stretch_config_changed):
+            model.stretch_linked_channels = model.stretch_linked_channels
+
+
+class TestPipelineModelRegistrationMethod:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_registration_method_default(self, model: PipelineModel) -> None:
+        assert model.registration_method in ("star", "phase_correlation")
+
+    def test_registration_method_setter_valid(self, model: PipelineModel) -> None:
+        model.registration_method = "phase_correlation"
+        assert model.registration_method == "phase_correlation"
+
+    def test_registration_method_invalid_falls_back_to_star(self, model: PipelineModel) -> None:
+        model.registration_method = "invalid_value"
+        assert model.registration_method == "star"
+
+    def test_registration_method_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.registration_method = "star"
+        with qtbot.waitSignal(model.registration_config_changed):
+            model.registration_method = "phase_correlation"
+
+    def test_registration_method_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.registration_method = "star"
+        with qtbot.assertNotEmitted(model.registration_config_changed):
+            model.registration_method = "star"
+
+
+class TestPipelineModelStackingSameValue:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_sigma_low_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.stacking_sigma_low = 2.0
+        with qtbot.assertNotEmitted(model.stacking_config_changed):
+            model.stacking_sigma_low = 2.0
+
+    def test_sigma_high_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.stacking_sigma_high = 3.0
+        with qtbot.assertNotEmitted(model.stacking_config_changed):
+            model.stacking_sigma_high = 3.0
+
+
+class TestPipelineModelAnnotationSameValue:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_show_dso_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.annotation_config_changed):
+            model.annotation_show_dso = model.annotation_show_dso
+
+    def test_show_stars_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.annotation_config_changed):
+            model.annotation_show_stars = model.annotation_show_stars
+
+    def test_show_boundaries_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.annotation_config_changed):
+            model.annotation_show_boundaries = model.annotation_show_boundaries
+
+    def test_show_grid_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.assertNotEmitted(model.annotation_config_changed):
+            model.annotation_show_grid = model.annotation_show_grid
+
+
+class TestPipelineModelStarProcessingSameValue:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_star_min_area_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.star_min_area = 10
+        with qtbot.assertNotEmitted(model.star_processing_config_changed):
+            model.star_min_area = 10
+
+    def test_star_max_area_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.star_max_area = 500
+        with qtbot.assertNotEmitted(model.star_processing_config_changed):
+            model.star_max_area = 500
+
+    def test_star_mask_dilation_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.star_mask_dilation = 5
+        with qtbot.assertNotEmitted(model.star_processing_config_changed):
+            model.star_mask_dilation = 5
+
+    def test_star_reduce_factor_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.star_reduce_factor = 0.5
+        with qtbot.assertNotEmitted(model.star_processing_config_changed):
+            model.star_reduce_factor = 0.5
+
+
+class TestPipelineModelExportSameValue:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_output_filename_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        model.output_filename = "test_output"
+        with qtbot.assertNotEmitted(model.export_config_changed):
+            model.output_filename = "test_output"

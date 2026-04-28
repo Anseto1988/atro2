@@ -183,6 +183,42 @@ class TestActivationDialog:
         dialog._key_input.setText("ASTRO-NEW-KEY-HERE")
         assert dialog._error_label.isHidden()
 
+    def test_on_activate_emits_signal(self, dialog: ActivationDialog, qtbot) -> None:
+        dialog._key_input.setText("ASTRO-1234-5678-ABCD")
+        with qtbot.waitSignal(dialog.activation_requested, timeout=500) as blocker:
+            dialog._on_activate()
+        assert blocker.args == ["ASTRO-1234-5678-ABCD"]
+
+    def test_on_activate_calls_adapter(self, dialog: ActivationDialog, adapter) -> None:
+        dialog._key_input.setText("ASTRO-1234-5678-ABCD")
+        dialog._on_activate()
+        adapter.activate_async.assert_called_once_with("ASTRO-1234-5678-ABCD")
+
+    def test_on_activate_empty_key_no_emit(self, dialog: ActivationDialog, qtbot) -> None:
+        dialog._key_input.setText("")
+        with qtbot.assertNotEmitted(dialog.activation_requested):
+            dialog._on_activate()
+
+    def test_on_deactivate_hides_deactivate_btn(self, dialog: ActivationDialog, adapter) -> None:
+        adapter.is_activated = True
+        dialog._deactivate_btn.setVisible(True)
+        dialog._on_deactivate()
+        assert dialog._deactivate_btn.isHidden()
+
+    def test_on_deactivate_clears_key_input(self, dialog: ActivationDialog, adapter) -> None:
+        dialog._key_input.setText("ASTRO-1234-5678-ABCD")
+        dialog._on_deactivate()
+        assert dialog._key_input.text() == ""
+
+    def test_on_deactivate_disables_activate_btn(self, dialog: ActivationDialog, adapter) -> None:
+        dialog._key_input.setText("ASTRO-1234-5678-ABCD")
+        dialog._on_deactivate()
+        assert not dialog._activate_btn.isEnabled()
+
+    def test_on_deactivate_calls_adapter(self, dialog: ActivationDialog, adapter) -> None:
+        dialog._on_deactivate()
+        adapter.deactivate.assert_called_once()
+
 
 class TestUpgradeDialog:
     @pytest.fixture()

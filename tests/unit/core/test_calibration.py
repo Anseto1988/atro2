@@ -394,3 +394,15 @@ class TestSuggestCalibrationConfig:
         cfg = suggest_calibration_config(result)
         assert cfg.dark_frames == []
         assert cfg.flat_frames == []
+
+
+class TestBatchMatchResultEmptyCoverage:
+    """Cover lines 140 and 146: dark_coverage/flat_coverage return 0.0 when matches is empty."""
+
+    def test_dark_coverage_empty_matches_returns_zero(self) -> None:
+        result = BatchMatchResult(matches=[])
+        assert result.dark_coverage == 0.0
+
+    def test_flat_coverage_empty_matches_returns_zero(self) -> None:
+        result = BatchMatchResult(matches=[])
+        assert result.flat_coverage == 0.0

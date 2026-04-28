@@ -88,6 +88,14 @@ class TestAperturePhotometry:
         flux = ap.measure(img, 32.0, 32.0, radius=5.0)
         assert flux > 0
 
+    def test_estimate_fwhm_dark_stamp_returns_default(self):
+        """Cover line 66: peak <= 0 → return 3.0."""
+        ap = AperturePhotometry()
+        # All-zero image: after bg subtraction peak == 0 → returns 3.0
+        img = np.zeros((64, 64), dtype=np.float64)
+        fwhm = ap._estimate_fwhm(img, 32.0, 32.0)
+        assert fwhm == pytest.approx(3.0)
+
 
 class TestCalibration:
     def test_ridge_linear_fit(self):
@@ -169,6 +177,50 @@ class TestPipelineStep:
         result_ctx = step.execute(ctx)
         assert "photometry_result" not in result_ctx.metadata
 
+    def test_image_from_images_list(self):
+        """Cover line 58: image taken from context.images[0] when result is None."""
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        mock_engine.run.return_value = MagicMock(n_matched=0, r_squared=0.0)
+        ctx = PipelineContext()
+        ctx.images = [np.zeros((32, 32), dtype=np.float64)]
+        ctx.metadata["wcs_solution"] = _make_wcs()
+        step = PhotometryStep(engine=mock_engine, fail_silently=True)
+        result_ctx = step.execute(ctx)
+        mock_engine.run.assert_called_once()
+
+    def test_missing_image_raises_when_not_fail_silently(self):
+        """Cover line 65: raise RuntimeError when no image and fail_silently=False."""
+        ctx = PipelineContext()
+        ctx.metadata["wcs_solution"] = _make_wcs()
+        step = PhotometryStep(fail_silently=False)
+        with pytest.raises(RuntimeError, match="no image"):
+            step.execute(ctx)
+
+    def test_engine_exception_fail_silently(self):
+        """Cover lines 75-76: engine raises → logged, context returned unchanged."""
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        mock_engine.run.side_effect = RuntimeError("engine crash")
+        ctx = PipelineContext()
+        ctx.result = np.zeros((32, 32), dtype=np.float64)
+        ctx.metadata["wcs_solution"] = _make_wcs()
+        step = PhotometryStep(engine=mock_engine, fail_silently=True)
+        result_ctx = step.execute(ctx)
+        assert "photometry_result" not in result_ctx.metadata
+
+    def test_engine_exception_raises_when_not_fail_silently(self):
+        """Cover lines 77-78: engine raises → re-raised when fail_silently=False."""
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        mock_engine.run.side_effect = RuntimeError("engine crash")
+        ctx = PipelineContext()
+        ctx.result = np.zeros((32, 32), dtype=np.float64)
+        ctx.metadata["wcs_solution"] = _make_wcs()
+        step = PhotometryStep(engine=mock_engine, fail_silently=False)
+        with pytest.raises(RuntimeError, match="engine crash"):
+            step.execute(ctx)
+
 
 class TestPipelineStageEnum:
     def test_photometry_after_astrometry(self):
@@ -232,6 +284,26 @@ class TestCatalogClients:
             mock_client_cls.return_value.__enter__.return_value.get.side_effect = Exception("network")
             stars = client.query(180.0, 45.0, 0.5)
         assert stars == []
+
+    def test_gaia_query_raises_when_not_fail_silently(self):
+        """Cover line 48: GAIA exception re-raised when fail_silently=False."""
+        from astroai.engine.photometry.catalog import GAIACatalogClient
+
+        client = GAIACatalogClient(fail_silently=False)
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.get.side_effect = Exception("timeout")
+            with pytest.raises(Exception, match="timeout"):
+                client.query(180.0, 45.0, 0.5)
+
+    def test_aavso_query_raises_when_not_fail_silently(self):
+        """Cover line 80: AAVSO exception re-raised when fail_silently=False."""
+        from astroai.engine.photometry.catalog import AAVSOCatalogClient
+
+        client = AAVSOCatalogClient(fail_silently=False)
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.get.side_effect = Exception("network")
+            with pytest.raises(Exception, match="network"):
+                client.query(180.0, 45.0, 0.5)
 
 
 class TestPhotometryEngine:
@@ -363,6 +435,33 @@ class TestPhotometryEngine:
         result = engine.run(img, self._make_wcs())
 
         assert result.n_matched == 0
+
+    def test_match_stars_appends_close_matches(self):
+        """Cover line 153: _match_stars appends matched star when dist <= tolerance."""
+        from astroai.engine.photometry.engine import PhotometryEngine
+        from astroai.astrometry.catalog import WcsSolution
+
+        scale_deg = 1.0 / 3600.0
+        # crpix1=1, crpix2=1 so pixel (0,0) maps to catalog position (ra_center, dec_center)
+        wcs = WcsSolution(
+            ra_center=180.0, dec_center=45.0,
+            pixel_scale_arcsec=1.0, rotation_deg=0.0,
+            fov_width_deg=0.1, fov_height_deg=0.1,
+            cd_matrix=(scale_deg, 0.0, 0.0, scale_deg),
+            crpix1=1.0, crpix2=1.0,
+        )
+        # Detection at pixel (0, 0). The catalog star is at ra_center/dec_center
+        # => cat_dx=0, cat_dy=0 => cat_px=0+0=0, cat_py=0+0=0 → dist=0 <= 5 px
+        xs = np.array([0.0])
+        ys = np.array([0.0])
+        ras = np.array([180.0])
+        decs = np.array([45.0])
+        instr_mags = np.array([-9.0])
+        catalog_stars = [{"ra": 180.0, "dec": 45.0, "phot_g_mean_mag": 12.5}]
+        engine = PhotometryEngine()
+        matched = engine._match_stars(xs, ys, ras, decs, instr_mags, catalog_stars, wcs)
+        assert len(matched) == 1
+        assert matched[0]["catalog_mag"] == pytest.approx(12.5)
 
     def test_run_blank_image_returns_empty(self):
         from astroai.engine.photometry.engine import PhotometryEngine

@@ -215,6 +215,91 @@ class TestImageViewerMouse:
         loaded_viewer.mouseMoveEvent(move)
 
 
+class TestImageViewerExtra:
+    def test_set_image_data_3d_collapses_to_2d(self, viewer: ImageViewer) -> None:
+        data = np.random.rand(3, 200, 300).astype(np.float32)
+        viewer.set_image_data(data)
+        assert viewer._raw_data is not None
+        assert viewer._raw_data.ndim == 2
+
+    def test_clear_removes_data(self, viewer: ImageViewer) -> None:
+        viewer.set_image_data(np.random.rand(100, 100).astype(np.float32))
+        viewer.clear()
+        assert viewer._raw_data is None
+
+    def test_clear_empties_tile_cache(self, viewer: ImageViewer) -> None:
+        viewer.set_image_data(np.random.rand(100, 100).astype(np.float32))
+        viewer._render_tile(0, 0)
+        viewer.clear()
+        assert len(viewer._tile_cache) == 0
+
+    def test_render_full_qimage_returns_none_without_data(self, viewer: ImageViewer) -> None:
+        assert viewer.render_full_qimage() is None
+
+    def test_render_full_qimage_returns_qimage(self, viewer: ImageViewer) -> None:
+        viewer.set_image_data(np.random.rand(50, 80).astype(np.float32))
+        img = viewer.render_full_qimage()
+        assert img is not None
+        assert img.width() == 80
+        assert img.height() == 50
+
+    def test_render_full_qimage_uniform_data(self, viewer: ImageViewer) -> None:
+        viewer.set_image_data(np.ones((40, 40), dtype=np.float32))
+        img = viewer.render_full_qimage()
+        assert img is not None
+
+    def test_tile_cache_hit_returns_same_image(self, viewer: ImageViewer) -> None:
+        viewer.set_image_data(np.random.rand(100, 100).astype(np.float32))
+        first = viewer._render_tile(0, 0)
+        second = viewer._render_tile(0, 0)
+        assert first is second
+
+
+class TestImageViewerPaintForced:
+    """Uses show()+grab() to force synchronous paintEvent execution."""
+
+    @pytest.fixture()
+    def shown_viewer(self, qtbot) -> ImageViewer:
+        w = ImageViewer()
+        w.resize(400, 300)
+        qtbot.addWidget(w)
+        w.show()
+        return w
+
+    @pytest.fixture()
+    def shown_loaded(self, shown_viewer: ImageViewer) -> ImageViewer:
+        shown_viewer.set_image_data(np.random.rand(200, 300).astype(np.float32))
+        return shown_viewer
+
+    def test_grab_empty_no_crash(self, shown_viewer: ImageViewer) -> None:
+        shown_viewer.grab()
+
+    def test_grab_with_data(self, shown_loaded: ImageViewer) -> None:
+        shown_loaded.grab()
+
+    def test_grab_after_clear(self, shown_loaded: ImageViewer) -> None:
+        shown_loaded.clear()
+        shown_loaded.grab()
+
+    def test_grab_3d_data(self, shown_viewer: ImageViewer) -> None:
+        shown_viewer.set_image_data(np.random.rand(3, 50, 80).astype(np.float32))
+        shown_viewer.grab()
+
+    def test_grab_uses_tile_cache_on_second_paint(self, shown_loaded: ImageViewer) -> None:
+        shown_loaded.grab()
+        cache_size_after_first = len(shown_loaded._tile_cache)
+        shown_loaded.grab()
+        assert len(shown_loaded._tile_cache) == cache_size_after_first
+
+    def test_grab_high_zoom_single_tile(self, shown_loaded: ImageViewer) -> None:
+        shown_loaded.set_zoom(0.1)
+        shown_loaded.grab()
+
+    def test_grab_zoomed_out(self, shown_loaded: ImageViewer) -> None:
+        shown_loaded.set_zoom(0.5)
+        shown_loaded.grab()
+
+
 class TestImageViewerWheel:
     def test_wheel_zoom_in(self, loaded_viewer: ImageViewer) -> None:
         old = loaded_viewer.zoom_level

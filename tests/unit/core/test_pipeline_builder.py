@@ -7,13 +7,17 @@ import pytest
 
 from astroai.core.pipeline.base import PipelineStage
 from astroai.core.pipeline.builder import PipelineBuilder
+from astroai.core.pipeline.comet_stack_step import CometStackStep
 from astroai.core.pipeline.export_step import ExportFormat, ExportStep
 from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+from astroai.engine.drizzle.pipeline_step import DrizzleStep
+from astroai.engine.mosaic.pipeline_step import MosaicStep
 from astroai.engine.registration.pipeline_step import RegistrationStep
 from astroai.engine.stacking.pipeline_step import StackingStep
 from astroai.processing.background.pipeline_step import BackgroundRemovalStep
 from astroai.processing.channels.pipeline_step import ChannelCombineStep, CombineMode
 from astroai.processing.color.pipeline_step import ColorCalibrationStep
+from astroai.processing.curves.pipeline_step import CurvesStep
 from astroai.processing.deconvolution.pipeline_step import DeconvolutionStep
 from astroai.processing.denoise.pipeline_step import DenoiseStep
 from astroai.processing.flat.pipeline_step import SyntheticFlatStep
@@ -445,3 +449,68 @@ class TestBuildFullPipeline:
         model.frame_selection_enabled = True
         pipeline = builder.build_full_pipeline(model, [])
         assert any(isinstance(s, FrameSelectionStep) for s in pipeline._steps)
+
+
+class TestBuildProcessingPipelineOptional:
+    """Cover optional steps not enabled in default PipelineModel."""
+
+    def test_drizzle_included_when_enabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.drizzle_enabled = True
+        pipeline = builder.build_processing_pipeline(model)
+        assert any(isinstance(s, DrizzleStep) for s in pipeline._steps)
+
+    def test_drizzle_not_included_when_disabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        pipeline = builder.build_processing_pipeline(model)
+        assert not any(isinstance(s, DrizzleStep) for s in pipeline._steps)
+
+    def test_mosaic_included_when_enabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.mosaic_enabled = True
+        pipeline = builder.build_processing_pipeline(model)
+        assert any(isinstance(s, MosaicStep) for s in pipeline._steps)
+
+    def test_mosaic_not_included_when_disabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        pipeline = builder.build_processing_pipeline(model)
+        assert not any(isinstance(s, MosaicStep) for s in pipeline._steps)
+
+    def test_comet_stack_included_when_enabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.comet_stack_enabled = True
+        pipeline = builder.build_processing_pipeline(model)
+        assert any(isinstance(s, CometStackStep) for s in pipeline._steps)
+
+    def test_comet_stack_not_included_when_disabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        pipeline = builder.build_processing_pipeline(model)
+        assert not any(isinstance(s, CometStackStep) for s in pipeline._steps)
+
+    def test_comet_tracking_mode_resolved(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.comet_stack_enabled = True
+        model.comet_tracking_mode = "stars"
+        pipeline = builder.build_processing_pipeline(model)
+        step = next(s for s in pipeline._steps if isinstance(s, CometStackStep))
+        assert step._tracking_mode == "stars"
+
+    def test_curves_included_when_enabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.curves_enabled = True
+        pipeline = builder.build_processing_pipeline(model)
+        assert any(isinstance(s, CurvesStep) for s in pipeline._steps)
+
+    def test_curves_not_included_when_disabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        pipeline = builder.build_processing_pipeline(model)
+        assert not any(isinstance(s, CurvesStep) for s in pipeline._steps)

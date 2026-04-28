@@ -1,4 +1,4 @@
-"""Image statistics dock widget — per-channel mean, std, min, max."""
+"""Image statistics dock widget — per-channel mean, median, std, SNR, min, max."""
 from __future__ import annotations
 
 import numpy as np
@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem, QVBox
 
 __all__ = ["ImageStatsWidget"]
 
-_HEADERS = ["Kanal", "Mittel", "Std", "Min", "Max"]
+_HEADERS = ["Kanal", "Mittel", "Median", "Std", "SNR", "Min", "Max"]
 _PLACEHOLDER = "—"
 _CHANNEL_LABELS_COLOR = ["R", "G", "B"]
 _CHANNEL_LABEL_MONO = "L"
@@ -15,6 +15,14 @@ _CHANNEL_LABEL_MONO = "L"
 
 def _fmt(value: float) -> str:
     return f"{value:.4f}"
+
+
+def _snr(ch: np.ndarray) -> str:
+    """Estimate signal-to-noise ratio as mean / std (higher is better)."""
+    std = float(np.std(ch))
+    if std < 1e-8:
+        return _PLACEHOLDER
+    return f"{float(np.mean(ch)) / std:.1f}"
 
 
 class ImageStatsWidget(QWidget):
@@ -52,9 +60,11 @@ class ImageStatsWidget(QWidget):
         for row, (label, ch) in enumerate(channels):
             self._set_item(row, 0, label)
             self._set_item(row, 1, _fmt(float(np.mean(ch))))
-            self._set_item(row, 2, _fmt(float(np.std(ch))))
-            self._set_item(row, 3, _fmt(float(np.min(ch))))
-            self._set_item(row, 4, _fmt(float(np.max(ch))))
+            self._set_item(row, 2, _fmt(float(np.median(ch))))
+            self._set_item(row, 3, _fmt(float(np.std(ch))))
+            self._set_item(row, 4, _snr(ch))
+            self._set_item(row, 5, _fmt(float(np.min(ch))))
+            self._set_item(row, 6, _fmt(float(np.max(ch))))
 
     def clear(self) -> None:
         self._table.setRowCount(1)

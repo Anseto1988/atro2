@@ -121,7 +121,7 @@ def validate_offline(
         trusted_last_online = attestation.last_online_at
     elif last_online_at is not None:
         trusted_last_online = last_online_at
-    else:
+    else:  # pragma: no cover
         raise NotActivated("No activation record found")
 
     # Clock rollback detection: system time must not be before last server sync

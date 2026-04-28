@@ -325,3 +325,89 @@ class TestSplitCompareViewMouseAndKey:
         tile1 = view._get_tile(view._before, view._before_cache, 0, 0)
         tile2 = view._get_tile(view._before, view._before_cache, 0, 0)
         assert tile1 is tile2  # same object from cache
+
+    def test_right_press_does_not_start_drag(self, view: SplitCompareView) -> None:
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QMouseEvent
+        pos = QPointF(200, 150)
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress, pos, pos,
+            Qt.MouseButton.RightButton, Qt.MouseButton.RightButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        view.mousePressEvent(event)
+        assert not view._pan_drag
+        assert not view._split_drag
+
+    def test_left_press_near_split_starts_split_drag(self, view: SplitCompareView) -> None:
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QMouseEvent
+        center_x = view.width() * view._split
+        pos = QPointF(center_x, 150)
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress, pos, pos,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        view.mousePressEvent(event)
+        assert view._split_drag
+
+    def test_mouse_move_split_drag_updates_split(self, view: SplitCompareView) -> None:
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QMouseEvent
+        view._split_drag = True
+        new_x = view.width() * 0.3
+        pos = QPointF(new_x, 150)
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseMove, pos, pos,
+            Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        view.mouseMoveEvent(event)
+        assert view._split == pytest.approx(0.3, abs=0.01)
+
+    def test_mouse_move_pan_drag_updates_offset(self, view: SplitCompareView, gray2d: np.ndarray) -> None:
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QMouseEvent
+        view.set_before(gray2d)
+        view._pan_drag = True
+        view._drag_start = QPointF(100, 100)
+        old_offset = QPointF(view._offset)
+        pos = QPointF(120, 110)
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseMove, pos, pos,
+            Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        view.mouseMoveEvent(event)
+        assert view._offset != old_offset
+
+    def test_mouse_move_hover_near_split_sets_cursor(self, view: SplitCompareView) -> None:
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QMouseEvent
+        center_x = view.width() * view._split
+        pos = QPointF(center_x, 150)
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseMove, pos, pos,
+            Qt.MouseButton.NoButton, Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        view.mouseMoveEvent(event)  # no crash
+
+    def test_mouse_move_hover_away_from_split(self, view: SplitCompareView) -> None:
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QMouseEvent
+        pos = QPointF(0, 150)
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseMove, pos, pos,
+            Qt.MouseButton.NoButton, Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        view.mouseMoveEvent(event)  # no crash
+
+    def test_unhandled_key_no_crash(self, view: SplitCompareView) -> None:
+        from PySide6.QtGui import QKeyEvent
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_A, Qt.KeyboardModifier.NoModifier
+        )
+        view.keyPressEvent(event)  # no crash
