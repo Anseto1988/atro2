@@ -309,6 +309,84 @@ class TestExtractArchive:
         assert (dest / "astap.bin").exists()
 
 
+class TestGetAstapPathUserAndSystem:
+    def test_user_dir_binary_used(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_astap_path returns user-dir binary when bundled is missing (line 131)."""
+        key = _detect_platform_key()
+        ext = ".exe" if platform.system() == "Windows" else ""
+        user_dir = tmp_path / "user"
+        binary_dir = user_dir / key
+        binary_dir.mkdir(parents=True)
+        binary = binary_dir / f"astap{ext}"
+        binary.write_bytes(b"fake")
+        if platform.system() != "Windows":
+            binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+
+        monkeypatch.setattr("astroai.engine.platesolving.astap_binary._BUNDLED_DIR", tmp_path / "empty")
+        monkeypatch.setattr("astroai.engine.platesolving.astap_binary._USER_DIR", user_dir)
+        monkeypatch.delenv("ASTAP_BINARY_PATH", raising=False)
+        assert get_astap_path() == binary
+
+    def test_system_path_binary_used(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_astap_path falls through to shutil.which when bundled and user are missing (line 135)."""
+        fake_bin = tmp_path / "astap_fake"
+        monkeypatch.setattr("astroai.engine.platesolving.astap_binary._BUNDLED_DIR", tmp_path / "empty1")
+        monkeypatch.setattr("astroai.engine.platesolving.astap_binary._USER_DIR", tmp_path / "empty2")
+        monkeypatch.delenv("ASTAP_BINARY_PATH", raising=False)
+
+        with patch("astroai.engine.platesolving.astap_binary.shutil.which", return_value=str(fake_bin)):
+            result = get_astap_path()
+        assert result == fake_bin
+
+
+class TestIsExecutableUnix:
+    @patch("platform.system", return_value="Linux")
+    @patch("astroai.engine.platesolving.astap_binary.os.access", return_value=False)
+    def test_non_executable_file_returns_false(self, _acc: object, _sys: object, tmp_path: Path) -> None:
+        """On non-Windows, os.access=False → not executable (line 113)."""
+        f = tmp_path / "bin"
+        f.write_bytes(b"data")
+        assert _is_executable(f) is False
+
+    @patch("platform.system", return_value="Linux")
+    @patch("astroai.engine.platesolving.astap_binary.os.access", return_value=True)
+    def test_executable_file_returns_true(self, _acc: object, _sys: object, tmp_path: Path) -> None:
+        f = tmp_path / "bin"
+        f.write_bytes(b"data")
+        assert _is_executable(f) is True
+
+
+class TestMakeExecutableNonWindows:
+    @patch("platform.system", return_value="Linux")
+    def test_sets_execute_bits(self, _: object, tmp_path: Path) -> None:
+        """On non-Windows, _make_executable adds exec bits (lines 172-173)."""
+        from astroai.engine.platesolving.astap_binary import _make_executable
+        f = tmp_path / "binary"
+        f.write_bytes(b"\x00")
+        f.chmod(0o600)  # no exec bit
+        _make_executable(f)
+        assert os.access(f, os.X_OK)
+
+
+class TestFindInPathWindowsExeFallback:
+    @patch("platform.system", return_value="Windows")
+    @patch("platform.machine", return_value="AMD64")
+    def test_windows_exe_fallback(self, _m: object, _s: object) -> None:
+        """When astap.exe not in PATH but 'astap' is, use it (line 94)."""
+        from astroai.engine.platesolving.astap_binary import _find_in_path
+
+        def _mock_which(name: str) -> str | None:
+            if name == "astap.exe":
+                return None
+            if name == "astap":
+                return "/usr/local/bin/astap"
+            return None
+
+        with patch("astroai.engine.platesolving.astap_binary.shutil.which", side_effect=_mock_which):
+            result = _find_in_path()
+        assert result == Path("/usr/local/bin/astap")
+
+
 class TestDownloadAstap:
     def test_download_skips_if_already_present(self, tmp_path: Path) -> None:
         from astroai.engine.platesolving.astap_binary import download_astap, _get_spec

@@ -83,3 +83,37 @@ class TestKeyProtectionFallback:
         s1 = LicenseStore(base_dir=store_dir)
         s2 = LicenseStore(base_dir=store_dir)
         assert s1._key == s2._key
+
+
+class TestIncrementStartCounter:
+    def test_increment_no_data_raises(self, store: LicenseStore) -> None:
+        with pytest.raises(LicenseError, match="No license data"):
+            store.increment_start_counter()
+
+    def test_increment_increases_counter(self, store: LicenseStore) -> None:
+        ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        store.save("tok", ts)
+        assert store.increment_start_counter() == 1
+        assert store.increment_start_counter() == 2
+
+    def test_load_naive_datetime_adds_utc(self, store: LicenseStore, store_dir: Path) -> None:
+        """Timestamps stored without tzinfo are auto-assigned UTC on load (line 140)."""
+        import json
+        from cryptography.fernet import Fernet
+
+        # Build a payload with naive datetime (no +00:00)
+        key = store._key
+        f = Fernet(key)
+        payload = json.dumps({
+            "token": "raw_tok",
+            "last_online_at": "2026-03-15T10:00:00",  # naive
+            "machine_id": "any",
+            "attestation": None,
+            "start_counter": 0,
+        }).encode()
+        store._file.write_bytes(f.encrypt(payload))
+
+        result = store.load()
+        assert result is not None
+        _, ts, _, _ = result
+        assert ts.tzinfo is not None

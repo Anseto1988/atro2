@@ -124,3 +124,44 @@ class TestCalibrateFrame:
         result = calibrate_frame(light, _meta(), CalibrationLibrary.empty())
         np.testing.assert_array_equal(result, light)
         assert result is not light
+
+
+class TestMatcherEdgeCases:
+    def test_temperature_large_delta_penalises(self) -> None:
+        """Temperature delta >= 2.0 deducts score (line 75 coverage)."""
+        light = _meta(exposure=120.0, gain_iso=800, temperature=20.0)
+        # Dark at -10 → delta=30 → penalty
+        cold_dark = CalibrationFrame(Path("cold.fits"), _meta(exposure=120.0, gain_iso=800, temperature=-10.0))
+        # Dark with no temperature set → no temperature penalty
+        no_temp_dark = CalibrationFrame(
+            Path("notemp.fits"),
+            ImageMetadata(exposure=120.0, gain_iso=800, temperature=None, width=100, height=100),
+        )
+        lib = CalibrationLibrary(darks=[cold_dark, no_temp_dark], flats=[], bias=[])
+        best = find_best_dark(light, lib)
+        assert best is not None
+        assert best.path == Path("notemp.fits")
+
+    def test_from_config_empty_config_produces_empty_library(self) -> None:
+        """from_config with config that has no paths returns empty CalibrationLibrary."""
+
+        class _Cfg:
+            dark_frames: list[str] = []
+            flat_frames: list[str] = []
+            bias_frames: list[str] = []
+
+        lib = CalibrationLibrary.from_config(_Cfg())
+        assert lib.darks == []
+        assert lib.flats == []
+        assert lib.bias == []
+
+    def test_from_config_skips_nonexistent_files(self, tmp_path: "Path") -> None:
+        """from_config silently skips missing FITS paths."""
+
+        class _Cfg:
+            dark_frames = [str(tmp_path / "nope.fits")]
+            flat_frames: list[str] = []
+            bias_frames: list[str] = []
+
+        lib = CalibrationLibrary.from_config(_Cfg())
+        assert lib.darks == []
