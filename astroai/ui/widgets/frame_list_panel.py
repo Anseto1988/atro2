@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import QPoint, QUrl, Qt, Signal, Slot
-from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PySide6.QtGui import QAction, QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGroupBox,

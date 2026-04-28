@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import rawpy
 
 import numpy as np
-import rawpy
 from numpy.typing import NDArray
 
 from astroai.core.io.fits_io import ImageMetadata
@@ -12,7 +14,7 @@ from astroai.core.io.fits_io import ImageMetadata
 RAW_EXTENSIONS = frozenset({".cr2", ".cr3", ".nef", ".arw", ".dng", ".orf", ".rw2"})
 
 
-def _extract_raw_metadata(raw: rawpy.RawPy, path: Path) -> ImageMetadata:
+def _extract_raw_metadata(raw: Any, path: Path) -> ImageMetadata:
     sizes = raw.sizes
     height = sizes.height
     width = sizes.width
@@ -54,14 +56,16 @@ def _extract_raw_metadata(raw: rawpy.RawPy, path: Path) -> ImageMetadata:
 
 def read_raw_metadata(path: str | Path) -> ImageMetadata:
     """Return only EXIF/RAW metadata without postprocessing the image."""
+    import rawpy as _rawpy
     path = Path(path)
-    with rawpy.imread(str(path)) as raw:
+    with _rawpy.imread(str(path)) as raw:
         return _extract_raw_metadata(raw, path)
 
 
 def read_raw(path: str | Path) -> tuple[NDArray[np.floating[Any]], ImageMetadata]:
+    import rawpy as _rawpy
     path = Path(path)
-    with rawpy.imread(str(path)) as raw:
+    with _rawpy.imread(str(path)) as raw:
         metadata = _extract_raw_metadata(raw, path)
         rgb: NDArray[np.floating[Any]] = raw.postprocess(
             output_bps=16,

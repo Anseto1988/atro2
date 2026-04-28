@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import torch
 import pytest
 
 
 def _probe_gpu() -> bool:
-    """Check if a GPU device is actually usable (not just reported as available)."""
+    try:
+        import torch
+    except Exception:
+        return False
     for device_str in ("cuda", "mps"):
         if device_str == "cuda" and not torch.cuda.is_available():
             continue

@@ -19,7 +19,6 @@ def _get_raw_io(monkeypatch: pytest.MonkeyPatch):
     import importlib
     from astroai.core.io import raw_io as mod
 
-    monkeypatch.setattr(mod, "rawpy", mock_rawpy)
     return mod, mock_rawpy
 
 

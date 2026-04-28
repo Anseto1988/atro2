@@ -1029,3 +1029,335 @@ class TestCalibStatusLabel:
         win._project.calibration.flat_frames = []
         win._refresh_calib_status()
         assert "—" in win._calib_status_label.text()
+
+
+class TestFramesDroppedAndPreview:
+    def test_frames_dropped_adds_to_project(self, win: MainWindow, tmp_path: Path) -> None:
+        f = tmp_path / "star.fits"
+        f.write_bytes(b"")
+        win._on_frames_dropped([str(f)])
+        assert any(str(f) == e.path for e in win._project.input_frames)
+
+    def test_frames_dropped_no_duplicate(self, win: MainWindow, tmp_path: Path) -> None:
+        f = tmp_path / "star.fits"
+        f.write_bytes(b"")
+        win._on_frames_dropped([str(f)])
+        win._on_frames_dropped([str(f)])
+        assert len(win._project.input_frames) == 1
+
+    def test_frames_dropped_updates_status(self, win: MainWindow, tmp_path: Path) -> None:
+        f = tmp_path / "a.fits"
+        f.write_bytes(b"")
+        win._on_frames_dropped([str(f)])
+        assert "Light-Frame" in win._status_bar.currentMessage()
+
+    def test_frame_preview_requested_starts_load(
+        self, win: MainWindow, tmp_path: Path
+    ) -> None:
+        from PIL import Image
+        f = tmp_path / "prev.png"
+        import numpy as np
+        Image.fromarray(np.zeros((8, 8), dtype=np.uint8), mode="L").save(f)
+        win._on_frame_preview_requested(str(f))
+
+
+class TestMaybeDiscardChanges:
+    def test_save_path_calls_save(self, win: MainWindow, tmp_path: Path, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        win._project.touch()
+        saved = []
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            lambda *a, **kw: QMessageBox.StandardButton.Save,
+        )
+        monkeypatch.setattr(win, "_on_save_project", lambda: saved.append(True))
+        result = win._maybe_discard_changes()
+        assert result
+        assert saved
+
+    def test_discard_path_returns_true(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        win._project.touch()
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            lambda *a, **kw: QMessageBox.StandardButton.Discard,
+        )
+        assert win._maybe_discard_changes()
+
+    def test_cancel_path_returns_false(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        win._project.touch()
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            lambda *a, **kw: QMessageBox.StandardButton.Cancel,
+        )
+        assert not win._maybe_discard_changes()
+
+
+class TestExportFrameStats:
+    def test_cancelled_dialog_no_crash(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **kw: ("", ""))
+        win._on_export_frame_stats()
+
+    def test_export_writes_csv(self, win: MainWindow, tmp_path: Path, monkeypatch) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        from astroai.project.project_file import FrameEntry
+        dest = str(tmp_path / "stats.csv")
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **kw: (dest, ""))
+        win._project.input_frames = [FrameEntry(path="/a.fits"), FrameEntry(path="/b.fits")]
+        win._on_export_frame_stats()
+        assert (tmp_path / "stats.csv").exists()
+        assert "stats.csv" in win._status_bar.currentMessage()
+
+
+class TestSyncAnnotation:
+    def test_sync_annotation_updates_panel(self, win: MainWindow) -> None:
+        win._pipeline.annotation_show_dso = True
+        win._pipeline.annotation_show_stars = False
+        win._sync_annotation_from_model()
+        assert win._annotation_panel._dso_cb.isChecked()
+        assert not win._annotation_panel._stars_cb.isChecked()
+
+    def test_sync_annotation_grid(self, win: MainWindow) -> None:
+        win._pipeline.annotation_show_grid = True
+        win._pipeline.annotation_show_boundaries = False
+        win._sync_annotation_from_model()
+        assert win._annotation_panel._grid_cb.isChecked()
+        assert not win._annotation_panel._boundaries_cb.isChecked()
+
+
+class TestRebuildPresetMenu:
+    def test_empty_presets_shows_placeholder(self, win: MainWindow, monkeypatch) -> None:
+        monkeypatch.setattr(win._preset_manager, "list_names", lambda: [])
+        win._rebuild_preset_menu()
+        actions = win._preset_menu.actions()
+        assert any(not a.isEnabled() for a in actions)
+
+    def test_with_preset_shows_action(self, win: MainWindow) -> None:
+        from astroai.core.pipeline.presets import PipelinePreset
+        p = PipelinePreset(name="TestP", config={})
+        win._preset_manager.save(p)
+        win._rebuild_preset_menu()
+        names = [a.text() for a in win._preset_menu.actions() if a.isEnabled()]
+        assert "TestP" in names
+
+
+class TestSaveAndLoadPreset:
+    def test_save_preset_with_name(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        monkeypatch.setattr(QInputDialog, "getText", lambda *a, **kw: ("MyPreset", True))
+        win._on_save_preset()
+        assert "MyPreset" in win._preset_manager.list_names()
+
+    def test_save_preset_cancelled_no_save(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        before = len(win._preset_manager.list_names())
+        monkeypatch.setattr(QInputDialog, "getText", lambda *a, **kw: ("", False))
+        win._on_save_preset()
+        assert len(win._preset_manager.list_names()) == before
+
+    def test_load_preset_applies(self, win: MainWindow) -> None:
+        from astroai.core.pipeline.presets import PipelinePreset
+        p = PipelinePreset(name="LP", config={})
+        win._preset_manager.save(p)
+        win._on_load_preset("LP")
+        assert "LP" in win._status_bar.currentMessage()
+
+    def test_load_preset_missing_shows_warning(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **kw: shown.append(True))
+        win._on_load_preset("DoesNotExist")
+        assert shown
+
+
+class TestShowProjectSummary:
+    def test_shows_info_dialog(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        shown = []
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **kw: shown.append(True))
+        win._on_show_project_summary()
+        assert shown
+
+    def test_no_crash_with_empty_project(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **kw: None)
+        win._on_show_project_summary()
+
+
+class TestFitToView:
+    def test_fit_to_view_on_viewer(self, win: MainWindow) -> None:
+        win._view_stack.setCurrentIndex(0)
+        win._on_fit_to_view()
+
+    def test_fit_to_view_on_compare(self, win: MainWindow) -> None:
+        import numpy as np
+        arr = np.random.rand(64, 64).astype(np.float32)
+        win._compare_view.set_before(arr)
+        win._view_stack.setCurrentIndex(1)
+        win._on_fit_to_view()
+
+
+class TestShowShortcuts:
+    def test_shows_shortcuts_dialog(self, win: MainWindow, qtbot) -> None:
+        win._on_show_shortcuts()
+
+
+class TestRunPipeline:
+    def test_run_no_image_returns_early(self, win: MainWindow) -> None:
+        win._on_run_pipeline()
+
+    def test_run_already_running_returns_early(self, win: MainWindow, monkeypatch) -> None:
+        import numpy as np
+        from astroai.core.pipeline.runner import PipelineWorker
+        monkeypatch.setattr(PipelineWorker, "is_running", property(lambda self: True))
+        win._current_image = np.zeros((8, 8), dtype=np.float32)
+        win._on_run_pipeline()
+
+    def test_run_with_image_starts_worker(self, win: MainWindow, monkeypatch) -> None:
+        import numpy as np
+        started = []
+        monkeypatch.setattr(win._pipeline_worker, "start", lambda *a: started.append(True))
+        win._current_image = np.zeros((8, 8), dtype=np.float32)
+        win._on_run_pipeline()
+        assert started
+
+
+class TestValidateBeforeRun:
+    def test_validate_passes_with_clean_project(self, win: MainWindow) -> None:
+        from astroai.project.validator import ValidationResult
+        with patch("astroai.project.validator.validate_project", return_value=ValidationResult()):
+            assert win._validate_before_run()
+
+    def test_validate_fails_shows_warning(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        from astroai.project.validator import ValidationResult, ValidationIssue
+        bad = ValidationResult(issues=[ValidationIssue(level="error", code="E1", message="Bad")])
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **kw: shown.append(True))
+        with patch("astroai.project.validator.validate_project", return_value=bad):
+            result = win._validate_before_run()
+        assert not result
+        assert shown
+
+
+class TestRunFullPipeline:
+    def test_no_frames_shows_message(self, win: MainWindow) -> None:
+        from astroai.project.validator import ValidationResult
+        win._project.input_frames = []
+        with patch("astroai.project.validator.validate_project", return_value=ValidationResult()):
+            win._on_run_full_pipeline()
+        assert "keine" in win._status_bar.currentMessage().lower()
+
+    def test_already_running_returns_early(self, win: MainWindow, monkeypatch) -> None:
+        from astroai.core.pipeline.runner import PipelineWorker
+        monkeypatch.setattr(PipelineWorker, "is_running", property(lambda self: True))
+        win._on_run_full_pipeline()
+
+    def test_starts_with_selected_frames(self, win: MainWindow, tmp_path: Path, monkeypatch) -> None:
+        from astroai.project.validator import ValidationResult
+        from astroai.project.project_file import FrameEntry
+        f = tmp_path / "img.fits"
+        f.write_bytes(b"")
+        win._project.input_frames = [FrameEntry(path=str(f), selected=True)]
+        started = []
+        monkeypatch.setattr(win._pipeline_worker, "start", lambda *a: started.append(True))
+        with patch("astroai.project.validator.validate_project", return_value=ValidationResult()):
+            win._on_run_full_pipeline()
+        assert started
+
+    def test_starts_with_output_path(self, win: MainWindow, tmp_path: Path, monkeypatch) -> None:
+        from astroai.project.validator import ValidationResult
+        from astroai.project.project_file import FrameEntry
+        f = tmp_path / "img.fits"
+        f.write_bytes(b"")
+        win._project.input_frames = [FrameEntry(path=str(f), selected=True)]
+        win._pipeline.output_path = str(tmp_path)
+        win._pipeline.output_filename = "result.fits"
+        started = []
+        monkeypatch.setattr(win._pipeline_worker, "start", lambda *a: started.append(True))
+        with patch("astroai.project.validator.validate_project", return_value=ValidationResult()):
+            win._on_run_full_pipeline()
+        assert started
+
+
+class TestPipelineSignalHandlers:
+    def test_pipeline_progress_updates_progress_widget(self, win: MainWindow) -> None:
+        win._on_pipeline_progress(0.5, "Hälfte")
+        assert win._progress._bar.value() == 500
+
+    def test_pipeline_stage_active_known_stage(self, win: MainWindow) -> None:
+        from astroai.core.pipeline.base import PipelineStage
+        stage_name = PipelineStage.CALIBRATION.name
+        win._on_pipeline_stage_active(stage_name)
+
+    def test_pipeline_stage_active_unknown_stage(self, win: MainWindow) -> None:
+        win._on_pipeline_stage_active("NONEXISTENT_STAGE")
+
+    def test_cancel_pipeline_disables_cancel_act(self, win: MainWindow) -> None:
+        win._cancel_act.setEnabled(True)
+        win._on_cancel_pipeline()
+        assert not win._cancel_act.isEnabled()
+
+    def test_pipeline_cancelled_resets_progress(self, win: MainWindow) -> None:
+        win._on_pipeline_cancelled()
+        assert win._run_act.isEnabled()
+
+    def test_pipeline_error_shows_in_status(self, win: MainWindow) -> None:
+        win._on_pipeline_error("Test-Fehler")
+        assert "Test-Fehler" in win._status_bar.currentMessage()
+
+    def test_pipeline_error_with_active_step_sets_error_state(self, win: MainWindow) -> None:
+        from astroai.ui.models import StepState
+        # Force a step to be active so the branch at line 1618 is taken
+        if win._pipeline.steps:
+            win._pipeline.steps[0].state = StepState.ACTIVE
+        win._on_pipeline_error("step fail")
+
+    def test_pipeline_finished_with_result_updates_viewer(self, win: MainWindow) -> None:
+        import numpy as np
+        from astroai.core.pipeline.base import PipelineContext
+        ctx = PipelineContext()
+        ctx.result = np.zeros((16, 16), dtype=np.float32)
+        win._on_pipeline_finished(ctx)
+        assert win._current_image is ctx.result
+
+    def test_pipeline_finished_no_result_no_crash(self, win: MainWindow) -> None:
+        from astroai.core.pipeline.base import PipelineContext
+        ctx = PipelineContext()
+        ctx.result = None
+        win._on_pipeline_finished(ctx)
+
+    def test_pipeline_finished_updates_frame_scores(self, win: MainWindow) -> None:
+        import numpy as np
+        from astroai.core.pipeline.base import PipelineContext
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [FrameEntry(path="/a.fits")]
+        ctx = PipelineContext()
+        ctx.result = np.zeros((8, 8), dtype=np.float32)
+        ctx.metadata["frame_scores"] = [0.9]
+        win._on_pipeline_finished(ctx)
+        assert win._project.input_frames[0].quality_score == pytest.approx(0.9)
+
+
+class TestAutoCalibMatch:
+    def test_cancelled_directory_returns_early(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **kw: "")
+        win._on_auto_match_calibration()
+
+    def test_empty_library_shows_info(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from unittest.mock import MagicMock
+        monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **kw: "/some/dir")
+        mock_lib = MagicMock()
+        mock_lib.darks = []
+        mock_lib.flats = []
+        mock_lib.bias = []
+        shown = []
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **kw: shown.append(True))
+        with patch("astroai.core.calibration.scanner.scan_directory", return_value=[]):
+            with patch("astroai.core.calibration.scanner.build_calibration_library", return_value=mock_lib):
+                win._on_auto_match_calibration()
+        assert shown
