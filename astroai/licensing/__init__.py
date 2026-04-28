@@ -48,10 +48,10 @@ class LicenseManager:
 
     def activate(self, license_key: str, app_version: str) -> LicenseToken:
         """Activate a license key on this machine."""
-        raw_jwt, _attestation = self._client.activate(license_key, app_version)
+        raw_jwt, attestation = self._client.activate(license_key, app_version)
         token = decode_token(raw_jwt, self._public_key)
         now = datetime.now(timezone.utc)
-        self._store.save(raw_jwt, now)
+        self._store.save(raw_jwt, now, attestation_raw=attestation)
         logger.info("License activated: tier=%s, expires=%s", token.tier.value, token.exp)
         return token
 
@@ -67,14 +67,14 @@ class LicenseManager:
         if stored is None:
             raise NotActivated("No license found — please activate first")
 
-        raw_jwt, last_online_at, *_ = stored
+        raw_jwt, last_online_at, attestation_raw, start_counter = stored
         now = datetime.now(timezone.utc)
 
         # Attempt online refresh
         try:
-            new_jwt, _attestation = self._client.refresh(raw_jwt)
+            new_jwt, new_attestation = self._client.refresh(raw_jwt)
             token = decode_token(new_jwt, self._public_key)
-            self._store.save(new_jwt, now)
+            self._store.save(new_jwt, now, attestation_raw=new_attestation, start_counter=0)
             logger.debug("License refreshed online")
             return LicenseStatus(
                 token=token,
@@ -87,7 +87,11 @@ class LicenseManager:
             logger.debug("Online refresh failed, checking grace period")
 
         # Offline validation with grace period
-        token = validate_offline(raw_jwt, last_online_at, self._public_key, now)
+        token = validate_offline(
+            raw_jwt, last_online_at, self._public_key, now,
+            raw_attestation=attestation_raw, start_counter=start_counter,
+        )
+        self._store.increment_start_counter()
         days_offline = (now - last_online_at).days
         grace_remaining = max(0, GRACE_PERIOD_DAYS - days_offline)
 
