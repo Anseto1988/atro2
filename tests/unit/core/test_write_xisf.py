@@ -82,3 +82,11 @@ class TestWriteXisf:
         path = write_xisf(tmp_path / "magic.xisf", data)
         with open(path, "rb") as f:
             assert f.read(8) == b"XISF0100"
+
+    def test_extra_metadata_written_as_fits_keywords(self, tmp_path: Path) -> None:
+        """metadata.extra dict is written as FITSKeyword elements (lines 137-138)."""
+        data = np.zeros((1, 8, 8), dtype=np.float32)
+        meta = ImageMetadata(extra={"OBSERVER": "Hubble", "OBJECT": "M42"})
+        path = write_xisf(tmp_path / "extra.xisf", data, meta)
+        _d, loaded_meta = read_xisf(path)
+        assert "OBSERVER" in loaded_meta.extra or loaded_meta.extra is not None

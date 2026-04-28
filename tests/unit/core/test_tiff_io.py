@@ -92,3 +92,35 @@ class TestReadTiff:
         loaded, meta = read_tiff(path)
         assert loaded.dtype == np.float32
         assert loaded.ndim == 3  # CHW after transpose
+
+    def test_read_pil_rgb_uint8_tiff(self, tmp_path: Path) -> None:
+        """PIL RGB uint8 TIFF is read via the elif img.mode=='RGB' branch (lines 75-77)."""
+        from PIL import Image as PILImage
+        rgb = np.full((20, 30, 3), 128, dtype=np.uint8)
+        img = PILImage.fromarray(rgb, mode="RGB")
+        path = tmp_path / "rgb_u8.tif"
+        img.save(str(path), format="TIFF")
+        loaded, meta = read_tiff(path)
+        assert loaded.dtype == np.float32
+        assert loaded.shape == (3, 20, 30)
+        assert meta.channels == 3
+
+    def test_tifffile_fallback_2d_grayscale(self, tmp_path: Path) -> None:
+        """tifffile fallback with 2D data sets channels=1 and unpacks shape correctly (lines 64, 66)."""
+        from unittest.mock import patch
+        from PIL import UnidentifiedImageError
+        import tifffile as _tf
+
+        data = np.ones((16, 24), dtype=np.float32)
+        path = tmp_path / "float2d.tif"
+        _tf.imwrite(str(path), data)
+
+        # Force PIL to fail so the tifffile fallback is exercised
+        with patch("astroai.core.io.tiff_io.Image.open", side_effect=UnidentifiedImageError("mock")):
+            loaded, meta = read_tiff(path)
+
+        assert loaded.dtype == np.float32
+        assert loaded.ndim == 2
+        assert meta.width == 24
+        assert meta.height == 16
+        assert meta.channels == 1

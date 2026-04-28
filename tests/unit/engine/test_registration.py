@@ -99,3 +99,15 @@ def test_rgb_frame(aligner):
     aligned, transform = aligner.align(ref, tgt)
     assert aligned.shape == ref.shape
     assert transform.shape == (3, 3)
+
+
+def test_no_subpixel_align_upsample_factor_1() -> None:
+    """upsample_factor=1 hits the else branch in _phase_correlate (lines 68-77)."""
+    from astroai.engine.registration.aligner import FrameAligner
+    rng = np.random.default_rng(55)
+    ref = rng.random((64, 64)).astype(np.float64)
+    tgt = np.roll(ref, 5, axis=1)
+    aligner = FrameAligner(upsample_factor=1)
+    aligned, transform = aligner.align(ref, tgt)
+    assert aligned.shape == ref.shape
+    assert transform.shape == (3, 3)

@@ -116,3 +116,94 @@ class TestReadXisf:
         assert loaded.shape == (3, 50, 80)
         assert meta.channels == 3
         np.testing.assert_array_almost_equal(loaded, data, decimal=5)
+
+
+class TestReadXisfEdgeCases:
+    def test_invalid_property_values_silently_ignored(self, tmp_path: Path) -> None:
+        """Non-numeric Exposure/ISO/Temperature values fall to except pass (lines 36-37, 41-42, 46-47)."""
+        data = np.ones((1, 8, 8), dtype=np.float32)
+        path = _build_xisf(
+            tmp_path, data,
+            properties={
+                "Instrument:Exposure": "bad_val",
+                "Instrument:ISO": "not_a_number",
+                "Instrument:Sensor:Temperature": "N/A",
+            },
+        )
+        _d, meta = read_xisf(path)
+        assert meta.exposure is None
+        assert meta.gain_iso is None
+        assert meta.temperature is None
+
+    def test_unknown_property_stored_in_extra(self, tmp_path: Path) -> None:
+        """Unknown property key is stored in ImageMetadata.extra (line 51)."""
+        data = np.ones((1, 8, 8), dtype=np.float32)
+        path = _build_xisf(
+            tmp_path, data,
+            properties={"Custom:MyKey": "some_value"},
+        )
+        _d, meta = read_xisf(path)
+        assert "Custom:MyKey" in meta.extra
+        assert meta.extra["Custom:MyKey"] == "some_value"
+
+    def test_invalid_fits_keyword_values_ignored(self, tmp_path: Path) -> None:
+        """Non-numeric FITSKeyword values fall to except pass (lines 59-60, 64-65, 69-70)."""
+        data = np.ones((1, 8, 8), dtype=np.float32)
+        path = _build_xisf(
+            tmp_path, data,
+            fits_keywords={"EXPTIME": "bad", "GAIN": "bad", "CCD-TEMP": "bad"},
+        )
+        _d, meta = read_xisf(path)
+        assert meta.exposure is None
+        assert meta.gain_iso is None
+        assert meta.temperature is None
+
+    def test_no_image_element_raises(self, tmp_path: Path) -> None:
+        """XISF without Image element raises ValueError (line 172)."""
+        ns = "http://www.pixinsight.com/xisf"
+        root = ET.Element(f"{{{ns}}}xisf", attrib={"version": "1.0"})
+        xml_bytes = ET.tostring(root, encoding="unicode").encode("utf-8")
+        padded = (len(xml_bytes) + 127) // 128 * 128
+        import struct
+        path = tmp_path / "noimage.xisf"
+        with open(path, "wb") as f:
+            f.write(b"XISF0100")
+            f.write(struct.pack("<I", padded))
+            f.write(b"\x00" * 4)
+            f.write(xml_bytes.ljust(padded, b"\x00"))
+        with pytest.raises(ValueError, match="No Image element"):
+            read_xisf(path)
+
+    def test_two_part_geometry(self, tmp_path: Path) -> None:
+        """2-part geometry (W:H) defaults to 1 channel (lines 178-180)."""
+        ns = "http://www.pixinsight.com/xisf"
+        data = np.ones((1, 8, 16), dtype=np.float32)
+        raw_bytes = data.astype(np.float32).tobytes()
+        root = ET.Element(f"{{{ns}}}xisf", attrib={"version": "1.0"})
+        # Use 2-part geometry
+        attachment_offset = 16 + 128  # rough estimate
+        img_elem = ET.SubElement(root, f"{{{ns}}}Image", attrib={
+            "geometry": "16:8",  # W:H, no channel count
+            "sampleFormat": "Float32",
+            "location": f"attachment:{16 + 128}:{len(raw_bytes)}",
+        })
+        xml_bytes = ET.tostring(root, encoding="unicode").encode("utf-8")
+        padded_len = (len(xml_bytes) + 127) // 128 * 128
+        actual_offset = 16 + padded_len
+        # Rebuild with correct offset
+        img_elem.set("location", f"attachment:{actual_offset}:{len(raw_bytes)}")
+        xml_bytes = ET.tostring(root, encoding="unicode").encode("utf-8")
+        padded_len = (len(xml_bytes) + 127) // 128 * 128
+        header_padded = xml_bytes.ljust(padded_len, b"\x00")
+        import struct
+        path = tmp_path / "2geom.xisf"
+        with open(path, "wb") as f:
+            f.write(b"XISF0100")
+            f.write(struct.pack("<I", padded_len))
+            f.write(b"\x00" * 4)
+            f.write(header_padded)
+            f.write(raw_bytes)
+        loaded, meta = read_xisf(path)
+        assert meta.width == 16
+        assert meta.height == 8
+        assert meta.channels == 1
