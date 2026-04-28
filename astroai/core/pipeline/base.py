@@ -14,6 +14,7 @@ class PipelineStage(Enum):
     CALIBRATION = auto()
     REGISTRATION = auto()
     STACKING = auto()
+    COMET_STACKING = auto()
     DRIZZLE = auto()
     ASTROMETRY = auto()
     MOSAIC = auto()
