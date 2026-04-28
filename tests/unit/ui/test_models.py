@@ -1103,3 +1103,106 @@ class TestPipelineModelChannelCombineNoOps:
         """line 251: step is None guard in _update_channel_combine_step_state."""
         model._steps = [s for s in model._steps if s.key != "channel_combine"]
         model._update_channel_combine_step_state()  # should not raise
+
+
+class TestPipelineModelSyntheticFlat:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    # -- synthetic_flat_enabled --
+
+    def test_synthetic_flat_enabled_default(self, model: PipelineModel) -> None:
+        assert model.synthetic_flat_enabled is False
+
+    def test_synthetic_flat_enabled_setter(self, model: PipelineModel) -> None:
+        model.synthetic_flat_enabled = True
+        assert model.synthetic_flat_enabled is True
+
+    def test_synthetic_flat_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.synthetic_flat_config_changed, timeout=500):
+            model.synthetic_flat_enabled = True
+
+    def test_synthetic_flat_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.synthetic_flat_config_changed.connect(lambda: signals.append(True))
+        model.synthetic_flat_enabled = False  # default
+        assert len(signals) == 0
+
+    def test_synthetic_flat_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        model.synthetic_flat_enabled = True
+        step = model.step_by_key("synthetic_flat")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+    def test_synthetic_flat_disabled_step_is_disabled(self, model: PipelineModel) -> None:
+        step = model.step_by_key("synthetic_flat")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    # -- synthetic_flat_tile_size --
+
+    def test_tile_size_default(self, model: PipelineModel) -> None:
+        assert model.synthetic_flat_tile_size == 64
+
+    def test_tile_size_setter(self, model: PipelineModel) -> None:
+        model.synthetic_flat_tile_size = 128
+        assert model.synthetic_flat_tile_size == 128
+
+    def test_tile_size_clamps_low(self, model: PipelineModel) -> None:
+        model.synthetic_flat_tile_size = 1
+        assert model.synthetic_flat_tile_size == 16
+
+    def test_tile_size_clamps_high(self, model: PipelineModel) -> None:
+        model.synthetic_flat_tile_size = 9999
+        assert model.synthetic_flat_tile_size == 256
+
+    def test_tile_size_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.synthetic_flat_config_changed, timeout=500):
+            model.synthetic_flat_tile_size = 128
+
+    def test_tile_size_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.synthetic_flat_config_changed.connect(lambda: signals.append(True))
+        model.synthetic_flat_tile_size = model.synthetic_flat_tile_size
+        assert len(signals) == 0
+
+    # -- synthetic_flat_smoothing_sigma --
+
+    def test_smoothing_sigma_default(self, model: PipelineModel) -> None:
+        assert model.synthetic_flat_smoothing_sigma == pytest.approx(8.0)
+
+    def test_smoothing_sigma_setter(self, model: PipelineModel) -> None:
+        model.synthetic_flat_smoothing_sigma = 5.0
+        assert model.synthetic_flat_smoothing_sigma == pytest.approx(5.0)
+
+    def test_smoothing_sigma_clamps_low(self, model: PipelineModel) -> None:
+        model.synthetic_flat_smoothing_sigma = -1.0
+        assert model.synthetic_flat_smoothing_sigma == pytest.approx(0.0)
+
+    def test_smoothing_sigma_clamps_high(self, model: PipelineModel) -> None:
+        model.synthetic_flat_smoothing_sigma = 999.0
+        assert model.synthetic_flat_smoothing_sigma == pytest.approx(50.0)
+
+    def test_smoothing_sigma_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.synthetic_flat_config_changed, timeout=500):
+            model.synthetic_flat_smoothing_sigma = 12.0
+
+    def test_smoothing_sigma_same_value_no_signal(self, model: PipelineModel) -> None:
+        signals: list[bool] = []
+        model.synthetic_flat_config_changed.connect(lambda: signals.append(True))
+        model.synthetic_flat_smoothing_sigma = model.synthetic_flat_smoothing_sigma
+        assert len(signals) == 0
+
+    # -- _update_synthetic_flat_step_state --
+
+    def test_update_step_state_step_none_no_raise(self, model: PipelineModel) -> None:
+        """Covers the early return when step_by_key returns None."""
+        model._steps = [s for s in model._steps if s.key != "synthetic_flat"]
+        model._update_synthetic_flat_step_state()  # must not raise
+
+    def test_enable_then_disable_cycles_step_state(self, model: PipelineModel) -> None:
+        model.synthetic_flat_enabled = True
+        assert model.step_by_key("synthetic_flat").state is StepState.PENDING  # type: ignore[union-attr]
+        model.synthetic_flat_enabled = False
+        assert model.step_by_key("synthetic_flat").state is StepState.DISABLED  # type: ignore[union-attr]
