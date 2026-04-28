@@ -4,6 +4,7 @@ from astroai.ui.widgets.calibration_benchmark import CalibrationBenchmarkWidget
 from astroai.ui.widgets.activation_dialog import ActivationDialog
 from astroai.ui.widgets.annotation_panel import AnnotationPanel
 from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
+from astroai.ui.widgets.comet_stack_panel import CometStackPanel
 from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
@@ -11,6 +12,7 @@ from astroai.ui.widgets.license_badge import LicenseBadge
 from astroai.ui.widgets.log_widget import LogWidget
 from astroai.ui.widgets.mosaic_panel import MosaicPanel
 from astroai.ui.widgets.offline_banner import OfflineBanner
+from astroai.ui.widgets.photometry_panel import PhotometryPanel
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
@@ -21,6 +23,7 @@ __all__ = [
     "ActivationDialog",
     "AnnotationPanel",
     "ChannelCombinerPanel",
+    "CometStackPanel",
     "DeconvolutionPanel",
     "HistogramWidget",
     "ImageViewer",
@@ -28,6 +31,7 @@ __all__ = [
     "LogWidget",
     "MosaicPanel",
     "OfflineBanner",
+    "PhotometryPanel",
     "ProgressWidget",
     "StarlessPanel",
     "UpgradeDialog",
