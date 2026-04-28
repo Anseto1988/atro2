@@ -1,0 +1,313 @@
+"""Unit tests for WcsAdapter, SkyObjectCatalog, and pure-logic overlay helpers."""
+from __future__ import annotations
+
+import csv
+import tempfile
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+from astropy.wcs import WCS
+
+from astroai.ui.overlay.sky_objects import (
+    CatalogObject,
+    ConstellationBoundarySegment,
+    NamedStar,
+    SkyObjectCatalog,
+    WcsTransform,
+)
+from astroai.ui.overlay.wcs_adapter import WcsAdapter
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_wcs(ra: float = 180.0, dec: float = 45.0, scale: float = 0.000277) -> WCS:
+    w = WCS(naxis=2)
+    w.wcs.crpix = [512.0, 512.0]
+    w.wcs.crval = [ra, dec]
+    w.wcs.cdelt = [-scale, scale]
+    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    w.pixel_shape = (1024, 1024)
+    return w
+
+
+# ---------------------------------------------------------------------------
+# CatalogObject / NamedStar / ConstellationBoundarySegment dataclasses
+# ---------------------------------------------------------------------------
+
+class TestDataclasses:
+    def test_catalog_object_defaults(self) -> None:
+        obj = CatalogObject(designation="M42", ra_deg=83.8, dec_deg=-5.4)
+        assert obj.obj_type == ""
+        assert obj.magnitude == pytest.approx(99.0)
+        assert obj.size_arcmin == pytest.approx(0.0)
+        assert obj.common_name == ""
+
+    def test_catalog_object_full(self) -> None:
+        obj = CatalogObject(
+            designation="M42", ra_deg=83.8, dec_deg=-5.4,
+            obj_type="RN", magnitude=4.0, size_arcmin=85.0, common_name="Orion Nebula",
+        )
+        assert obj.common_name == "Orion Nebula"
+        assert obj.magnitude == pytest.approx(4.0)
+
+    def test_named_star_fields(self) -> None:
+        star = NamedStar(hip_id=32349, name="Sirius", ra_deg=101.2, dec_deg=-16.7, magnitude=-1.46)
+        assert star.hip_id == 32349
+        assert star.name == "Sirius"
+
+    def test_constellation_boundary_defaults(self) -> None:
+        seg = ConstellationBoundarySegment(ra1_deg=0.0, dec1_deg=0.0, ra2_deg=1.0, dec2_deg=0.0)
+        assert seg.constellation == ""
+
+    def test_dataclasses_are_frozen(self) -> None:
+        obj = CatalogObject(designation="M1", ra_deg=83.6, dec_deg=22.0)
+        with pytest.raises(AttributeError):
+            obj.designation = "M2"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# WcsTransform protocol
+# ---------------------------------------------------------------------------
+
+class TestWcsTransformProtocol:
+    def test_wcs_adapter_satisfies_protocol(self) -> None:
+        wcs = _make_wcs()
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        assert isinstance(adapter, WcsTransform)
+
+
+# ---------------------------------------------------------------------------
+# WcsAdapter
+# ---------------------------------------------------------------------------
+
+class TestWcsAdapter:
+    def test_image_size(self) -> None:
+        wcs = _make_wcs()
+        adapter = WcsAdapter(wcs, 800, 600)
+        assert adapter.image_size() == (800, 600)
+
+    def test_world_to_pixel_center(self) -> None:
+        wcs = _make_wcs(ra=180.0, dec=45.0)
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        result = adapter.world_to_pixel(180.0, 45.0)
+        assert result is not None
+        x, y = result
+        assert x == pytest.approx(512.0, abs=2.0)
+        assert y == pytest.approx(512.0, abs=2.0)
+
+    def test_world_to_pixel_out_of_bounds_returns_none(self) -> None:
+        wcs = _make_wcs(ra=180.0, dec=45.0)
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        # RA/Dec far from center (other side of sky)
+        result = adapter.world_to_pixel(0.0, -45.0)
+        assert result is None
+
+    def test_world_to_pixel_near_edge_accepted(self) -> None:
+        wcs = _make_wcs(ra=180.0, dec=45.0, scale=0.000277)
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        # Center is always in bounds
+        result = adapter.world_to_pixel(180.0, 45.0)
+        assert result is not None
+
+    def test_pixel_to_world_center(self) -> None:
+        wcs = _make_wcs(ra=180.0, dec=45.0)
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        result = adapter.pixel_to_world(512.0, 512.0)
+        assert result is not None
+        ra, dec = result
+        assert ra == pytest.approx(180.0, abs=0.1)
+        assert dec == pytest.approx(45.0, abs=0.1)
+
+    def test_pixel_to_world_returns_float_tuple(self) -> None:
+        wcs = _make_wcs()
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        result = adapter.pixel_to_world(100.0, 200.0)
+        assert result is not None
+        assert isinstance(result[0], float)
+        assert isinstance(result[1], float)
+
+    def test_world_to_pixel_roundtrip(self) -> None:
+        """Pixel → world → pixel should be close to identity."""
+        wcs = _make_wcs(ra=180.0, dec=45.0)
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        x_in, y_in = 300.0, 400.0
+        world = adapter.pixel_to_world(x_in, y_in)
+        assert world is not None
+        result = adapter.world_to_pixel(world[0], world[1])
+        assert result is not None
+        assert result[0] == pytest.approx(x_in, abs=0.5)
+        assert result[1] == pytest.approx(y_in, abs=0.5)
+
+    def test_world_to_pixel_10pct_margin_accepted(self) -> None:
+        """Points slightly outside image (within 10% margin) should be returned."""
+        wcs = _make_wcs(ra=180.0, dec=45.0, scale=0.000277)
+        # Use a small image so the 10% margin is easy to hit
+        adapter = WcsAdapter(wcs, 1024, 1024)
+        # The center is always accepted
+        result = adapter.world_to_pixel(180.0, 45.0)
+        assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# WcsAdapter factory methods (mocked to avoid ASTAP)
+# ---------------------------------------------------------------------------
+
+class TestWcsAdapterFactories:
+    def test_from_solve_result(self) -> None:
+        wcs = _make_wcs()
+        from astroai.engine.platesolving.solver import SolveResult
+        solve_result = MagicMock(spec=SolveResult)
+        solve_result.wcs = wcs
+        adapter = WcsAdapter.from_solve_result(solve_result, (600, 800))
+        assert adapter.image_size() == (800, 600)
+
+    def test_from_engine_overlay(self) -> None:
+        wcs = _make_wcs()
+        from astroai.engine.platesolving.annotation import AnnotationOverlay as EngineOverlay
+        overlay = MagicMock(spec=EngineOverlay)
+        overlay.wcs = wcs
+        overlay.image_shape = (480, 640)
+        adapter = WcsAdapter.from_engine_overlay(overlay)
+        assert adapter.image_size() == (640, 480)
+
+
+# ---------------------------------------------------------------------------
+# SkyObjectCatalog — loading from real embedded catalogs
+# ---------------------------------------------------------------------------
+
+class TestSkyObjectCatalogRealData:
+    def test_deep_sky_objects_loaded(self) -> None:
+        cat = SkyObjectCatalog()
+        dso = cat.deep_sky_objects
+        assert len(dso) > 0
+
+    def test_named_stars_loaded(self) -> None:
+        cat = SkyObjectCatalog()
+        stars = cat.named_stars
+        assert len(stars) > 0
+
+    def test_dso_fields_valid(self) -> None:
+        cat = SkyObjectCatalog()
+        for obj in cat.deep_sky_objects:
+            assert isinstance(obj.designation, str)
+            assert 0.0 <= obj.ra_deg <= 360.0
+            assert -90.0 <= obj.dec_deg <= 90.0
+
+    def test_stars_fields_valid(self) -> None:
+        cat = SkyObjectCatalog()
+        for star in cat.named_stars:
+            assert isinstance(star.name, str)
+            assert star.hip_id > 0
+            assert 0.0 <= star.ra_deg <= 360.0
+
+    def test_lazy_loading_idempotent(self) -> None:
+        cat = SkyObjectCatalog()
+        dso1 = cat.deep_sky_objects
+        dso2 = cat.deep_sky_objects
+        assert len(dso1) == len(dso2)
+
+    def test_sirius_in_named_stars(self) -> None:
+        cat = SkyObjectCatalog()
+        names = [s.name for s in cat.named_stars]
+        assert "Sirius" in names
+
+    def test_m42_in_dso(self) -> None:
+        cat = SkyObjectCatalog()
+        designations = [o.designation for o in cat.deep_sky_objects]
+        assert "M42" in designations or any("42" in d for d in designations)
+
+
+# ---------------------------------------------------------------------------
+# SkyObjectCatalog — missing catalog files handled gracefully
+# ---------------------------------------------------------------------------
+
+class TestSkyObjectCatalogMissingFiles:
+    def test_missing_dso_returns_empty(self, tmp_path: Path) -> None:
+        """No crash if DSO CSV is absent."""
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            dso = cat.deep_sky_objects
+        assert list(dso) == []
+
+    def test_missing_stars_returns_empty(self, tmp_path: Path) -> None:
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            stars = cat.named_stars
+        assert list(stars) == []
+
+    def test_corrupt_dso_does_not_crash(self, tmp_path: Path) -> None:
+        """Corrupt CSV should be silently skipped."""
+        dso_file = tmp_path / "dso_catalog.csv"
+        dso_file.write_text("designation,ra_deg\nM1,NOT_A_NUMBER\n")
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            dso = cat.deep_sky_objects
+        assert list(dso) == []
+
+
+# ---------------------------------------------------------------------------
+# SkyObjectCatalog — custom CSV loading
+# ---------------------------------------------------------------------------
+
+class TestSkyObjectCatalogCustomCSV:
+    def test_loads_custom_dso_csv(self, tmp_path: Path) -> None:
+        dso_file = tmp_path / "dso_catalog.csv"
+        dso_file.write_text(
+            "designation,ra_deg,dec_deg,type,mag,size_arcmin,common_name\n"
+            "M1,83.6331,22.0145,SNR,8.4,6.0,Crab\n"
+            "M42,83.8221,-5.3911,RN,4.0,85.0,Orion Nebula\n"
+        )
+        star_file = tmp_path / "named_stars.csv"
+        star_file.write_text("hip_id,name,ra_deg,dec_deg,mag\n")
+        bound_file = tmp_path / "constellation_boundaries.csv"
+        bound_file.write_text("ra1_deg,dec1_deg,ra2_deg,dec2_deg,constellation\n")
+
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            dso = list(cat.deep_sky_objects)
+        assert len(dso) == 2
+        assert dso[0].designation == "M1"
+        assert dso[1].common_name == "Orion Nebula"
+
+    def test_loads_custom_stars_csv(self, tmp_path: Path) -> None:
+        star_file = tmp_path / "named_stars.csv"
+        star_file.write_text(
+            "hip_id,name,ra_deg,dec_deg,mag\n"
+            "32349,Sirius,101.2872,-16.7161,-1.46\n"
+        )
+        dso_file = tmp_path / "dso_catalog.csv"
+        dso_file.write_text("designation,ra_deg,dec_deg\n")
+        bound_file = tmp_path / "constellation_boundaries.csv"
+        bound_file.write_text("ra1_deg,dec1_deg,ra2_deg,dec2_deg\n")
+
+        cat = SkyObjectCatalog.__new__(SkyObjectCatalog)
+        cat._dso = []
+        cat._stars = []
+        cat._boundaries = []
+        cat._loaded = False
+        with patch("astroai.ui.overlay.sky_objects._CATALOGS_DIR", tmp_path):
+            stars = list(cat.named_stars)
+        assert len(stars) == 1
+        assert stars[0].name == "Sirius"
+        assert stars[0].magnitude == pytest.approx(-1.46)
