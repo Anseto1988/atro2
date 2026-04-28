@@ -70,6 +70,9 @@ jobs:
           - os: ubuntu-latest
             target: linux
             archive_ext: tar.gz
+          - os: macos-latest
+            target: macos
+            archive_ext: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -119,6 +122,9 @@ jobs:
       - name: Package artifact (Linux)
         if: matrix.target == 'linux'
         run: tar -czf "astroai-${{ env.VERSION }}-linux.tar.gz" -C dist AstroAI
+      - name: Package artifact (macOS)
+        if: matrix.target == 'macos'
+        run: tar -czf "astroai-${{ env.VERSION }}-macos.tar.gz" -C dist AstroAI.app
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
