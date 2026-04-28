@@ -1,8 +1,11 @@
 # AstroAI Suite
 
+[![CI](https://github.com/Anseto1988/atro2/actions/workflows/ci.yml/badge.svg)](https://github.com/Anseto1988/atro2/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/Anseto1988/atro2/branch/main/graph/badge.svg)](https://codecov.io/gh/Anseto1988/atro2)
+
 AI-powered astrophotography processing suite.
 
-**Version:** 2.3.0-alpha
+**Version:** 2.4.0-alpha
 
 ## What's New in v2.3
 

@@ -148,6 +148,27 @@ def _enrich_fits_entry(entry: object) -> None:
         pass
 
 
+def _enrich_raw_entry(entry: object) -> None:
+    """Populate FrameEntry metadata from RAW EXIF. Silent no-op on failure."""
+    from astroai.project.project_file import FrameEntry
+    from astroai.core.io.raw_io import RAW_EXTENSIONS
+    if not isinstance(entry, FrameEntry):
+        return
+    if Path(entry.path).suffix.lower() not in RAW_EXTENSIONS:
+        return
+    try:
+        from astroai.core.io.raw_io import read_raw_metadata
+        meta = read_raw_metadata(Path(entry.path))
+        if meta.exposure is not None:
+            entry.exposure = meta.exposure
+        if meta.gain_iso is not None:
+            entry.gain_iso = meta.gain_iso
+        if meta.temperature is not None:
+            entry.temperature = meta.temperature
+    except Exception:
+        pass
+
+
 class MainWindow(QMainWindow):
     """Primary application window with dock-based layout."""
 
@@ -693,7 +714,13 @@ class MainWindow(QMainWindow):
         self._progress.set_status("Lade...")
         self._file_loader.load(Path(path))
 
-    _FITS_FILTER = "FITS (*.fits *.fit *.fts);;TIFF (*.tif *.tiff);;PNG (*.png);;Alle (*)"
+    _FITS_FILTER = (
+        "FITS (*.fits *.fit *.fts);;"
+        "TIFF (*.tif *.tiff);;"
+        "PNG (*.png);;"
+        "RAW (*.cr2 *.cr3 *.nef *.arw *.dng *.orf *.rw2);;"
+        "Alle (*)"
+    )
 
     def _pick_files(self, title: str) -> list[str]:
         paths, _ = QFileDialog.getOpenFileNames(self, title, "", self._FITS_FILTER)
@@ -746,6 +773,7 @@ class MainWindow(QMainWindow):
             if p not in existing:
                 entry = FrameEntry(path=p)
                 _enrich_fits_entry(entry)
+                _enrich_raw_entry(entry)
                 self._project.input_frames.append(entry)
                 existing.add(p)
                 added += 1

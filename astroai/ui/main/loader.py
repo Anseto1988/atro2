@@ -55,6 +55,8 @@ class _LoadWorker(QObject):
         suffix = path.suffix.lower()
         self.status.emit(f"Lade {path.name}...")
         try:
+            from astroai.core.io.raw_io import RAW_EXTENSIONS
+
             header: dict[str, str] | None = None
             if suffix in (".fits", ".fit", ".fts"):
                 from astropy.io import fits
@@ -66,6 +68,20 @@ class _LoadWorker(QObject):
                         return
                     img = data.astype(np.float32)
                     header = _extract_fits_header(hdul)
+            elif suffix in RAW_EXTENSIONS:
+                from astroai.core.io.raw_io import read_raw
+
+                rgb, meta = read_raw(path)
+                img = np.mean(rgb, axis=2).astype(np.float32)
+                header = {"Format": suffix[1:].upper()}
+                if meta.exposure is not None:
+                    header["EXPTIME"] = str(meta.exposure)
+                if meta.gain_iso is not None:
+                    header["GAIN"] = str(meta.gain_iso)
+                if meta.date_obs is not None:
+                    header["DATE-OBS"] = meta.date_obs
+                header["NAXIS1"] = str(meta.width)
+                header["NAXIS2"] = str(meta.height)
             elif suffix in (".tif", ".tiff"):
                 from PIL import Image
 

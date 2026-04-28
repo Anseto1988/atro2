@@ -131,3 +131,65 @@ class TestExtractRawMetadataExif:
         assert meta.exposure is None
         assert meta.gain_iso is None
         assert meta.date_obs is None
+
+
+class TestReadRawMetadata:
+    """Tests for read_raw_metadata (metadata-only, no postprocessing)."""
+
+    def test_returns_image_metadata(self, monkeypatch) -> None:
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        _setup_raw_context(mock_rawpy, 120, 160, 3)
+
+        meta = mod.read_raw_metadata(Path("/fake/image.cr2"))
+
+        assert meta.width == 160
+        assert meta.height == 120
+        assert meta.channels == 3
+
+    def test_does_not_call_postprocess(self, monkeypatch) -> None:
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        raw_obj = _setup_raw_context(mock_rawpy, 10, 10, 3)
+
+        mod.read_raw_metadata(Path("/fake/image.nef"))
+
+        raw_obj.postprocess.assert_not_called()
+
+    def test_exif_fields_populated(self, monkeypatch) -> None:
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        _setup_raw_context(mock_rawpy, 100, 200, 3)
+
+        from PIL.ExifTags import TAGS
+        name_to_id = {v: k for k, v in TAGS.items()}
+        exif_id_exp = name_to_id.get("ExposureTime", 33434)
+        exif_id_iso = name_to_id.get("ISOSpeedRatings", 34855)
+
+        fake_exif = {exif_id_exp: 0.002, exif_id_iso: 800}
+        mock_img = MagicMock()
+        mock_img.__enter__ = MagicMock(return_value=mock_img)
+        mock_img.__exit__ = MagicMock(return_value=False)
+        mock_img.getexif.return_value = fake_exif
+
+        with patch("PIL.Image.open", return_value=mock_img):
+            meta = mod.read_raw_metadata(Path("/fake/image.arw"))
+
+        assert meta.exposure == pytest.approx(0.002)
+        assert meta.gain_iso == 800
+
+    def test_pil_failure_leaves_fields_none(self, monkeypatch) -> None:
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        _setup_raw_context(mock_rawpy, 50, 50, 3)
+
+        with patch("PIL.Image.open", side_effect=OSError("cannot open")):
+            meta = mod.read_raw_metadata(Path("/fake/image.cr2"))
+
+        assert meta.exposure is None
+        assert meta.gain_iso is None
+
+    def test_arw_extension_accepted(self, monkeypatch) -> None:
+        mod, mock_rawpy = _get_raw_io(monkeypatch)
+        _setup_raw_context(mock_rawpy, 8, 8, 3)
+
+        with patch("PIL.Image.open", side_effect=OSError):
+            meta = mod.read_raw_metadata(Path("/fake/shot.arw"))
+
+        assert meta.width == 8

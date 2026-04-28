@@ -52,6 +52,13 @@ def _extract_raw_metadata(raw: rawpy.RawPy, path: Path) -> ImageMetadata:
     )
 
 
+def read_raw_metadata(path: str | Path) -> ImageMetadata:
+    """Return only EXIF/RAW metadata without postprocessing the image."""
+    path = Path(path)
+    with rawpy.imread(str(path)) as raw:
+        return _extract_raw_metadata(raw, path)
+
+
 def read_raw(path: str | Path) -> tuple[NDArray[np.floating[Any]], ImageMetadata]:
     path = Path(path)
     with rawpy.imread(str(path)) as raw:

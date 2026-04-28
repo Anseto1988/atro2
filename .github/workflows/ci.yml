@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: ubuntu-py3.12-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ubuntu-py3.12-poetry-
+      - name: Install dependencies
+        run: poetry install --with dev --sync
+      - name: ruff check
+        run: poetry run ruff check astroai/
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: ubuntu-py3.12-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ubuntu-py3.12-poetry-
+      - name: Install dependencies
+        run: poetry install --with dev --sync
+      - name: mypy (0 errors policy)
+        run: poetry run mypy astroai/
+
+  test:
+    name: Tests + Coverage (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # pyproject.toml requires >=3.12,<3.13 — only 3.12 is a valid target
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: ubuntu-py${{ matrix.python-version }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ubuntu-py${{ matrix.python-version }}-poetry-
+      - name: Install dependencies
+        run: poetry install --with dev --sync
+      - name: pytest + coverage (min 95%)
+        run: |
+          poetry run pytest tests/unit/ \
+            --cov=astroai \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=95 \
+            -q
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false

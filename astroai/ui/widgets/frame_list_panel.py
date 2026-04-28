@@ -260,7 +260,7 @@ class FrameListPanel(QWidget):
         )
         remove_act.setEnabled(bool(selected_rows))
 
-        action = menu.exec(self._table.mapToGlobal(pos))
+        action = self._exec_menu(menu, pos)
         if action == preview_act and len(selected_rows) == 1:
             entry = self._entries[selected_rows[0]]
             self.preview_requested.emit(entry.path)
@@ -274,6 +274,9 @@ class FrameListPanel(QWidget):
             self._invert_selection()
         elif action == remove_act and selected_rows:
             self.remove_requested.emit(selected_rows)
+
+    def _exec_menu(self, menu: QMenu, pos: QPoint) -> QAction | None:
+        return menu.exec(self._table.mapToGlobal(pos))
 
     # ------------------------------------------------------------------
     # Frame notes

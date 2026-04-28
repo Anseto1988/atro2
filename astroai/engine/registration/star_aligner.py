@@ -104,9 +104,10 @@ class StarAligner:
             dists = np.hypot(ref_stars[:, 0] - cy, ref_stars[:, 1] - cx)
             nearest = int(np.argmin(dists))
             if dists[nearest] < 50.0:
+                # Convention: positive = target was shifted forward relative to ref
                 shifts.append((
-                    ref_stars[nearest, 0] - cy,
-                    ref_stars[nearest, 1] - cx,
+                    cy - ref_stars[nearest, 0],
+                    cx - ref_stars[nearest, 1],
                 ))
         if len(shifts) < _MIN_STARS:
             return 0.0, 0.0

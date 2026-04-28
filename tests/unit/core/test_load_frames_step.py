@@ -123,3 +123,82 @@ class TestLoadFramesStepBasic:
             out = step.execute(PipelineContext())
             assert len(out.images) == 1
             assert out.images[0].dtype == np.float32
+
+
+class TestLoadFramesStepRaw:
+    """Tests for RAW-format support in _load_frame / LoadFramesStep."""
+
+    def _mock_read_raw(self, monkeypatch, shape=(10, 12, 3), fill=0.5):
+        from unittest.mock import MagicMock
+        from astroai.core.pipeline import load_frames_step as mod
+
+        fake_rgb = np.full(shape, fill, dtype=np.float32)
+        fake_meta = MagicMock()
+        fake_meta.width = shape[1]
+        fake_meta.height = shape[0]
+
+        monkeypatch.setattr(
+            mod,
+            "_load_frame",
+            lambda path: np.mean(fake_rgb, axis=2).astype(np.float32),
+        )
+        return fake_rgb
+
+    def test_raw_cr2_loads_as_float32(self, monkeypatch) -> None:
+        from astroai.core.pipeline.load_frames_step import _load_frame
+        from unittest.mock import patch, MagicMock
+        from astroai.core.io.raw_io import RAW_EXTENSIONS
+
+        fake_rgb = np.full((8, 8, 3), 0.5, dtype=np.float32)
+        fake_meta = MagicMock()
+        fake_meta.width = 8
+        fake_meta.height = 8
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(fake_rgb, fake_meta)):
+            result = _load_frame(Path("/fake/img.cr2"))
+
+        assert result.dtype == np.float32
+        assert result.shape == (8, 8)
+
+    def test_raw_nef_loads_as_float32(self, monkeypatch) -> None:
+        from astroai.core.pipeline.load_frames_step import _load_frame
+        from unittest.mock import patch, MagicMock
+
+        fake_rgb = np.full((6, 10, 3), 0.25, dtype=np.float32)
+        fake_meta = MagicMock()
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(fake_rgb, fake_meta)):
+            result = _load_frame(Path("/fake/img.nef"))
+
+        assert result.shape == (6, 10)
+        np.testing.assert_allclose(result[0, 0], 0.25, rtol=1e-5)
+
+    def test_raw_arw_luminance_mean(self, monkeypatch) -> None:
+        from astroai.core.pipeline.load_frames_step import _load_frame
+        from unittest.mock import patch, MagicMock
+
+        # R=0.3, G=0.6, B=0.9 → mean=0.6
+        fake_rgb = np.zeros((4, 4, 3), dtype=np.float32)
+        fake_rgb[:, :, 0] = 0.3
+        fake_rgb[:, :, 1] = 0.6
+        fake_rgb[:, :, 2] = 0.9
+        fake_meta = MagicMock()
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(fake_rgb, fake_meta)):
+            result = _load_frame(Path("/fake/img.arw"))
+
+        np.testing.assert_allclose(result[0, 0], 0.6, rtol=1e-5)
+
+    def test_raw_in_pipeline_step(self, monkeypatch) -> None:
+        from unittest.mock import patch, MagicMock
+
+        fake_rgb = np.full((5, 5, 3), 1.0, dtype=np.float32)
+        fake_meta = MagicMock()
+
+        with patch("astroai.core.io.raw_io.read_raw", return_value=(fake_rgb, fake_meta)):
+            step = LoadFramesStep([Path("/fake/img.cr2")])
+            out = step.execute(PipelineContext())
+
+        assert len(out.images) == 1
+        assert out.images[0].dtype == np.float32
+        assert out.images[0].shape == (5, 5)

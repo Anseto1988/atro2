@@ -8,6 +8,7 @@ __all__ = [
     "ImageMetadata",
     "read_fits",
     "read_raw",
+    "read_raw_metadata",
     "read_tiff",
     "read_xisf",
     "write_fits",
@@ -20,6 +21,9 @@ def __getattr__(name: str) -> Any:
     if name == "read_raw":
         from astroai.core.io.raw_io import read_raw
         return read_raw
+    if name == "read_raw_metadata":
+        from astroai.core.io.raw_io import read_raw_metadata
+        return read_raw_metadata
     if name == "RAW_EXTENSIONS":
         from astroai.core.io.raw_io import RAW_EXTENSIONS
         return RAW_EXTENSIONS

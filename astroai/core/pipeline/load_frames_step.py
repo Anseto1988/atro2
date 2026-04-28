@@ -30,6 +30,12 @@ def _load_frame(path: Path) -> np.ndarray:
             if data is None:
                 raise ValueError(f"No image data in {path.name}")
             return np.asarray(data, dtype=np.float32)
+    from astroai.core.io.raw_io import RAW_EXTENSIONS
+    if suffix in RAW_EXTENSIONS:
+        from astroai.core.io.raw_io import read_raw
+        rgb, _meta = read_raw(path)
+        luminance: np.ndarray = np.mean(rgb, axis=2).astype(np.float32)
+        return luminance
     from PIL import Image
     img: np.ndarray = np.array(Image.open(path).convert("L"), dtype=np.float32)
     return img
