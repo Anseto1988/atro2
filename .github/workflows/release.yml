@@ -31,10 +31,10 @@ jobs:
 
             ### Neue Features seit v1.1.0-alpha
 
-            - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay
-            - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback)
-            - **F-3** Drizzle Super-Resolution — 2x/3x Sub-Pixel-Upscaling
-            - AI-Koordinaten-Extraktion + Sky-Atlas-Integration
+            - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay, AI-Koordinaten-Extraktion + Sky-Atlas
+            - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback), CalibrationBenchmarkWidget
+            - **F-3** Drizzle Super-Resolution — 2x/3x Sub-Pixel-Upscaling (reproject-basiert)
+            - **F-4** Mosaic-Workflow — MosaicStep Pipeline-Integration, MosaicPanel UI-Widget, Multi-Panel-Stitching
 
             ### Alle Features
 
@@ -43,7 +43,10 @@ jobs:
             - **E4** LRGB/Narrowband Multi-Kanal-Workflow — ChannelCombiner, NarrowbandMapper
             - **E5** Starless — StarRemovalStep, StarlessPanel
             - **E6** Deconvolution, DenoiseStep, StretchStep
+            - **F-1** ASTAP Plate Solving + Sky Overlay
+            - **F-2** GPU-Kalibrierung (CUDA/MPS/CPU)
             - **F-3** Drizzle Super-Resolution (reproject-basiert)
+            - **F-4** Mosaic-Workflow (MosaicStep + MosaicPanel)
             - Cloudflare Workers Licensing API
             - Security Hardening S-01 bis S-04
 
