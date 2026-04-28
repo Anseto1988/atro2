@@ -94,9 +94,8 @@ class TestMainWindowSignalHandlers:
 
     def test_on_zoom_changed(self, win: MainWindow) -> None:
         win._on_zoom_changed(2.0)
-        msg = win.statusBar().currentMessage()
-        assert "Zoom" in msg
-        assert "200" in msg
+        assert "Zoom" in win._zoom_label.text()
+        assert "200" in win._zoom_label.text()
 
     def test_on_pixel_hovered(self, win: MainWindow) -> None:
         win._on_pixel_hovered(42, 17, 0.75)
@@ -554,3 +553,189 @@ class TestProjectSync:
         assert win._pipeline.starless_enabled is True
         assert win._pipeline.starless_strength == pytest.approx(0.7)
         assert win._pipeline.starless_format == "fits"
+
+    def test_wcs_adapter_initially_none(self, win: MainWindow) -> None:
+        assert win._wcs_adapter is None
+
+    def test_pixel_hovered_no_wcs_shows_pixel_coords(self, win: MainWindow) -> None:
+        win._on_image_loaded(
+            __import__("numpy").ones((16, 16), dtype=__import__("numpy").float32),
+            "test.fits"
+        )
+        win._on_pixel_hovered(10, 20, 0.5)
+        msg = win._status_bar.currentMessage()
+        assert "(10, 20)" in msg
+        assert "0.5" in msg
+
+    def test_pixel_hovered_with_wcs_shows_radec(self, win: MainWindow) -> None:
+        class _FakeWcs:
+            def world_to_pixel(self, ra: float, dec: float) -> tuple[float, float] | None:
+                return (0.0, 0.0)
+            def pixel_to_world(self, x: float, y: float) -> tuple[float, float] | None:
+                return (83.822, -5.391)
+            def image_size(self) -> tuple[int, int]:
+                return (100, 100)
+
+        win._wcs_adapter = _FakeWcs()
+        win._on_pixel_hovered(5, 5, 0.3)
+        msg = win._status_bar.currentMessage()
+        assert "83.82200" in msg or "83.822" in msg
+        assert "RA" in msg
+
+    def test_pixel_hovered_wcs_none_result_no_crash(self, win: MainWindow) -> None:
+        class _NoneWcs:
+            def world_to_pixel(self, ra: float, dec: float) -> tuple[float, float] | None:
+                return None
+            def pixel_to_world(self, x: float, y: float) -> tuple[float, float] | None:
+                return None
+            def image_size(self) -> tuple[int, int]:
+                return (100, 100)
+
+        win._wcs_adapter = _NoneWcs()
+        win._on_pixel_hovered(5, 5, 0.3)
+        msg = win._status_bar.currentMessage()
+        assert "(5, 5)" in msg
+
+    def test_set_wcs_solution_none_clears_adapter(self, win: MainWindow) -> None:
+        win._wcs_adapter = object()
+        win.set_wcs_solution(None)
+        assert win._wcs_adapter is None
+
+    def test_sync_curves_roundtrip(self, win: MainWindow) -> None:
+        win._pipeline.curves_enabled = True
+        win._pipeline.curves_rgb_points = [(0.0, 0.0), (0.5, 0.7), (1.0, 1.0)]
+        win._sync_model_to_project()
+        win._pipeline.curves_enabled = False
+        win._pipeline.curves_rgb_points = [(0.0, 0.0), (1.0, 1.0)]
+        win._sync_project_to_model()
+        assert win._pipeline.curves_enabled is True
+        pts = win._pipeline.curves_rgb_points
+        assert len(pts) == 3
+        assert abs(pts[1][1] - 0.7) < 1e-6
+
+
+class TestMainWindowCompareView:
+    def test_compare_act_disabled_initially(self, win: MainWindow) -> None:
+        assert not win._compare_act.isEnabled()
+
+    def test_compare_act_unchecked_initially(self, win: MainWindow) -> None:
+        assert not win._compare_act.isChecked()
+
+    def test_view_stack_shows_viewer_initially(self, win: MainWindow) -> None:
+        assert win._view_stack.currentIndex() == 0
+
+    def test_before_image_none_initially(self, win: MainWindow) -> None:
+        assert win._before_image is None
+
+    def test_toggle_compare_switches_to_index_1(self, win: MainWindow) -> None:
+        win._compare_act.setEnabled(True)
+        win._on_toggle_compare(True)
+        assert win._view_stack.currentIndex() == 1
+
+    def test_toggle_compare_off_switches_to_index_0(self, win: MainWindow) -> None:
+        win._view_stack.setCurrentIndex(1)
+        win._on_toggle_compare(False)
+        assert win._view_stack.currentIndex() == 0
+
+    def test_reset_compare_state_clears_all(self, win: MainWindow) -> None:
+        win._before_image = np.ones((4, 4), dtype=np.float32)
+        win._compare_act.setEnabled(True)
+        win._compare_act.setChecked(True)
+        win._view_stack.setCurrentIndex(1)
+        win._reset_compare_state()
+        assert win._before_image is None
+        assert not win._compare_act.isEnabled()
+        assert not win._compare_act.isChecked()
+        assert win._view_stack.currentIndex() == 0
+
+    def test_pipeline_finished_with_before_image_enables_compare(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.core.pipeline.base import PipelineContext
+        win._before_image = np.zeros((4, 4), dtype=np.float32)
+        ctx = PipelineContext()
+        ctx.result = np.ones((4, 4), dtype=np.float32)
+        win._on_pipeline_finished(ctx)
+        assert win._compare_act.isEnabled()
+        assert win._compare_act.isChecked()
+        assert win._view_stack.currentIndex() == 1
+
+    def test_pipeline_finished_without_before_image_no_compare(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.core.pipeline.base import PipelineContext
+        win._before_image = None
+        ctx = PipelineContext()
+        ctx.result = np.ones((4, 4), dtype=np.float32)
+        win._on_pipeline_finished(ctx)
+        assert not win._compare_act.isEnabled()
+
+    def test_new_project_resets_compare(self, win: MainWindow) -> None:
+        win._compare_act.setEnabled(True)
+        win._compare_act.setChecked(True)
+        win._before_image = np.zeros((4, 4), dtype=np.float32)
+        win._on_new_project()
+        assert not win._compare_act.isEnabled()
+        assert win._before_image is None
+
+
+class TestMainWindowFrameSelection:
+    def test_on_frame_selection_changed_updates_project(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [
+            FrameEntry(path="/a.fits", selected=True),
+            FrameEntry(path="/b.fits", selected=True),
+        ]
+        win._on_frame_selection_changed(0, False)
+        assert win._project.input_frames[0].selected is False
+
+    def test_on_frame_selection_changed_enables_run_when_selected(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [FrameEntry(path="/a.fits", selected=False)]
+        win._on_frame_selection_changed(0, True)
+        assert win._stack_run_act.isEnabled()
+
+    def test_on_frame_selection_changed_disables_run_when_none_selected(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [FrameEntry(path="/a.fits", selected=True)]
+        win._on_frame_selection_changed(0, False)
+        assert not win._stack_run_act.isEnabled()
+
+    def test_on_frame_selection_changed_out_of_range_no_crash(
+        self, win: MainWindow
+    ) -> None:
+        win._project.input_frames = []
+        win._on_frame_selection_changed(99, False)  # must not raise
+
+    def test_on_frames_remove_requested_removes_entries(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [
+            FrameEntry(path="/a.fits"),
+            FrameEntry(path="/b.fits"),
+            FrameEntry(path="/c.fits"),
+        ]
+        win._on_frames_remove_requested([0, 2])
+        assert len(win._project.input_frames) == 1
+        assert win._project.input_frames[0].path == "/b.fits"
+
+    def test_on_frames_remove_requested_refreshes_panel(
+        self, win: MainWindow
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [FrameEntry(path="/a.fits")]
+        win._on_frames_remove_requested([0])
+        assert win._frame_list_panel._table.rowCount() == 0
+
+    def test_on_frames_remove_requested_out_of_range_no_crash(
+        self, win: MainWindow
+    ) -> None:
+        win._project.input_frames = []
+        win._on_frames_remove_requested([99])  # must not raise

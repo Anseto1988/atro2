@@ -70,10 +70,13 @@ class TestFileLoader:
 # _LoadWorker – direct unit tests for each branch in run()
 # ---------------------------------------------------------------------------
 
-def _make_fits_hdul(data):
+def _make_fits_hdul(data, header_dict: dict | None = None):
     """Return a mock FITS HDUList context manager with hdul[0].data == data."""
     mock_hdu = MagicMock()
     mock_hdu.data = data
+    mock_header = MagicMock()
+    mock_header.get = lambda key, default=None: (header_dict or {}).get(key, default)
+    mock_hdu.header = mock_header
     mock_hdul = MagicMock()
     mock_hdul.__enter__ = lambda s: mock_hdul
     mock_hdul.__exit__ = MagicMock(return_value=False)
@@ -93,7 +96,7 @@ class TestLoadWorkerFitsBranch:
             with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
                 worker.run()
 
-        img, name = blocker.args
+        img, name, _hdr = blocker.args
         assert isinstance(img, np.ndarray)
         assert img.dtype == np.float32
         assert name == "image.fits"
@@ -117,7 +120,7 @@ class TestLoadWorkerFitsBranch:
             with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
                 worker.run()
 
-        _, name = blocker.args
+        _, name, _hdr = blocker.args
         assert name == "frame.fit"
 
 
@@ -136,7 +139,7 @@ class TestLoadWorkerTiffBranch:
             with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
                 worker.run()
 
-        img, name = blocker.args
+        img, name, _hdr = blocker.args
         assert img.dtype == np.float32
         assert img.ndim == 2
         assert name == "mono.tiff"
@@ -153,7 +156,7 @@ class TestLoadWorkerTiffBranch:
             with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
                 worker.run()
 
-        img, _ = blocker.args
+        img, _, _hdr = blocker.args
         assert img.ndim == 2
 
 
@@ -175,7 +178,7 @@ class TestLoadWorkerOtherBranch:
             with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
                 worker.run()
 
-        img, name = blocker.args
+        img, name, _hdr = blocker.args
         assert img.dtype == np.float32
         assert img.ndim == 2
         assert name == "snap.png"
@@ -213,3 +216,116 @@ class TestLoadWorkerStatusSignal:
 
         assert received
         assert "test_status.png" in received[0]
+
+
+class TestFITSHeaderExtraction:
+    """Tests for FITS header extraction in _LoadWorker."""
+
+    def test_fits_header_dict_returned(self, qtbot) -> None:
+        fake_data = np.ones((4, 4), dtype=np.float32)
+        worker = _LoadWorker(Path("/data/m31.fits"))
+        hdul = _make_fits_hdul(fake_data, {"OBJECT": "M31", "EXPTIME": "300.0"})
+
+        with patch("astropy.io.fits.open", return_value=hdul):
+            with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
+                worker.run()
+
+        _, _name, header = blocker.args
+        assert isinstance(header, dict)
+        assert header.get("OBJECT") == "M31"
+        assert header.get("EXPTIME") == "300.0"
+
+    def test_non_fits_header_is_none(self, qtbot) -> None:
+        import PIL.Image as PILImage
+
+        grey = PILImage.fromarray(np.zeros((8, 8), dtype=np.uint8), mode="L")
+        worker = _LoadWorker(Path("/data/snap.png"))
+
+        with patch("PIL.Image.open", return_value=MagicMock(convert=lambda m: grey)):
+            with qtbot.waitSignal(worker.finished, timeout=3000) as blocker:
+                worker.run()
+
+        _, _name, header = blocker.args
+        assert header is None
+
+    def test_file_loader_emits_header_loaded(self, qtbot, tmp_path: Path) -> None:
+        loader = FileLoader()
+        img_path = tmp_path / "test.png"
+        from PIL import Image
+        Image.fromarray(np.zeros((8, 8), dtype=np.uint8), mode="L").save(img_path)
+
+        with qtbot.waitSignal(loader.header_loaded, timeout=5000) as blocker:
+            loader.load(img_path)
+
+        # PNG → header is None
+        assert blocker.args[0] is None
+
+
+class TestFITSMetadataPanel:
+    @pytest.fixture()
+    def panel(self, qtbot):  # type: ignore[no-untyped-def]
+        from astroai.ui.widgets.fits_metadata_panel import FITSMetadataPanel
+        w = FITSMetadataPanel()
+        qtbot.addWidget(w)
+        w.resize(300, 400)
+        w.show()
+        return w
+
+    def test_initial_shows_placeholder(self, panel) -> None:
+        assert panel._placeholder.isVisible()
+        assert not panel._table.isVisible()
+
+    def test_set_header_with_data_shows_table(self, panel) -> None:
+        panel.set_header({"OBJECT": "M31", "EXPTIME": "120"})
+        assert panel._table.isVisible()
+        assert not panel._placeholder.isVisible()
+
+    def test_set_header_none_shows_placeholder(self, panel) -> None:
+        panel.set_header({"OBJECT": "M31"})
+        panel.set_header(None)
+        assert panel._placeholder.isVisible()
+
+    def test_set_header_empty_dict_shows_placeholder(self, panel) -> None:
+        panel.set_header({})
+        assert panel._placeholder.isVisible()
+
+    def test_set_header_known_key_uses_label(self, panel) -> None:
+        panel.set_header({"OBJECT": "NGC7000"})
+        items = [
+            panel._table.item(r, 0).text()
+            for r in range(panel._table.rowCount())
+        ]
+        assert "Ziel" in items
+
+    def test_set_header_exptime_key_shown(self, panel) -> None:
+        panel.set_header({"EXPTIME": "300.0"})
+        values = [
+            panel._table.item(r, 1).text()
+            for r in range(panel._table.rowCount())
+        ]
+        assert "300.0" in values
+
+    def test_clear_hides_table(self, panel) -> None:
+        panel.set_header({"OBJECT": "M42"})
+        panel.clear()
+        assert not panel._table.isVisible()
+        assert panel._placeholder.isVisible()
+
+    def test_clear_empties_rows(self, panel) -> None:
+        panel.set_header({"OBJECT": "M42"})
+        panel.clear()
+        assert panel._table.rowCount() == 0
+
+    def test_unknown_key_not_shown(self, panel) -> None:
+        panel.set_header({"WEIRD_KEY": "some_value"})
+        # WEIRD_KEY is not in _LABEL_MAP → placeholder shown
+        assert panel._placeholder.isVisible()
+
+    def test_multiple_known_keys_all_shown(self, panel) -> None:
+        panel.set_header({
+            "OBJECT": "M101",
+            "EXPTIME": "600",
+            "FILTER": "Ha",
+            "TELESCOP": "Celestron C8",
+        })
+        assert panel._table.rowCount() == 4

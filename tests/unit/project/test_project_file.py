@@ -20,6 +20,9 @@ from astroai.project.project_file import (
     StarlessConfig,
     StretchConfig,
     SyntheticFlatConfig,
+    FrameSelectionConfig,
+    BackgroundRemovalConfig,
+    AnnotationConfig,
     PROJECT_FILE_VERSION,
 )
 
@@ -95,6 +98,8 @@ class TestAstroProject:
         assert "starless" in data
         assert "synthetic_flat" in data
         assert "comet_stack" in data
+        assert "frame_selection" in data
+        assert "background_removal" in data
 
     def test_drizzle_config_defaults(self):
         cfg = DrizzleConfig()
@@ -152,6 +157,10 @@ class TestAstroProject:
         assert proj.synthetic_flat.tile_size == 64
         assert proj.comet_stack.enabled is False
         assert proj.comet_stack.tracking_mode == "blend"
+        assert proj.frame_selection.enabled is False
+        assert proj.frame_selection.min_score == pytest.approx(0.5)
+        assert proj.background_removal.enabled is False
+        assert proj.background_removal.method == "rbf"
 
     def test_full_roundtrip_with_new_configs(self):
         proj = AstroProject(
@@ -194,3 +203,70 @@ class TestAstroProject:
         assert cfg.enabled is False
         assert cfg.tracking_mode == "blend"
         assert cfg.blend_factor == pytest.approx(0.5)
+
+    def test_frame_selection_config_defaults(self):
+        cfg = FrameSelectionConfig()
+        assert cfg.enabled is False
+        assert cfg.min_score == pytest.approx(0.5)
+        assert cfg.max_rejected_fraction == pytest.approx(0.8)
+
+    def test_background_removal_config_defaults(self):
+        cfg = BackgroundRemovalConfig()
+        assert cfg.enabled is False
+        assert cfg.tile_size == 64
+        assert cfg.method == "rbf"
+        assert cfg.preserve_median is True
+
+    def test_registration_config_defaults(self):
+        cfg = RegistrationConfig()
+        assert cfg.enabled is True
+        assert cfg.upsample_factor == 10
+        assert cfg.reference_frame_index == 0
+
+    def test_registration_roundtrip(self):
+        proj = AstroProject(
+            registration=RegistrationConfig(upsample_factor=50, reference_frame_index=2),
+        )
+        data = proj.to_dict()
+        restored = AstroProject.from_dict(data)
+        assert restored.registration.upsample_factor == 50
+        assert restored.registration.reference_frame_index == 2
+
+    def test_registration_included_in_to_dict(self):
+        proj = AstroProject()
+        data = proj.to_dict()
+        assert "registration" in data
+
+
+class TestAnnotationConfig:
+    def test_annotation_defaults(self):
+        cfg = AnnotationConfig()
+        assert cfg.show_dso is True
+        assert cfg.show_stars is True
+        assert cfg.show_boundaries is False
+        assert cfg.show_grid is False
+
+    def test_annotation_roundtrip(self):
+        proj = AstroProject(
+            annotation=AnnotationConfig(
+                show_dso=False, show_stars=True, show_boundaries=True, show_grid=True
+            ),
+        )
+        data = proj.to_dict()
+        restored = AstroProject.from_dict(data)
+        assert restored.annotation.show_dso is False
+        assert restored.annotation.show_stars is True
+        assert restored.annotation.show_boundaries is True
+        assert restored.annotation.show_grid is True
+
+    def test_annotation_included_in_to_dict(self):
+        proj = AstroProject()
+        data = proj.to_dict()
+        assert "annotation" in data
+
+    def test_annotation_defaults_for_legacy_files(self):
+        data = AstroProject().to_dict()
+        del data["annotation"]
+        restored = AstroProject.from_dict(data)
+        assert restored.annotation.show_dso is True
+        assert restored.annotation.show_boundaries is False

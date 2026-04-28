@@ -2,13 +2,47 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal
 
+# FITS header keys to extract, in display order
+_FITS_KEYS: list[tuple[str, ...]] = [
+    ("OBJECT",),
+    ("DATE-OBS", "DATE_OBS"),
+    ("EXPTIME", "EXPOSURE"),
+    ("FILTER",),
+    ("TELESCOP",),
+    ("INSTRUME",),
+    ("FOCALLEN",),
+    ("XPIXSZ", "PIXSIZE1"),
+    ("RA", "OBJCTRA"),
+    ("DEC", "OBJCTDEC"),
+    ("GAIN",),
+    ("CCD-TEMP", "CCD_TEMP"),
+    ("XBINNING",),
+    ("YBINNING",),
+    ("NAXIS1",),
+    ("NAXIS2",),
+]
+
+
+def _extract_fits_header(hdul: Any) -> dict[str, str]:
+    """Return a flat dict of selected FITS header values."""
+    header = hdul[0].header
+    result: dict[str, str] = {}
+    for aliases in _FITS_KEYS:
+        for key in aliases:
+            val = header.get(key)
+            if val is not None:
+                result[aliases[0]] = str(val).strip()
+                break
+    return result
+
 
 class _LoadWorker(QObject):
-    finished = Signal(object, str)  # (ndarray | None, filename)
+    finished = Signal(object, str, object)  # (ndarray, filename, header_dict | None)
     error = Signal(str)
     status = Signal(str)
 
@@ -21,6 +55,7 @@ class _LoadWorker(QObject):
         suffix = path.suffix.lower()
         self.status.emit(f"Lade {path.name}...")
         try:
+            header: dict[str, str] | None = None
             if suffix in (".fits", ".fit", ".fts"):
                 from astropy.io import fits
 
@@ -30,6 +65,7 @@ class _LoadWorker(QObject):
                         self.error.emit(f"Keine Bilddaten in {path.name}")
                         return
                     img = data.astype(np.float32)
+                    header = _extract_fits_header(hdul)
             elif suffix in (".tif", ".tiff"):
                 from PIL import Image
 
@@ -43,7 +79,7 @@ class _LoadWorker(QObject):
                 pil_img_conv = Image.open(path).convert("L")
                 img = np.array(pil_img_conv, dtype=np.float32)
 
-            self.finished.emit(img, path.name)
+            self.finished.emit(img, path.name, header)
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -51,7 +87,8 @@ class _LoadWorker(QObject):
 class FileLoader(QObject):
     """Manages background file loading via a worker thread."""
 
-    image_loaded = Signal(object, str)  # (ndarray, filename)
+    image_loaded = Signal(object, str)      # (ndarray, filename)
+    header_loaded = Signal(object)          # dict[str, str] | None
     load_error = Signal(str)
     load_status = Signal(str)
 
@@ -78,7 +115,8 @@ class FileLoader(QObject):
 
         self._thread.start()
 
-    def _on_finished(self, data: object, name: str) -> None:
+    def _on_finished(self, data: object, name: str, header: object) -> None:
+        self.header_loaded.emit(header)
         self.image_loaded.emit(data, name)
         self._cleanup()
 

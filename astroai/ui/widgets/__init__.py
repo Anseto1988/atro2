@@ -7,6 +7,7 @@ from astroai.ui.widgets.channel_panel import ChannelCombinerPanel
 from astroai.ui.widgets.comet_stack_panel import CometStackPanel
 from astroai.ui.widgets.deconvolution_panel import DeconvolutionPanel
 from astroai.ui.widgets.histogram_widget import HistogramWidget
+from astroai.ui.widgets.live_histogram_view import HistogramView, HistogramWorker
 from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.license_badge import LicenseBadge
 from astroai.ui.widgets.log_widget import LogWidget
@@ -26,6 +27,8 @@ __all__ = [
     "CometStackPanel",
     "DeconvolutionPanel",
     "HistogramWidget",
+    "HistogramView",
+    "HistogramWorker",
     "ImageViewer",
     "LicenseBadge",
     "LogWidget",

@@ -138,6 +138,46 @@ class CometStackConfig:
 
 
 @dataclass
+class FrameSelectionConfig:
+    enabled: bool = False
+    min_score: float = 0.5
+    max_rejected_fraction: float = 0.8
+
+
+@dataclass
+class BackgroundRemovalConfig:
+    enabled: bool = False
+    tile_size: int = 64
+    method: str = "rbf"
+    preserve_median: bool = True
+
+
+@dataclass
+class CurvesConfig:
+    enabled: bool = False
+    rgb_points: list[list[float]] = field(
+        default_factory=lambda: [[0.0, 0.0], [1.0, 1.0]]
+    )
+    r_points: list[list[float]] = field(
+        default_factory=lambda: [[0.0, 0.0], [1.0, 1.0]]
+    )
+    g_points: list[list[float]] = field(
+        default_factory=lambda: [[0.0, 0.0], [1.0, 1.0]]
+    )
+    b_points: list[list[float]] = field(
+        default_factory=lambda: [[0.0, 0.0], [1.0, 1.0]]
+    )
+
+
+@dataclass
+class AnnotationConfig:
+    show_dso: bool = True
+    show_stars: bool = True
+    show_boundaries: bool = False
+    show_grid: bool = False
+
+
+@dataclass
 class AstroProject:
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     input_frames: list[FrameEntry] = field(default_factory=list)
@@ -151,10 +191,14 @@ class AstroProject:
     color_calibration: ColorCalibrationConfig = field(default_factory=ColorCalibrationConfig)
     synthetic_flat: SyntheticFlatConfig = field(default_factory=SyntheticFlatConfig)
     comet_stack: CometStackConfig = field(default_factory=CometStackConfig)
+    frame_selection: FrameSelectionConfig = field(default_factory=FrameSelectionConfig)
+    background_removal: BackgroundRemovalConfig = field(default_factory=BackgroundRemovalConfig)
     denoise: DenoiseConfig = field(default_factory=DenoiseConfig)
     deconvolution: DeconvolutionConfig = field(default_factory=DeconvolutionConfig)
     starless: StarlessConfig = field(default_factory=StarlessConfig)
     star_processing: StarProcessingConfig = field(default_factory=StarProcessingConfig)
+    curves: CurvesConfig = field(default_factory=CurvesConfig)
+    annotation: AnnotationConfig = field(default_factory=AnnotationConfig)
     output_path: str = ""
     output_format: str = "fits"
 
@@ -180,10 +224,14 @@ class AstroProject:
             color_calibration=ColorCalibrationConfig(**data.get("color_calibration", {})),
             synthetic_flat=SyntheticFlatConfig(**data.get("synthetic_flat", {})),
             comet_stack=CometStackConfig(**data.get("comet_stack", {})),
+            frame_selection=FrameSelectionConfig(**data.get("frame_selection", {})),
+            background_removal=BackgroundRemovalConfig(**data.get("background_removal", {})),
             denoise=DenoiseConfig(**data.get("denoise", {})),
             deconvolution=DeconvolutionConfig(**data.get("deconvolution", {})),
             starless=StarlessConfig(**data.get("starless", {})),
             star_processing=StarProcessingConfig(**data.get("star_processing", {})),
+            curves=CurvesConfig(**data.get("curves", {})),
+            annotation=AnnotationConfig(**data.get("annotation", {})),
             output_path=data.get("output_path", ""),
             output_format=data.get("output_format", "fits"),
         )

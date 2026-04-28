@@ -34,6 +34,8 @@ class StarRemovalStep(PipelineStep):
         min_star_area: int = 3,
         max_star_area: int = 5000,
         mask_dilation: int = 3,
+        reduce_enabled: bool = False,
+        reduce_factor: float = 0.5,
         onnx_model_path: str | None = None,
     ) -> None:
         self._manager = StarManager(
@@ -42,6 +44,8 @@ class StarRemovalStep(PipelineStep):
             max_star_area=max_star_area,
             mask_dilation=mask_dilation,
         )
+        self._reduce_enabled = reduce_enabled
+        self._reduce_factor = float(np.clip(reduce_factor, 0.0, 1.0))
         self._onnx_model_path = onnx_model_path
         self._onnx_session: Any | None = None
 
@@ -62,6 +66,17 @@ class StarRemovalStep(PipelineStep):
             context.images[0] if context.images else None
         )
         if data is None:
+            return context
+
+        if self._reduce_enabled:
+            progress(PipelineProgress(
+                stage=self.stage, current=0, total=1, message="Reducing stars\u2026",
+            ))
+            reduced = self._manager.reduce_stars(data, factor=self._reduce_factor)
+            context.result = reduced
+            progress(PipelineProgress(
+                stage=self.stage, current=1, total=1, message="Star reduction complete",
+            ))
             return context
 
         progress(PipelineProgress(

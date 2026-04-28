@@ -9,6 +9,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 
+class PipelineCancelledError(Exception):
+    """Raised when the pipeline is cancelled between steps."""
+
+
 class PipelineStage(Enum):
     LOADING = auto()
     CALIBRATION = auto()
@@ -36,10 +40,15 @@ class PipelineProgress:
 
 
 ProgressCallback = Callable[[PipelineProgress], None]
+CancelCheck = Callable[[], bool]
 
 
 def noop_callback(_progress: PipelineProgress) -> None:
     pass
+
+
+def noop_cancel() -> bool:
+    return False
 
 
 @dataclass
@@ -80,9 +89,12 @@ class Pipeline:
         self,
         context: PipelineContext,
         progress: ProgressCallback = noop_callback,
+        cancel_check: CancelCheck = noop_cancel,
     ) -> PipelineContext:
         total = len(self._steps)
         for i, step in enumerate(self._steps):
+            if cancel_check():
+                raise PipelineCancelledError("Pipeline cancelled before step: " + step.name)
             progress(PipelineProgress(
                 stage=step.stage,
                 current=i,

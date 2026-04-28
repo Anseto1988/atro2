@@ -22,15 +22,18 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 14
+        assert len(steps) == 17
         assert steps[0].key == "calibrate"
-        assert steps[1].key == "synthetic_flat"
-        assert steps[4].key == "comet_stacking"
-        assert steps[5].key == "drizzle"
-        assert steps[6].key == "mosaic"
-        assert steps[7].key == "channel_combine"
-        assert steps[8].key == "stretch"
-        assert steps[9].key == "color_calibration"
+        assert steps[1].key == "frame_selection"
+        assert steps[2].key == "synthetic_flat"
+        assert steps[5].key == "comet_stacking"
+        assert steps[6].key == "drizzle"
+        assert steps[7].key == "mosaic"
+        assert steps[8].key == "channel_combine"
+        assert steps[9].key == "stretch"
+        assert steps[10].key == "curves"
+        assert steps[11].key == "background_removal"
+        assert steps[12].key == "color_calibration"
         assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
@@ -80,21 +83,25 @@ class TestPipelineModel:
         model.advance_to("stack")
         steps = model.steps
         assert steps[0].state is StepState.DONE    # calibrate
-        # synthetic_flat at index 1 is DISABLED (optional, not enabled)
+        # frame_selection at index 1 is DISABLED (optional, not enabled)
         assert steps[1].state is StepState.DISABLED
-        assert steps[2].state is StepState.DONE    # register
-        assert steps[3].state is StepState.ACTIVE  # stack
-        # comet_stacking at index 4 is DISABLED (optional, not enabled)
-        assert steps[4].state is StepState.DISABLED
-        # drizzle at index 5 is DISABLED (optional, not enabled)
+        # synthetic_flat at index 2 is DISABLED (optional, not enabled)
+        assert steps[2].state is StepState.DISABLED
+        assert steps[3].state is StepState.DONE    # register
+        assert steps[4].state is StepState.ACTIVE  # stack
+        # comet_stacking at index 5 is DISABLED (optional, not enabled)
         assert steps[5].state is StepState.DISABLED
-        # mosaic at index 6 is DISABLED (optional, not enabled)
+        # drizzle at index 6 is DISABLED (optional, not enabled)
         assert steps[6].state is StepState.DISABLED
-        # channel_combine at index 7 is DISABLED (optional, not enabled)
+        # mosaic at index 7 is DISABLED (optional, not enabled)
         assert steps[7].state is StepState.DISABLED
-        assert steps[8].state is StepState.PENDING  # stretch
-        # color_calibration at index 9 is DISABLED (optional, not enabled)
-        assert steps[9].state is StepState.DISABLED
+        # channel_combine at index 8 is DISABLED (optional, not enabled)
+        assert steps[8].state is StepState.DISABLED
+        assert steps[9].state is StepState.PENDING  # stretch
+        # background_removal at index 10 is DISABLED (optional, not enabled)
+        assert steps[10].state is StepState.DISABLED
+        # color_calibration at index 11 is DISABLED (optional, not enabled)
+        assert steps[11].state is StepState.DISABLED
 
     def test_step_changed_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.step_changed, timeout=500):
@@ -240,10 +247,10 @@ class TestPipelineModelStarless:
     # -- export_config method --
 
     def test_export_config_default(self, model: PipelineModel) -> None:
-        """Default config: starless disabled, so export_starless/star_mask are False."""
+        """Default config: output_format=fits, starless disabled."""
         config = model.export_config()
         assert config == {
-            "fmt_value": "xisf",
+            "fmt_value": "fits",
             "export_starless": False,
             "export_star_mask": False,
         }
@@ -253,7 +260,7 @@ class TestPipelineModelStarless:
         model.starless_enabled = True
         config = model.export_config()
         assert config == {
-            "fmt_value": "xisf",
+            "fmt_value": "fits",
             "export_starless": True,
             "export_star_mask": True,
         }
@@ -264,7 +271,7 @@ class TestPipelineModelStarless:
         model.save_star_mask = False
         config = model.export_config()
         assert config == {
-            "fmt_value": "xisf",
+            "fmt_value": "fits",
             "export_starless": True,
             "export_star_mask": False,
         }
@@ -1206,3 +1213,653 @@ class TestPipelineModelSyntheticFlat:
         assert model.step_by_key("synthetic_flat").state is StepState.PENDING  # type: ignore[union-attr]
         model.synthetic_flat_enabled = False
         assert model.step_by_key("synthetic_flat").state is StepState.DISABLED  # type: ignore[union-attr]
+
+
+class TestPipelineModelFrameSelection:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_frame_selection_enabled_default(self, model: PipelineModel) -> None:
+        assert model.frame_selection_enabled is False
+
+    def test_frame_selection_enabled_setter(self, model: PipelineModel) -> None:
+        model.frame_selection_enabled = True
+        assert model.frame_selection_enabled is True
+
+    def test_frame_selection_enabled_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.frame_selection_config_changed.connect(lambda: received.append(None))
+        model.frame_selection_enabled = True
+        assert len(received) == 1
+
+    def test_frame_selection_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.frame_selection_config_changed.connect(lambda: received.append(None))
+        model.frame_selection_enabled = False  # already False
+        assert len(received) == 0
+
+    def test_frame_selection_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        model.frame_selection_enabled = True
+        assert model.step_by_key("frame_selection").state is StepState.PENDING  # type: ignore[union-attr]
+
+    def test_frame_selection_disabled_step_is_disabled(self, model: PipelineModel) -> None:
+        # default: disabled
+        assert model.step_by_key("frame_selection").state is StepState.DISABLED  # type: ignore[union-attr]
+
+    def test_min_score_default(self, model: PipelineModel) -> None:
+        assert model.frame_selection_min_score == pytest.approx(0.5)
+
+    def test_min_score_setter(self, model: PipelineModel) -> None:
+        model.frame_selection_min_score = 0.7
+        assert model.frame_selection_min_score == pytest.approx(0.7)
+
+    def test_min_score_clamps_low(self, model: PipelineModel) -> None:
+        model.frame_selection_min_score = -0.5
+        assert model.frame_selection_min_score == pytest.approx(0.0)
+
+    def test_min_score_clamps_high(self, model: PipelineModel) -> None:
+        model.frame_selection_min_score = 1.5
+        assert model.frame_selection_min_score == pytest.approx(1.0)
+
+    def test_min_score_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.frame_selection_config_changed.connect(lambda: received.append(None))
+        model.frame_selection_min_score = 0.8
+        assert len(received) == 1
+
+    def test_min_score_same_value_no_signal(self, model: PipelineModel) -> None:
+        model.frame_selection_min_score = 0.5  # set to default
+        received: list[None] = []
+        model.frame_selection_config_changed.connect(lambda: received.append(None))
+        model.frame_selection_min_score = 0.5
+        assert len(received) == 0
+
+    def test_max_rejected_fraction_default(self, model: PipelineModel) -> None:
+        assert model.frame_selection_max_rejected_fraction == pytest.approx(0.8)
+
+    def test_max_rejected_fraction_setter(self, model: PipelineModel) -> None:
+        model.frame_selection_max_rejected_fraction = 0.5
+        assert model.frame_selection_max_rejected_fraction == pytest.approx(0.5)
+
+    def test_max_rejected_fraction_clamps_low(self, model: PipelineModel) -> None:
+        model.frame_selection_max_rejected_fraction = -1.0
+        assert model.frame_selection_max_rejected_fraction == pytest.approx(0.0)
+
+    def test_max_rejected_fraction_clamps_high(self, model: PipelineModel) -> None:
+        model.frame_selection_max_rejected_fraction = 2.0
+        assert model.frame_selection_max_rejected_fraction == pytest.approx(1.0)
+
+    def test_max_rejected_fraction_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.frame_selection_config_changed.connect(lambda: received.append(None))
+        model.frame_selection_max_rejected_fraction = 0.3
+        assert len(received) == 1
+
+    def test_max_rejected_fraction_same_value_no_signal(self, model: PipelineModel) -> None:
+        model.frame_selection_max_rejected_fraction = 0.8  # set to default
+        received: list[None] = []
+        model.frame_selection_config_changed.connect(lambda: received.append(None))
+        model.frame_selection_max_rejected_fraction = 0.8
+        assert len(received) == 0
+
+    def test_update_step_state_step_none_no_raise(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "frame_selection"]
+        model._update_frame_selection_step_state()  # must not raise
+
+    def test_enable_then_disable_cycles_step_state(self, model: PipelineModel) -> None:
+        model.frame_selection_enabled = True
+        assert model.step_by_key("frame_selection").state is StepState.PENDING  # type: ignore[union-attr]
+        model.frame_selection_enabled = False
+        assert model.step_by_key("frame_selection").state is StepState.DISABLED  # type: ignore[union-attr]
+
+
+class TestPipelineModelBackgroundRemoval:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_background_removal_enabled_default(self, model: PipelineModel) -> None:
+        assert model.background_removal_enabled is False
+
+    def test_background_removal_enabled_setter(self, model: PipelineModel) -> None:
+        model.background_removal_enabled = True
+        assert model.background_removal_enabled is True
+
+    def test_background_removal_enabled_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.background_removal_config_changed.connect(lambda: received.append(None))
+        model.background_removal_enabled = True
+        assert len(received) == 1
+
+    def test_background_removal_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.background_removal_config_changed.connect(lambda: received.append(None))
+        model.background_removal_enabled = False
+        assert len(received) == 0
+
+    def test_background_removal_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        model.background_removal_enabled = True
+        assert model.step_by_key("background_removal").state is StepState.PENDING  # type: ignore[union-attr]
+
+    def test_background_removal_disabled_step_is_disabled(self, model: PipelineModel) -> None:
+        assert model.step_by_key("background_removal").state is StepState.DISABLED  # type: ignore[union-attr]
+
+    def test_tile_size_default(self, model: PipelineModel) -> None:
+        assert model.background_removal_tile_size == 64
+
+    def test_tile_size_setter(self, model: PipelineModel) -> None:
+        model.background_removal_tile_size = 128
+        assert model.background_removal_tile_size == 128
+
+    def test_tile_size_clamps_low(self, model: PipelineModel) -> None:
+        model.background_removal_tile_size = 8
+        assert model.background_removal_tile_size == 16
+
+    def test_tile_size_clamps_high(self, model: PipelineModel) -> None:
+        model.background_removal_tile_size = 512
+        assert model.background_removal_tile_size == 256
+
+    def test_tile_size_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.background_removal_config_changed.connect(lambda: received.append(None))
+        model.background_removal_tile_size = 128
+        assert len(received) == 1
+
+    def test_method_default(self, model: PipelineModel) -> None:
+        assert model.background_removal_method == "rbf"
+
+    def test_method_setter(self, model: PipelineModel) -> None:
+        model.background_removal_method = "poly"
+        assert model.background_removal_method == "poly"
+
+    def test_method_same_value_no_signal(self, model: PipelineModel) -> None:
+        model.background_removal_method = "rbf"
+        received: list[None] = []
+        model.background_removal_config_changed.connect(lambda: received.append(None))
+        model.background_removal_method = "rbf"
+        assert len(received) == 0
+
+    def test_preserve_median_default(self, model: PipelineModel) -> None:
+        assert model.background_removal_preserve_median is True
+
+    def test_preserve_median_setter(self, model: PipelineModel) -> None:
+        model.background_removal_preserve_median = False
+        assert model.background_removal_preserve_median is False
+
+    def test_preserve_median_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.background_removal_config_changed.connect(lambda: received.append(None))
+        model.background_removal_preserve_median = False
+        assert len(received) == 1
+
+    def test_update_step_state_step_none_no_raise(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "background_removal"]
+        model._update_background_removal_step_state()
+
+    def test_enable_then_disable_cycles_step_state(self, model: PipelineModel) -> None:
+        model.background_removal_enabled = True
+        assert model.step_by_key("background_removal").state is StepState.PENDING  # type: ignore[union-attr]
+        model.background_removal_enabled = False
+        assert model.step_by_key("background_removal").state is StepState.DISABLED  # type: ignore[union-attr]
+
+
+class TestPipelineModelStarProcessing:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_star_reduce_enabled_default(self, model: PipelineModel) -> None:
+        assert model.star_reduce_enabled is False
+
+    def test_star_reduce_enabled_setter(self, model: PipelineModel) -> None:
+        model.star_reduce_enabled = True
+        assert model.star_reduce_enabled is True
+
+    def test_star_reduce_enabled_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.star_processing_config_changed.connect(lambda: received.append(None))
+        model.star_reduce_enabled = True
+        assert len(received) == 1
+
+    def test_star_reduce_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.star_processing_config_changed.connect(lambda: received.append(None))
+        model.star_reduce_enabled = False
+        assert len(received) == 0
+
+    def test_star_reduce_factor_default(self, model: PipelineModel) -> None:
+        assert model.star_reduce_factor == pytest.approx(0.5)
+
+    def test_star_reduce_factor_setter(self, model: PipelineModel) -> None:
+        model.star_reduce_factor = 0.3
+        assert model.star_reduce_factor == pytest.approx(0.3)
+
+    def test_star_reduce_factor_clamps_low(self, model: PipelineModel) -> None:
+        model.star_reduce_factor = -0.5
+        assert model.star_reduce_factor == pytest.approx(0.0)
+
+    def test_star_reduce_factor_clamps_high(self, model: PipelineModel) -> None:
+        model.star_reduce_factor = 1.5
+        assert model.star_reduce_factor == pytest.approx(1.0)
+
+    def test_star_detection_sigma_default(self, model: PipelineModel) -> None:
+        assert model.star_detection_sigma == pytest.approx(4.0)
+
+    def test_star_detection_sigma_setter(self, model: PipelineModel) -> None:
+        model.star_detection_sigma = 6.0
+        assert model.star_detection_sigma == pytest.approx(6.0)
+
+    def test_star_detection_sigma_clamps_low(self, model: PipelineModel) -> None:
+        model.star_detection_sigma = 0.0
+        assert model.star_detection_sigma == pytest.approx(1.0)
+
+    def test_star_detection_sigma_clamps_high(self, model: PipelineModel) -> None:
+        model.star_detection_sigma = 15.0
+        assert model.star_detection_sigma == pytest.approx(10.0)
+
+    def test_star_min_area_default(self, model: PipelineModel) -> None:
+        assert model.star_min_area == 3
+
+    def test_star_min_area_setter(self, model: PipelineModel) -> None:
+        model.star_min_area = 10
+        assert model.star_min_area == 10
+
+    def test_star_min_area_clamps_low(self, model: PipelineModel) -> None:
+        model.star_min_area = 0
+        assert model.star_min_area == 1
+
+    def test_star_max_area_default(self, model: PipelineModel) -> None:
+        assert model.star_max_area == 5000
+
+    def test_star_max_area_setter(self, model: PipelineModel) -> None:
+        model.star_max_area = 10000
+        assert model.star_max_area == 10000
+
+    def test_star_max_area_clamps_high(self, model: PipelineModel) -> None:
+        model.star_max_area = 999999
+        assert model.star_max_area == 50000
+
+    def test_star_mask_dilation_default(self, model: PipelineModel) -> None:
+        assert model.star_mask_dilation == 3
+
+    def test_star_mask_dilation_setter(self, model: PipelineModel) -> None:
+        model.star_mask_dilation = 5
+        assert model.star_mask_dilation == 5
+
+    def test_star_mask_dilation_clamps_high(self, model: PipelineModel) -> None:
+        model.star_mask_dilation = 100
+        assert model.star_mask_dilation == 20
+
+    def test_star_processing_emits_signal_on_sigma_change(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.star_processing_config_changed.connect(lambda: received.append(None))
+        model.star_detection_sigma = 7.0
+        assert len(received) == 1
+
+    def test_star_processing_no_signal_same_value(self, model: PipelineModel) -> None:
+        model.star_detection_sigma = 4.0
+        received: list[None] = []
+        model.star_processing_config_changed.connect(lambda: received.append(None))
+        model.star_detection_sigma = 4.0
+        assert len(received) == 0
+
+
+class TestPipelineModelRegistration:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_upsample_factor_default(self, model: PipelineModel) -> None:
+        assert model.registration_upsample_factor == 10
+
+    def test_upsample_factor_setter(self, model: PipelineModel) -> None:
+        model.registration_upsample_factor = 20
+        assert model.registration_upsample_factor == 20
+
+    def test_upsample_factor_clamps_low(self, model: PipelineModel) -> None:
+        model.registration_upsample_factor = 0
+        assert model.registration_upsample_factor == 1
+
+    def test_upsample_factor_clamps_high(self, model: PipelineModel) -> None:
+        model.registration_upsample_factor = 999
+        assert model.registration_upsample_factor == 100
+
+    def test_upsample_factor_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.registration_config_changed.connect(lambda: received.append(None))
+        model.registration_upsample_factor = 5
+        assert len(received) == 1
+
+    def test_upsample_factor_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.registration_config_changed.connect(lambda: received.append(None))
+        model.registration_upsample_factor = 10
+        assert len(received) == 0
+
+    def test_reference_frame_index_default(self, model: PipelineModel) -> None:
+        assert model.registration_reference_frame_index == 0
+
+    def test_reference_frame_index_setter(self, model: PipelineModel) -> None:
+        model.registration_reference_frame_index = 3
+        assert model.registration_reference_frame_index == 3
+
+    def test_reference_frame_index_clamps_negative(self, model: PipelineModel) -> None:
+        model.registration_reference_frame_index = -5
+        assert model.registration_reference_frame_index == 0
+
+    def test_reference_frame_index_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.registration_config_changed.connect(lambda: received.append(None))
+        model.registration_reference_frame_index = 2
+        assert len(received) == 1
+
+
+class TestPipelineModelStacking:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_stacking_method_default(self, model: PipelineModel) -> None:
+        assert model.stacking_method == "sigma_clip"
+
+    def test_stacking_method_setter(self, model: PipelineModel) -> None:
+        model.stacking_method = "mean"
+        assert model.stacking_method == "mean"
+
+    def test_stacking_method_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.stacking_config_changed.connect(lambda: received.append(None))
+        model.stacking_method = "median"
+        assert len(received) == 1
+
+    def test_stacking_method_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.stacking_config_changed.connect(lambda: received.append(None))
+        model.stacking_method = "sigma_clip"
+        assert len(received) == 0
+
+    def test_sigma_low_default(self, model: PipelineModel) -> None:
+        assert model.stacking_sigma_low == pytest.approx(2.5)
+
+    def test_sigma_low_setter(self, model: PipelineModel) -> None:
+        model.stacking_sigma_low = 3.0
+        assert model.stacking_sigma_low == pytest.approx(3.0)
+
+    def test_sigma_low_clamps_low(self, model: PipelineModel) -> None:
+        model.stacking_sigma_low = -1.0
+        assert model.stacking_sigma_low == pytest.approx(0.0)
+
+    def test_sigma_low_clamps_high(self, model: PipelineModel) -> None:
+        model.stacking_sigma_low = 20.0
+        assert model.stacking_sigma_low == pytest.approx(10.0)
+
+    def test_sigma_high_default(self, model: PipelineModel) -> None:
+        assert model.stacking_sigma_high == pytest.approx(2.5)
+
+    def test_sigma_high_setter(self, model: PipelineModel) -> None:
+        model.stacking_sigma_high = 4.0
+        assert model.stacking_sigma_high == pytest.approx(4.0)
+
+    def test_sigma_high_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.stacking_config_changed.connect(lambda: received.append(None))
+        model.stacking_sigma_high = 3.5
+        assert len(received) == 1
+
+    def test_sigma_low_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.stacking_config_changed.connect(lambda: received.append(None))
+        model.stacking_sigma_low = 1.5
+        assert len(received) == 1
+
+
+class TestPipelineModelAnnotation:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_show_dso_default(self, model: PipelineModel) -> None:
+        assert model.annotation_show_dso is True
+
+    def test_show_stars_default(self, model: PipelineModel) -> None:
+        assert model.annotation_show_stars is True
+
+    def test_show_boundaries_default(self, model: PipelineModel) -> None:
+        assert model.annotation_show_boundaries is False
+
+    def test_show_grid_default(self, model: PipelineModel) -> None:
+        assert model.annotation_show_grid is False
+
+    def test_show_dso_setter(self, model: PipelineModel) -> None:
+        model.annotation_show_dso = False
+        assert model.annotation_show_dso is False
+
+    def test_show_stars_setter(self, model: PipelineModel) -> None:
+        model.annotation_show_stars = False
+        assert model.annotation_show_stars is False
+
+    def test_show_boundaries_setter(self, model: PipelineModel) -> None:
+        model.annotation_show_boundaries = True
+        assert model.annotation_show_boundaries is True
+
+    def test_show_grid_setter(self, model: PipelineModel) -> None:
+        model.annotation_show_grid = True
+        assert model.annotation_show_grid is True
+
+    def test_dso_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.annotation_config_changed.connect(lambda: received.append(None))
+        model.annotation_show_dso = False
+        assert len(received) == 1
+
+    def test_stars_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.annotation_config_changed.connect(lambda: received.append(None))
+        model.annotation_show_stars = False
+        assert len(received) == 1
+
+    def test_boundaries_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.annotation_config_changed.connect(lambda: received.append(None))
+        model.annotation_show_boundaries = True
+        assert len(received) == 1
+
+    def test_grid_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.annotation_config_changed.connect(lambda: received.append(None))
+        model.annotation_show_grid = True
+        assert len(received) == 1
+
+    def test_no_signal_same_value(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.annotation_config_changed.connect(lambda: received.append(None))
+        model.annotation_show_dso = True  # same as default
+        assert len(received) == 0
+
+
+class TestPipelineModelExport:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_output_path_default(self, model: PipelineModel) -> None:
+        assert model.output_path == ""
+
+    def test_output_format_default(self, model: PipelineModel) -> None:
+        assert model.output_format == "fits"
+
+    def test_output_filename_default(self, model: PipelineModel) -> None:
+        assert model.output_filename == "output"
+
+    def test_output_path_setter(self, model: PipelineModel) -> None:
+        model.output_path = "/tmp/astro"
+        assert model.output_path == "/tmp/astro"
+
+    def test_output_format_setter(self, model: PipelineModel) -> None:
+        model.output_format = "xisf"
+        assert model.output_format == "xisf"
+
+    def test_output_filename_setter(self, model: PipelineModel) -> None:
+        model.output_filename = "ngc7000"
+        assert model.output_filename == "ngc7000"
+
+    def test_output_path_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.export_config_changed.connect(lambda: received.append(None))
+        model.output_path = "/some/dir"
+        assert len(received) == 1
+
+    def test_output_format_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.export_config_changed.connect(lambda: received.append(None))
+        model.output_format = "tiff"
+        assert len(received) == 1
+
+    def test_output_filename_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.export_config_changed.connect(lambda: received.append(None))
+        model.output_filename = "result"
+        assert len(received) == 1
+
+    def test_output_path_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.export_config_changed.connect(lambda: received.append(None))
+        model.output_path = ""  # same as default
+        assert len(received) == 0
+
+    def test_output_format_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.export_config_changed.connect(lambda: received.append(None))
+        model.output_format = "fits"  # same as default
+        assert len(received) == 0
+
+    def test_export_config_uses_output_format(self, model: PipelineModel) -> None:
+        model.output_format = "xisf"
+        cfg = model.export_config()
+        assert cfg["fmt_value"] == "xisf"
+
+    def test_export_config_starless_when_enabled(self, model: PipelineModel) -> None:
+        model.starless_enabled = True
+        cfg = model.export_config()
+        assert cfg["export_starless"] is True
+
+    def test_export_config_no_starless_by_default(self, model: PipelineModel) -> None:
+        cfg = model.export_config()
+        assert cfg["export_starless"] is False
+        assert cfg["export_star_mask"] is False
+
+
+class TestPipelineModelCurves:
+    """Tests for PipelineModel curves configuration properties and signal."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    _IDENTITY = [(0.0, 0.0), (1.0, 1.0)]
+
+    def test_curves_enabled_default(self, model: PipelineModel) -> None:
+        assert model.curves_enabled is False
+
+    def test_curves_enabled_setter(self, model: PipelineModel) -> None:
+        model.curves_enabled = True
+        assert model.curves_enabled is True
+
+    def test_curves_enabled_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.curves_config_changed.connect(lambda: received.append(None))
+        model.curves_enabled = True
+        assert len(received) == 1
+
+    def test_curves_enabled_same_value_no_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.curves_config_changed.connect(lambda: received.append(None))
+        model.curves_enabled = False
+        assert len(received) == 0
+
+    def test_curves_step_initially_disabled(self, model: PipelineModel) -> None:
+        step = model.step_by_key("curves")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_curves_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        model.curves_enabled = True
+        step = model.step_by_key("curves")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+    def test_curves_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.curves_enabled = True
+        model.curves_enabled = False
+        step = model.step_by_key("curves")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_curves_rgb_points_default(self, model: PipelineModel) -> None:
+        assert model.curves_rgb_points == self._IDENTITY
+
+    def test_curves_rgb_points_setter(self, model: PipelineModel) -> None:
+        pts = [(0.0, 0.0), (0.5, 0.7), (1.0, 1.0)]
+        model.curves_rgb_points = pts
+        assert model.curves_rgb_points == pts
+
+    def test_curves_rgb_points_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.curves_config_changed.connect(lambda: received.append(None))
+        model.curves_rgb_points = [(0.0, 0.0), (0.5, 0.8), (1.0, 1.0)]
+        assert len(received) == 1
+
+    def test_curves_rgb_points_returns_copy(self, model: PipelineModel) -> None:
+        pts = model.curves_rgb_points
+        pts.append((0.5, 0.5))
+        assert model.curves_rgb_points == self._IDENTITY
+
+    def test_curves_r_points_default(self, model: PipelineModel) -> None:
+        assert model.curves_r_points == self._IDENTITY
+
+    def test_curves_r_points_setter(self, model: PipelineModel) -> None:
+        pts = [(0.0, 0.0), (0.3, 0.1), (1.0, 1.0)]
+        model.curves_r_points = pts
+        assert model.curves_r_points == pts
+
+    def test_curves_r_points_emits_signal(self, model: PipelineModel) -> None:
+        received: list[None] = []
+        model.curves_config_changed.connect(lambda: received.append(None))
+        model.curves_r_points = [(0.0, 0.0), (1.0, 1.0)]
+        assert len(received) == 1
+
+    def test_curves_g_points_default(self, model: PipelineModel) -> None:
+        assert model.curves_g_points == self._IDENTITY
+
+    def test_curves_g_points_setter(self, model: PipelineModel) -> None:
+        pts = [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)]
+        model.curves_g_points = pts
+        assert model.curves_g_points == pts
+
+    def test_curves_b_points_default(self, model: PipelineModel) -> None:
+        assert model.curves_b_points == self._IDENTITY
+
+    def test_curves_b_points_setter(self, model: PipelineModel) -> None:
+        pts = [(0.0, 0.0), (0.8, 0.9), (1.0, 1.0)]
+        model.curves_b_points = pts
+        assert model.curves_b_points == pts
+
+    def test_update_curves_step_state_missing_step_no_raise(self, model: PipelineModel) -> None:
+        model._steps = [s for s in model._steps if s.key != "curves"]
+        model._update_curves_step_state()
+
+    def test_reset_keeps_curves_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("curves", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("curves")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_curves_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.curves_enabled = True
+        model.set_step_state("curves", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("curves")
+        assert step is not None
+        assert step.state is StepState.PENDING

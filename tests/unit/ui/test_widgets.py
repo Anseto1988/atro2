@@ -4,12 +4,24 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from astroai.project.project_file import FrameEntry
 from astroai.ui.models import PipelineModel, StepState
 from astroai.ui.widgets.comet_stack_panel import CometStackPanel
+from astroai.ui.widgets.export_panel import ExportPanel
+from astroai.ui.widgets.frame_list_panel import FrameListPanel
+from astroai.ui.widgets.session_notes_panel import SessionNotesPanel
+from astroai.ui.widgets.image_stats_widget import ImageStatsWidget
 from astroai.ui.widgets.histogram_widget import HistogramWidget
 from astroai.ui.widgets.image_viewer import ImageViewer
 from astroai.ui.widgets.progress_widget import ProgressWidget
 from astroai.ui.widgets.synthetic_flat_panel import SyntheticFlatPanel
+from astroai.ui.widgets.frame_selection_panel import FrameSelectionPanel
+from astroai.ui.widgets.registration_panel import RegistrationPanel
+from astroai.ui.widgets.background_removal_panel import BackgroundRemovalPanel
+from astroai.ui.widgets.denoise_panel import DenoisePanel
+from astroai.ui.widgets.stretch_panel import StretchPanel
+from astroai.ui.widgets.stacking_panel import StackingPanel
+from astroai.ui.widgets.star_processing_panel import StarProcessingPanel
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 
 
@@ -212,10 +224,54 @@ class TestProgressWidget:
         progress.set_indeterminate()
         assert progress._bar.maximum() == 0
 
-    def test_determinate(self, progress: ProgressWidget) -> None:
-        progress.set_indeterminate()
-        progress.set_determinate()
-        assert progress._bar.maximum() == 1000
+
+class TestRegistrationPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, model: PipelineModel, qtbot) -> RegistrationPanel:  # type: ignore[no-untyped-def]
+        w = RegistrationPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_upsample_factor(self, panel: RegistrationPanel) -> None:
+        assert panel._upsample_spin.value() == 10
+
+    def test_initial_ref_index(self, panel: RegistrationPanel) -> None:
+        assert panel._ref_index_spin.value() == 0
+
+    def test_upsample_spin_updates_model(
+        self, panel: RegistrationPanel, model: PipelineModel
+    ) -> None:
+        panel._upsample_spin.setValue(20)
+        assert model.registration_upsample_factor == 20
+
+    def test_ref_index_spin_updates_model(
+        self, panel: RegistrationPanel, model: PipelineModel
+    ) -> None:
+        panel._ref_index_spin.setValue(5)
+        assert model.registration_reference_frame_index == 5
+
+    def test_model_change_updates_upsample_spin(
+        self, panel: RegistrationPanel, model: PipelineModel
+    ) -> None:
+        model.registration_upsample_factor = 50
+        assert panel._upsample_spin.value() == 50
+
+    def test_model_change_updates_ref_index_spin(
+        self, panel: RegistrationPanel, model: PipelineModel
+    ) -> None:
+        model.registration_reference_frame_index = 3
+        assert panel._ref_index_spin.value() == 3
+
+    def test_upsample_range(self, panel: RegistrationPanel) -> None:
+        assert panel._upsample_spin.minimum() == 1
+        assert panel._upsample_spin.maximum() == 100
+
+    def test_ref_index_min(self, panel: RegistrationPanel) -> None:
+        assert panel._ref_index_spin.minimum() == 0
 
 
 class TestCometStackPanel:
@@ -374,3 +430,901 @@ class TestSyntheticFlatPanel:
         assert model.synthetic_flat_enabled
         model.reset()
         assert panel._enabled_cb.isChecked()  # reset keeps user config, only resets step state
+
+
+class TestFrameSelectionPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> FrameSelectionPanel:  # type: ignore[no-untyped-def]
+        w = FrameSelectionPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_state_disabled(self, panel: FrameSelectionPanel) -> None:
+        assert not panel._enabled_cb.isChecked()
+        assert not panel._settings_group.isEnabled()
+
+    def test_enable_toggles_settings_group(
+        self, panel: FrameSelectionPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.frame_selection_enabled
+        assert panel._settings_group.isEnabled()
+
+    def test_min_score_updates_model(
+        self, panel: FrameSelectionPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._score_spin.setValue(0.7)
+        assert model.frame_selection_min_score == pytest.approx(0.7)
+
+    def test_max_rejected_fraction_updates_model(
+        self, panel: FrameSelectionPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._reject_spin.setValue(0.6)
+        assert model.frame_selection_max_rejected_fraction == pytest.approx(0.6)
+
+    def test_sync_from_model(
+        self, panel: FrameSelectionPanel, model: PipelineModel
+    ) -> None:
+        model._frame_selection_enabled = True
+        model._frame_selection_min_score = 0.3
+        model._frame_selection_max_rejected_fraction = 0.9
+        model.frame_selection_config_changed.emit()
+        assert panel._enabled_cb.isChecked()
+        assert panel._score_spin.value() == pytest.approx(0.3)
+        assert panel._reject_spin.value() == pytest.approx(0.9)
+
+    def test_pipeline_reset_preserves_enabled_state(
+        self, panel: FrameSelectionPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.frame_selection_enabled
+        model.reset()
+        assert panel._enabled_cb.isChecked()  # reset preserves user config
+
+
+class TestBackgroundRemovalPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> BackgroundRemovalPanel:  # type: ignore[no-untyped-def]
+        w = BackgroundRemovalPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_state_disabled(self, panel: BackgroundRemovalPanel) -> None:
+        assert not panel._enabled_cb.isChecked()
+        assert not panel._settings_group.isEnabled()
+
+    def test_enable_toggles_settings_group(
+        self, panel: BackgroundRemovalPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.background_removal_enabled
+        assert panel._settings_group.isEnabled()
+
+    def test_tile_size_updates_model(
+        self, panel: BackgroundRemovalPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._tile_spin.setValue(128)
+        assert model.background_removal_tile_size == 128
+
+    def test_preserve_median_updates_model(
+        self, panel: BackgroundRemovalPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._preserve_median_cb.setChecked(False)
+        assert model.background_removal_preserve_median is False
+
+    def test_method_combo_updates_model(
+        self, panel: BackgroundRemovalPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        panel._method_combo.setCurrentIndex(1)  # "poly"
+        assert model.background_removal_method == "poly"
+
+    def test_sync_from_model(
+        self, panel: BackgroundRemovalPanel, model: PipelineModel
+    ) -> None:
+        model._background_removal_enabled = True
+        model._background_removal_tile_size = 32
+        model._background_removal_preserve_median = False
+        model.background_removal_config_changed.emit()
+        assert panel._enabled_cb.isChecked()
+        assert panel._tile_spin.value() == 32
+        assert not panel._preserve_median_cb.isChecked()
+
+    def test_pipeline_reset_preserves_enabled_state(
+        self, panel: BackgroundRemovalPanel, model: PipelineModel
+    ) -> None:
+        panel._enabled_cb.setChecked(True)
+        assert model.background_removal_enabled
+        model.reset()
+        assert panel._enabled_cb.isChecked()
+
+
+class TestDenoisePanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> DenoisePanel:  # type: ignore[no-untyped-def]
+        w = DenoisePanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_strength(self, panel: DenoisePanel) -> None:
+        assert panel._strength_spin.value() == pytest.approx(1.0)
+
+    def test_strength_updates_model(
+        self, panel: DenoisePanel, model: PipelineModel
+    ) -> None:
+        panel._strength_spin.setValue(0.6)
+        assert model.denoise_strength == pytest.approx(0.6)
+
+    def test_tile_size_updates_model(
+        self, panel: DenoisePanel, model: PipelineModel
+    ) -> None:
+        panel._tile_spin.setValue(256)
+        assert model.denoise_tile_size == 256
+
+    def test_overlap_updates_model(
+        self, panel: DenoisePanel, model: PipelineModel
+    ) -> None:
+        panel._overlap_spin.setValue(32)
+        assert model.denoise_tile_overlap == 32
+
+    def test_sync_from_model(
+        self, panel: DenoisePanel, model: PipelineModel
+    ) -> None:
+        model._denoise_strength = 0.5
+        model._denoise_tile_size = 128
+        model._denoise_tile_overlap = 16
+        model.denoise_config_changed.emit()
+        assert panel._strength_spin.value() == pytest.approx(0.5)
+        assert panel._tile_spin.value() == 128
+        assert panel._overlap_spin.value() == 16
+
+
+class TestStretchPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> StretchPanel:  # type: ignore[no-untyped-def]
+        w = StretchPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_target_background(self, panel: StretchPanel) -> None:
+        assert panel._bg_spin.value() == pytest.approx(0.25)
+
+    def test_bg_updates_model(
+        self, panel: StretchPanel, model: PipelineModel
+    ) -> None:
+        panel._bg_spin.setValue(0.3)
+        assert model.stretch_target_background == pytest.approx(0.3)
+
+    def test_sigma_updates_model(
+        self, panel: StretchPanel, model: PipelineModel
+    ) -> None:
+        panel._sigma_spin.setValue(-3.5)
+        assert model.stretch_shadow_clipping_sigmas == pytest.approx(-3.5)
+
+    def test_linked_checkbox_updates_model(
+        self, panel: StretchPanel, model: PipelineModel
+    ) -> None:
+        panel._linked_cb.setChecked(False)
+        assert model.stretch_linked_channels is False
+
+    def test_sync_from_model(
+        self, panel: StretchPanel, model: PipelineModel
+    ) -> None:
+        model._stretch_target_background = 0.2
+        model._stretch_shadow_clipping_sigmas = -3.0
+        model._stretch_linked_channels = False
+        model.stretch_config_changed.emit()
+        assert panel._bg_spin.value() == pytest.approx(0.2)
+        assert panel._sigma_spin.value() == pytest.approx(-3.0)
+        assert not panel._linked_cb.isChecked()
+
+
+class TestStarProcessingPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> StarProcessingPanel:  # type: ignore[no-untyped-def]
+        w = StarProcessingPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_reduce_factor_slider(self, panel: StarProcessingPanel) -> None:
+        assert panel._factor_slider.value() == 50
+
+    def test_reduce_cb_updates_model(
+        self, panel: StarProcessingPanel, model: PipelineModel
+    ) -> None:
+        panel._reduce_cb.setChecked(True)
+        assert model.star_reduce_enabled is True
+
+    def test_factor_slider_updates_model(
+        self, panel: StarProcessingPanel, model: PipelineModel
+    ) -> None:
+        panel._factor_slider.setValue(70)
+        assert model.star_reduce_factor == pytest.approx(0.7)
+
+    def test_sigma_spin_updates_model(
+        self, panel: StarProcessingPanel, model: PipelineModel
+    ) -> None:
+        panel._sigma_spin.setValue(6.0)
+        assert model.star_detection_sigma == pytest.approx(6.0)
+
+    def test_min_area_spin_updates_model(
+        self, panel: StarProcessingPanel, model: PipelineModel
+    ) -> None:
+        panel._min_area_spin.setValue(10)
+        assert model.star_min_area == 10
+
+    def test_max_area_spin_updates_model(
+        self, panel: StarProcessingPanel, model: PipelineModel
+    ) -> None:
+        panel._max_area_spin.setValue(8000)
+        assert model.star_max_area == 8000
+
+    def test_sync_from_model(
+        self, panel: StarProcessingPanel, model: PipelineModel
+    ) -> None:
+        model._star_reduce_enabled = True
+        model._star_reduce_factor = 0.3
+        model._star_detection_sigma = 5.0
+        model.star_processing_config_changed.emit()
+        assert panel._reduce_cb.isChecked()
+        assert panel._factor_slider.value() == 30
+        assert panel._sigma_spin.value() == pytest.approx(5.0)
+
+
+class TestStackingPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, qtbot, model: PipelineModel) -> StackingPanel:  # type: ignore[no-untyped-def]
+        w = StackingPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_method_is_sigma_clip(self, panel: StackingPanel) -> None:
+        assert panel._method_combo.currentText() == "sigma_clip"
+
+    def test_sigma_spins_enabled_for_sigma_clip(self, panel: StackingPanel) -> None:
+        panel._method_combo.setCurrentText("sigma_clip")
+        assert panel._sigma_low_spin.isEnabled()
+        assert panel._sigma_high_spin.isEnabled()
+
+    def test_sigma_spins_disabled_for_mean(self, panel: StackingPanel) -> None:
+        panel._method_combo.setCurrentText("mean")
+        assert not panel._sigma_low_spin.isEnabled()
+        assert not panel._sigma_high_spin.isEnabled()
+
+    def test_sigma_spins_disabled_for_median(self, panel: StackingPanel) -> None:
+        panel._method_combo.setCurrentText("median")
+        assert not panel._sigma_low_spin.isEnabled()
+        assert not panel._sigma_high_spin.isEnabled()
+
+    def test_method_combo_updates_model(
+        self, panel: StackingPanel, model: PipelineModel
+    ) -> None:
+        panel._method_combo.setCurrentText("mean")
+        assert model.stacking_method == "mean"
+
+    def test_sigma_low_spin_updates_model(
+        self, panel: StackingPanel, model: PipelineModel
+    ) -> None:
+        panel._sigma_low_spin.setValue(1.5)
+        assert model.stacking_sigma_low == pytest.approx(1.5)
+
+    def test_sigma_high_spin_updates_model(
+        self, panel: StackingPanel, model: PipelineModel
+    ) -> None:
+        panel._sigma_high_spin.setValue(3.0)
+        assert model.stacking_sigma_high == pytest.approx(3.0)
+
+    def test_sync_from_model(
+        self, panel: StackingPanel, model: PipelineModel
+    ) -> None:
+        model._stacking_method = "median"
+        model._stacking_sigma_low = 2.0
+        model._stacking_sigma_high = 4.0
+        model.stacking_config_changed.emit()
+        assert panel._method_combo.currentText() == "median"
+        assert panel._sigma_low_spin.value() == pytest.approx(2.0)
+        assert panel._sigma_high_spin.value() == pytest.approx(4.0)
+
+
+class TestExportPanel:
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    @pytest.fixture()
+    def panel(self, model: PipelineModel, qtbot) -> ExportPanel:  # type: ignore[no-untyped-def]
+        w = ExportPanel(model)
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_dir_edit_empty(self, panel: ExportPanel) -> None:
+        assert panel._dir_edit.text() == ""
+
+    def test_initial_name_edit(self, panel: ExportPanel) -> None:
+        assert panel._name_edit.text() == "output"
+
+    def test_initial_format_fits(self, panel: ExportPanel) -> None:
+        assert panel._fmt_combo.currentText() == "FITS"
+
+    def test_format_combo_updates_model(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        panel._fmt_combo.setCurrentText("XISF")
+        assert model.output_format == "xisf"
+
+    def test_format_combo_tiff_updates_model(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        panel._fmt_combo.setCurrentText("TIFF32")
+        assert model.output_format == "tiff"
+
+    def test_dir_edit_editing_finished_updates_model(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        panel._dir_edit.setText("/tmp/output")
+        panel._dir_edit.editingFinished.emit()
+        assert model.output_path == "/tmp/output"
+
+    def test_name_edit_editing_finished_updates_model(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        panel._name_edit.setText("m42_stack")
+        panel._name_edit.editingFinished.emit()
+        assert model.output_filename == "m42_stack"
+
+    def test_name_edit_empty_uses_default(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        panel._name_edit.setText("")
+        panel._name_edit.editingFinished.emit()
+        assert model.output_filename == "output"
+
+    def test_sync_from_model_updates_dir_edit(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        model._output_path = "/data/astro"
+        model.export_config_changed.emit()
+        assert panel._dir_edit.text() == "/data/astro"
+
+    def test_sync_from_model_updates_format_combo(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        model._output_format = "tiff"
+        model.export_config_changed.emit()
+        assert panel._fmt_combo.currentText() == "TIFF32"
+
+    def test_sync_from_model_updates_name_edit(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        model._output_filename = "ngc891"
+        model.export_config_changed.emit()
+        assert panel._name_edit.text() == "ngc891"
+
+    def test_unknown_format_falls_back_to_first(
+        self, panel: ExportPanel, model: PipelineModel
+    ) -> None:
+        model._output_format = "unknown_fmt"
+        model.export_config_changed.emit()
+        assert panel._fmt_combo.currentIndex() == 0
+
+
+class TestFrameListPanel:
+    @pytest.fixture()
+    def panel(self, qtbot) -> FrameListPanel:  # type: ignore[no-untyped-def]
+        w = FrameListPanel()
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_empty(self, panel: FrameListPanel) -> None:
+        assert panel._table.rowCount() == 0
+        assert "Keine" in panel._count_label.text()
+
+    def test_refresh_populates_rows(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/data/light_001.fits", exposure=120.0, selected=True),
+            FrameEntry(path="/data/light_002.fits", exposure=120.0, selected=True),
+        ]
+        panel.refresh(entries)
+        assert panel._table.rowCount() == 2
+
+    def test_filename_column_shows_basename(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/deep/path/ngc7000_001.fits", exposure=300.0)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 0).text() == "ngc7000_001.fits"
+
+    def test_filename_tooltip_is_full_path(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/deep/path/frame.fits")]
+        panel.refresh(entries)
+        assert panel._table.item(0, 0).toolTip() == "/deep/path/frame.fits"
+
+    def test_exposure_column_formatted(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", exposure=120.5)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 1).text() == "120.5"
+
+    def test_exposure_none_shows_dash(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", exposure=None)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 1).text() == "—"
+
+    def test_quality_score_formatted_as_percent(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", quality_score=0.875)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 2).text() == "87.5%"
+
+    def test_quality_score_none_shows_dash(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", quality_score=None)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 2).text() == "—"
+
+    def test_selected_true_shows_checkmark(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", selected=True)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 3).text() == "✓"
+
+    def test_selected_false_shows_cross(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", selected=False)]
+        panel.refresh(entries)
+        assert panel._table.item(0, 3).text() == "✗"
+
+    def test_count_label_updates(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.9, selected=True),
+            FrameEntry(path="/b.fits", quality_score=0.7, selected=False),
+        ]
+        panel.refresh(entries)
+        label = panel._count_label.text()
+        assert "2 Frame" in label
+        assert "1 ausgewählt" in label
+        assert "2 bewertet" in label
+
+    def test_refresh_clears_previous(self, panel: FrameListPanel) -> None:
+        panel.refresh([FrameEntry(path="/a.fits"), FrameEntry(path="/b.fits")])
+        panel.refresh([FrameEntry(path="/c.fits")])
+        assert panel._table.rowCount() == 1
+
+    def test_refresh_empty_resets_label(self, panel: FrameListPanel) -> None:
+        panel.refresh([FrameEntry(path="/a.fits")])
+        panel.refresh([])
+        assert "Keine" in panel._count_label.text()
+        assert panel._table.rowCount() == 0
+
+    def test_double_click_toggles_selected_false(
+        self, panel: FrameListPanel
+    ) -> None:
+        entry = FrameEntry(path="/f.fits", selected=True)
+        panel.refresh([entry])
+        panel._on_cell_double_clicked(0, 0)
+        assert entry.selected is False
+        assert panel._table.item(0, 3).text() == "✗"
+
+    def test_double_click_toggles_selected_true(
+        self, panel: FrameListPanel
+    ) -> None:
+        entry = FrameEntry(path="/f.fits", selected=False)
+        panel.refresh([entry])
+        panel._on_cell_double_clicked(0, 0)
+        assert entry.selected is True
+        assert panel._table.item(0, 3).text() == "✓"
+
+    def test_double_click_updates_count_label(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=True),
+            FrameEntry(path="/b.fits", selected=True),
+        ]
+        panel.refresh(entries)
+        panel._on_cell_double_clicked(0, 0)
+        assert "1 ausgewählt" in panel._count_label.text()
+
+    def test_double_click_emits_selection_changed(
+        self, qtbot, panel: FrameListPanel
+    ) -> None:
+        entry = FrameEntry(path="/f.fits", selected=True)
+        panel.refresh([entry])
+        with qtbot.waitSignal(panel.selection_changed) as blocker:
+            panel._on_cell_double_clicked(0, 0)
+        assert blocker.args == [0, False]
+
+    def test_double_click_out_of_range_is_noop(
+        self, panel: FrameListPanel
+    ) -> None:
+        panel.refresh([])
+        panel._on_cell_double_clicked(99, 0)  # must not raise
+
+    def test_double_click_second_time_re_enables(
+        self, panel: FrameListPanel
+    ) -> None:
+        entry = FrameEntry(path="/f.fits", selected=True)
+        panel.refresh([entry])
+        panel._on_cell_double_clicked(0, 0)
+        panel._on_cell_double_clicked(0, 0)
+        assert entry.selected is True
+
+    def test_entries_reference_mutated_by_toggle(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [FrameEntry(path="/f.fits", selected=True)]
+        panel.refresh(entries)
+        panel._on_cell_double_clicked(0, 0)
+        assert entries[0].selected is False
+
+    # --- bulk selection helpers ---
+
+    def test_select_all_sets_all_selected(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=False),
+            FrameEntry(path="/b.fits", selected=False),
+        ]
+        panel.refresh(entries)
+        panel.select_all()
+        assert all(e.selected for e in entries)
+
+    def test_deselect_all_clears_all(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=True),
+            FrameEntry(path="/b.fits", selected=True),
+        ]
+        panel.refresh(entries)
+        panel.deselect_all()
+        assert not any(e.selected for e in entries)
+
+    def test_invert_selection_flips_all(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=True),
+            FrameEntry(path="/b.fits", selected=False),
+        ]
+        panel.refresh(entries)
+        panel.invert_selection()
+        assert entries[0].selected is False
+        assert entries[1].selected is True
+
+    def test_select_all_updates_cell_text(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", selected=False)]
+        panel.refresh(entries)
+        panel.select_all()
+        assert panel._table.item(0, 3).text() == "✓"
+
+    def test_deselect_all_updates_cell_text(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/f.fits", selected=True)]
+        panel.refresh(entries)
+        panel.deselect_all()
+        assert panel._table.item(0, 3).text() == "✗"
+
+    def test_select_all_updates_count_label(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=False),
+            FrameEntry(path="/b.fits", selected=False),
+        ]
+        panel.refresh(entries)
+        panel.select_all()
+        assert "2 ausgewählt" in panel._count_label.text()
+
+    def test_select_all_emits_selection_changed_for_changed_rows(
+        self, qtbot, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=False),
+            FrameEntry(path="/b.fits", selected=True),   # already selected — no signal
+        ]
+        panel.refresh(entries)
+        signals: list[tuple[int, bool]] = []
+        panel.selection_changed.connect(lambda i, v: signals.append((i, v)))
+        panel.select_all()
+        # Only index 0 was changed
+        assert (0, True) in signals
+        assert not any(i == 1 for i, _ in signals)
+
+    def test_remove_requested_signal(self, qtbot, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits"),
+            FrameEntry(path="/b.fits"),
+        ]
+        panel.refresh(entries)
+        with qtbot.waitSignal(panel.remove_requested) as blocker:
+            panel.remove_requested.emit([0])
+        assert blocker.args[0] == [0]
+
+    def test_invert_selection_empty_is_noop(
+        self, panel: FrameListPanel
+    ) -> None:
+        panel.refresh([])
+        panel.invert_selection()  # must not raise
+
+    def test_count_label_shows_total_exposure(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=True, exposure=300.0),
+            FrameEntry(path="/b.fits", selected=True, exposure=300.0),
+        ]
+        panel.refresh(entries)
+        assert "10m" in panel._count_label.text()
+
+    def test_count_label_no_exposure_when_unset(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [FrameEntry(path="/a.fits", selected=True, exposure=None)]
+        panel.refresh(entries)
+        # No exposure section when all frames lack exposure data
+        label = panel._count_label.text()
+        assert "0s" not in label and "0m" not in label
+
+    def test_count_label_excludes_deselected_exposure(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=True, exposure=120.0),
+            FrameEntry(path="/b.fits", selected=False, exposure=9999.0),
+        ]
+        panel.refresh(entries)
+        label = panel._count_label.text()
+        assert "2m" in label  # 120s = 2m
+
+    def test_format_exposure_seconds(self, panel: FrameListPanel) -> None:
+        from astroai.ui.widgets.frame_list_panel import _format_exposure
+        assert _format_exposure(45) == "45s"
+
+    def test_format_exposure_minutes(self, panel: FrameListPanel) -> None:
+        from astroai.ui.widgets.frame_list_panel import _format_exposure
+        assert _format_exposure(90) == "1m 30s"
+
+    def test_format_exposure_hours(self, panel: FrameListPanel) -> None:
+        from astroai.ui.widgets.frame_list_panel import _format_exposure
+        assert _format_exposure(3720) == "1h 02m"
+
+    # --- sort ---
+
+    def test_sort_by_name_ascending(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/data/z_frame.fits"),
+            FrameEntry(path="/data/a_frame.fits"),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(0)
+        assert panel._table.item(0, 0).text() == "a_frame.fits"
+        assert panel._table.item(1, 0).text() == "z_frame.fits"
+
+    def test_sort_by_name_descending_on_second_click(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/data/a_frame.fits"),
+            FrameEntry(path="/data/z_frame.fits"),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(0)
+        panel._on_header_clicked(0)
+        assert panel._table.item(0, 0).text() == "z_frame.fits"
+
+    def test_sort_by_exposure_ascending(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", exposure=300.0),
+            FrameEntry(path="/b.fits", exposure=60.0),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(1)
+        assert panel._table.item(0, 1).text() == "60.0"
+        assert panel._table.item(1, 1).text() == "300.0"
+
+    def test_sort_by_quality_ascending(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.9),
+            FrameEntry(path="/b.fits", quality_score=0.3),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(2)
+        assert panel._table.item(0, 2).text() == "30.0%"
+
+    def test_sort_by_selected_ascending(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", selected=True),
+            FrameEntry(path="/b.fits", selected=False),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(3)
+        assert panel._table.item(0, 3).text() == "✗"
+
+    def test_sort_changes_entries_order_in_place(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/data/z.fits"),
+            FrameEntry(path="/data/a.fits"),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(0)
+        assert panel._entries[0].path == "/data/a.fits"
+
+    def test_sort_resets_direction_on_new_column(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", exposure=300.0),
+            FrameEntry(path="/b.fits", exposure=60.0),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(0)
+        panel._on_header_clicked(0)   # now descending on col 0
+        panel._on_header_clicked(1)   # switch to col 1 — must be ascending again
+        assert panel._sort_asc is True
+        assert panel._table.item(0, 1).text() == "60.0"
+
+    def test_sort_none_exposure_sorted_first(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", exposure=120.0),
+            FrameEntry(path="/b.fits", exposure=None),
+        ]
+        panel.refresh(entries)
+        panel._on_header_clicked(1)
+        assert panel._table.item(0, 1).text() == "—"
+
+    def test_sort_on_empty_panel_is_noop(self, panel: FrameListPanel) -> None:
+        panel.refresh([])
+        panel._on_header_clicked(0)  # must not raise
+
+    def test_refresh_reapplies_active_sort(self, panel: FrameListPanel) -> None:
+        panel.refresh([FrameEntry(path="/z.fits"), FrameEntry(path="/a.fits")])
+        panel._on_header_clicked(0)  # sort ascending by name
+        panel.refresh([FrameEntry(path="/m.fits"), FrameEntry(path="/b.fits")])
+        assert panel._table.item(0, 0).text() == "b.fits"
+
+
+class TestSessionNotesPanel:
+    @pytest.fixture()
+    def panel(self, qtbot) -> SessionNotesPanel:  # type: ignore[no-untyped-def]
+        w = SessionNotesPanel()
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_notes_empty(self, panel: SessionNotesPanel) -> None:
+        assert panel.notes == ""
+
+    def test_set_notes_updates_property(self, panel: SessionNotesPanel) -> None:
+        panel.set_notes("Beobachtungsnacht 2026-04-28")
+        assert panel.notes == "Beobachtungsnacht 2026-04-28"
+
+    def test_set_notes_does_not_emit_signal(self, panel: SessionNotesPanel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        emitted: list[str] = []
+        panel.text_changed.connect(emitted.append)
+        panel.set_notes("silent")
+        assert emitted == []
+
+    def test_text_changed_signal_emitted_on_edit(self, panel: SessionNotesPanel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        emitted: list[str] = []
+        panel.text_changed.connect(emitted.append)
+        panel._editor.setPlainText("new note")
+        assert len(emitted) >= 1
+        assert emitted[-1] == "new note"
+
+    def test_set_notes_empty_string(self, panel: SessionNotesPanel) -> None:
+        panel.set_notes("some text")
+        panel.set_notes("")
+        assert panel.notes == ""
+
+    def test_multiline_notes_preserved(self, panel: SessionNotesPanel) -> None:
+        text = "Zeile 1\nZeile 2\nZeile 3"
+        panel.set_notes(text)
+        assert panel.notes == text
+
+    def test_unicode_notes(self, panel: SessionNotesPanel) -> None:
+        text = "Seeing: außergewöhnlich gut — Mond 15% beleuchtet"
+        panel.set_notes(text)
+        assert panel.notes == text
+
+    def test_placeholder_text_present(self, panel: SessionNotesPanel) -> None:
+        assert panel._editor.placeholderText() != ""
+
+    def test_plain_text_only(self, panel: SessionNotesPanel) -> None:
+        assert panel._editor.acceptRichText() is False
+
+    def test_set_notes_overwrites_previous(self, panel: SessionNotesPanel) -> None:
+        panel.set_notes("first")
+        panel.set_notes("second")
+        assert panel.notes == "second"
+
+
+class TestImageStatsWidget:
+    @pytest.fixture()
+    def widget(self, qtbot) -> ImageStatsWidget:  # type: ignore[no-untyped-def]
+        w = ImageStatsWidget()
+        qtbot.addWidget(w)
+        return w
+
+    def test_initial_state_one_row(self, widget: ImageStatsWidget) -> None:
+        assert widget._table.rowCount() == 1
+
+    def test_initial_placeholder_values(self, widget: ImageStatsWidget) -> None:
+        for col in range(1, 5):
+            assert widget._table.item(0, col).text() == "—"
+
+    def test_mono_image_one_row(self, widget: ImageStatsWidget) -> None:
+        data = np.ones((32, 32), dtype=np.float32) * 0.5
+        widget.set_image_data(data)
+        assert widget._table.rowCount() == 1
+
+    def test_mono_channel_label(self, widget: ImageStatsWidget) -> None:
+        data = np.ones((32, 32), dtype=np.float32)
+        widget.set_image_data(data)
+        assert widget._table.item(0, 0).text() == "L"
+
+    def test_color_image_three_rows(self, widget: ImageStatsWidget) -> None:
+        data = np.ones((32, 32, 3), dtype=np.float32)
+        widget.set_image_data(data)
+        assert widget._table.rowCount() == 3
+
+    def test_color_channel_labels(self, widget: ImageStatsWidget) -> None:
+        data = np.ones((16, 16, 3), dtype=np.float32)
+        widget.set_image_data(data)
+        labels = [widget._table.item(i, 0).text() for i in range(3)]
+        assert labels == ["R", "G", "B"]
+
+    def test_mono_mean_correct(self, widget: ImageStatsWidget) -> None:
+        data = np.full((10, 10), 0.25, dtype=np.float32)
+        widget.set_image_data(data)
+        assert widget._table.item(0, 1).text() == "0.2500"
+
+    def test_mono_min_max_correct(self, widget: ImageStatsWidget) -> None:
+        data = np.linspace(0.0, 1.0, 100, dtype=np.float32).reshape(10, 10)
+        widget.set_image_data(data)
+        assert widget._table.item(0, 3).text() == "0.0000"
+        assert widget._table.item(0, 4).text() == "1.0000"
+
+    def test_color_channel_values_differ(self, widget: ImageStatsWidget) -> None:
+        data = np.zeros((16, 16, 3), dtype=np.float32)
+        data[:, :, 0] = 0.1
+        data[:, :, 1] = 0.5
+        data[:, :, 2] = 0.9
+        widget.set_image_data(data)
+        r_mean = widget._table.item(0, 1).text()
+        g_mean = widget._table.item(1, 1).text()
+        b_mean = widget._table.item(2, 1).text()
+        assert r_mean != g_mean
+        assert g_mean != b_mean
+
+    def test_clear_resets_to_placeholder(self, widget: ImageStatsWidget) -> None:
+        data = np.ones((16, 16), dtype=np.float32)
+        widget.set_image_data(data)
+        widget.clear()
+        for col in range(1, 5):
+            assert widget._table.item(0, col).text() == "—"
+
+    def test_invalid_ndim_clears(self, widget: ImageStatsWidget) -> None:
+        data = np.ones((16, 16), dtype=np.float32)
+        widget.set_image_data(data)
+        widget.set_image_data(np.ones((4, 4, 4, 4), dtype=np.float32))
+        for col in range(1, 5):
+            assert widget._table.item(0, col).text() == "—"
+
+    def test_headers_correct(self, widget: ImageStatsWidget) -> None:
+        assert widget._table.columnCount() == 5
+        assert widget._table.horizontalHeaderItem(0).text() == "Kanal"

@@ -11,10 +11,13 @@ from pathlib import Path
 import pytest
 
 from astroai.project.project_file import (
+    AnnotationConfig,
     AstroProject,
     CalibrationConfig,
+    CurvesConfig,
     DenoiseConfig,
     FrameEntry,
+    FrameSelectionConfig,
     ProjectMetadata,
     RegistrationConfig,
     StackingConfig,
@@ -215,3 +218,221 @@ class TestProjectPersistenceE2E:
         assert restored.stacking.method == complex_project.stacking.method
         assert restored.denoise.strength == complex_project.denoise.strength
         assert restored.output_path == complex_project.output_path
+
+    def test_roundtrip_frame_selection_config(self) -> None:
+        project = AstroProject(
+            frame_selection=FrameSelectionConfig(
+                enabled=True,
+                min_score=0.65,
+                max_rejected_fraction=0.5,
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "project.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+
+        assert loaded.frame_selection.enabled is True
+        assert loaded.frame_selection.min_score == pytest.approx(0.65)
+        assert loaded.frame_selection.max_rejected_fraction == pytest.approx(0.5)
+
+    def test_frame_selection_defaults_for_legacy_files(self) -> None:
+        # Simulate a legacy project file without frame_selection key
+        data: dict = {
+            "metadata": {"version": "1.0"},
+            "stacking": {"method": "median", "sigma_low": 2.5, "sigma_high": 2.5},
+        }
+        project = AstroProject.from_dict(data)
+        assert project.frame_selection.enabled is False
+        assert project.frame_selection.min_score == pytest.approx(0.5)
+
+
+class TestAnnotationPersistenceE2E:
+    """Integration tests: AnnotationConfig roundtrip via ProjectSerializer."""
+
+    def test_annotation_save_load_roundtrip(self) -> None:
+        project = AstroProject(
+            annotation=AnnotationConfig(
+                show_dso=False,
+                show_stars=True,
+                show_boundaries=True,
+                show_grid=True,
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "annotation_test.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+
+        assert loaded.annotation.show_dso is False
+        assert loaded.annotation.show_stars is True
+        assert loaded.annotation.show_boundaries is True
+        assert loaded.annotation.show_grid is True
+
+    def test_annotation_defaults_preserved_in_roundtrip(self) -> None:
+        project = AstroProject()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "default_annotation.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+
+        defaults = AnnotationConfig()
+        assert loaded.annotation.show_dso == defaults.show_dso
+        assert loaded.annotation.show_stars == defaults.show_stars
+        assert loaded.annotation.show_boundaries == defaults.show_boundaries
+        assert loaded.annotation.show_grid == defaults.show_grid
+
+    def test_annotation_absent_in_legacy_file_uses_defaults(self) -> None:
+        data = AstroProject().to_dict()
+        del data["annotation"]
+        project = AstroProject.from_dict(data)
+
+        defaults = AnnotationConfig()
+        assert project.annotation.show_dso == defaults.show_dso
+        assert project.annotation.show_boundaries == defaults.show_boundaries
+
+    def test_complex_project_with_annotation_roundtrip(self) -> None:
+        project = AstroProject(
+            metadata=ProjectMetadata(name="M42 Test"),
+            registration=RegistrationConfig(
+                upsample_factor=20, reference_frame_index=1
+            ),
+            stacking=StackingConfig(method="median"),
+            annotation=AnnotationConfig(
+                show_dso=True,
+                show_stars=False,
+                show_boundaries=False,
+                show_grid=True,
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "complex.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+
+        assert loaded.annotation.show_dso is True
+        assert loaded.annotation.show_stars is False
+        assert loaded.annotation.show_grid is True
+        assert loaded.registration.upsample_factor == 20
+        assert loaded.stacking.method == "median"
+
+    def test_all_annotation_flags_false_roundtrip(self) -> None:
+        project = AstroProject(
+            annotation=AnnotationConfig(
+                show_dso=False,
+                show_stars=False,
+                show_boundaries=False,
+                show_grid=False,
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "all_false.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+
+        assert loaded.annotation.show_dso is False
+        assert loaded.annotation.show_stars is False
+        assert loaded.annotation.show_boundaries is False
+        assert loaded.annotation.show_grid is False
+
+
+class TestSessionNotesPersistenceE2E:
+    def test_description_roundtrip(self) -> None:
+        project = AstroProject(
+            metadata=ProjectMetadata(description="Beobachtungsnacht 2026-04-28, Seeing 4/5")
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "notes.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.metadata.description == "Beobachtungsnacht 2026-04-28, Seeing 4/5"
+
+    def test_empty_description_roundtrip(self) -> None:
+        project = AstroProject(metadata=ProjectMetadata(description=""))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "empty.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.metadata.description == ""
+
+    def test_multiline_description_roundtrip(self) -> None:
+        text = "Zeile 1\nZeile 2\nSonderzeichen: äöü — ★"
+        project = AstroProject(metadata=ProjectMetadata(description=text))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "multiline.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.metadata.description == text
+
+    def test_description_default_is_empty(self) -> None:
+        project = AstroProject()
+        assert project.metadata.description == ""
+
+    def test_description_survives_complex_project(self) -> None:
+        project = AstroProject(
+            metadata=ProjectMetadata(name="M42 Session", description="Orion Nebula, 42x120s"),
+            registration=RegistrationConfig(upsample_factor=20),
+            stacking=StackingConfig(method="median"),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "complex_notes.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.metadata.description == "Orion Nebula, 42x120s"
+        assert loaded.metadata.name == "M42 Session"
+        assert loaded.registration.upsample_factor == 20
+
+
+class TestCurvesConfigPersistenceE2E:
+    def test_enabled_flag_roundtrip(self) -> None:
+        project = AstroProject(curves=CurvesConfig(enabled=True))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "curves.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.curves.enabled is True
+
+    def test_disabled_by_default(self) -> None:
+        project = AstroProject()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "curves_default.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.curves.enabled is False
+
+    def test_rgb_points_roundtrip(self) -> None:
+        pts = [[0.0, 0.0], [0.25, 0.4], [0.75, 0.6], [1.0, 1.0]]
+        project = AstroProject(curves=CurvesConfig(enabled=True, rgb_points=pts))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "curves_pts.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.curves.rgb_points == pts
+
+    def test_per_channel_points_roundtrip(self) -> None:
+        r_pts = [[0.0, 0.0], [0.5, 0.7], [1.0, 1.0]]
+        g_pts = [[0.0, 0.0], [0.5, 0.3], [1.0, 1.0]]
+        b_pts = [[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]]
+        project = AstroProject(
+            curves=CurvesConfig(
+                enabled=True, r_points=r_pts, g_points=g_pts, b_points=b_pts
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "curves_ch.astroai"
+            ProjectSerializer.save(project, path)
+            loaded = ProjectSerializer.load(path)
+        assert loaded.curves.r_points == r_pts
+        assert loaded.curves.g_points == g_pts
+        assert loaded.curves.b_points == b_pts
+
+    def test_legacy_file_missing_curves_uses_defaults(self) -> None:
+        import json
+        project_dict = AstroProject().to_dict()
+        del project_dict["curves"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "legacy.astroai"
+            path.write_text(json.dumps(project_dict), encoding="utf-8")
+            loaded = ProjectSerializer.load(path)
+        assert loaded.curves.enabled is False
+        assert len(loaded.curves.rgb_points) == 2

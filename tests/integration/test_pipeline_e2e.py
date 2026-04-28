@@ -606,3 +606,239 @@ class TestFullPipelineE2E:
 
         assert any("Running:" in m for m in progress_messages)
         assert any("complete" in m.lower() for m in progress_messages)
+
+
+# --- Frame Selection Integration ---
+
+
+class TestFrameSelectionIntegration:
+    """Integration tests: FrameSelectionStep filters frames within a Pipeline."""
+
+    def test_step_passes_good_frames(self) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        step = FrameSelectionStep(min_score=0.0)  # accept everything
+        frames = [make_synthetic_starfield(seed=i, n_stars=10) for i in range(5)]
+        ctx = PipelineContext(images=frames)
+        out = step.execute(ctx)
+        assert len(out.images) == 5
+        assert out.metadata["frame_selection_total"] == 5
+        assert out.metadata["frame_selection_kept"] == 5
+
+    def test_step_rejects_blank_frames(self) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        step = FrameSelectionStep(min_score=0.3, max_rejected_fraction=1.0)
+        blank = np.zeros((64, 64), dtype=np.float32)
+        good = make_synthetic_starfield(seed=1, n_stars=15, noise_std=2.0)
+        ctx = PipelineContext(images=[blank, good, blank])
+        out = step.execute(ctx)
+        # blank frames score near 0, good frame scores higher
+        assert out.metadata["frame_selection_total"] == 3
+        assert len(out.images) <= 3
+
+    def test_step_safety_net_preserves_minimum(self) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        # max_rejected_fraction=0.4 → can reject at most 2 of 5 frames
+        step = FrameSelectionStep(min_score=1.0, max_rejected_fraction=0.4)
+        frames = [np.full((64, 64), 10.0, dtype=np.float32) for _ in range(5)]
+        ctx = PipelineContext(images=frames)
+        out = step.execute(ctx)
+        assert len(out.images) >= 3  # at most 2 rejected (40% of 5)
+
+    def test_step_scores_metadata_populated(self) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        step = FrameSelectionStep(min_score=0.0)
+        frames = [make_synthetic_starfield(seed=i) for i in range(3)]
+        ctx = PipelineContext(images=frames)
+        out = step.execute(ctx)
+        scores = out.metadata["frame_scores"]
+        assert len(scores) == 3
+        assert all(0.0 <= s <= 1.0 for s in scores)
+
+    def test_step_in_pipeline_chain(self) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        # FrameSelectionStep followed by a trivial pass-through step
+        class _Identity(PipelineStep):
+            @property
+            def name(self) -> str:
+                return "identity"
+            def execute(self, ctx: PipelineContext, progress: ProgressCallback = noop_callback) -> PipelineContext:
+                return ctx
+
+        pipeline = Pipeline([FrameSelectionStep(min_score=0.0), _Identity()])
+        frames = [make_synthetic_starfield(seed=i) for i in range(4)]
+        ctx = PipelineContext(images=frames)
+        out = pipeline.run(ctx)
+        assert len(out.images) == 4
+        assert "frame_scores" in out.metadata
+
+    def test_empty_context_passthrough_in_pipeline(self) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        step = FrameSelectionStep()
+        out = step.execute(PipelineContext())
+        assert out.images == []
+
+
+# --- Full Pipeline with Production Steps ---
+
+
+class TestFullPipelineWithProductionSteps:
+    """E2E: LoadFramesStep → RegistrationStep → StackingStep → StretchStep
+    using the real production step implementations with FITS files on disk."""
+
+    def test_full_chain_multiple_frames(self, tmp_path: Path) -> None:
+        from astroai.core.pipeline.load_frames_step import LoadFramesStep
+        from astroai.engine.registration.pipeline_step import (
+            RegistrationStep as ProdRegStep,
+        )
+        from astroai.engine.stacking.pipeline_step import (
+            StackingStep as ProdStackStep,
+        )
+
+        meta = ImageMetadata(exposure=120.0, gain_iso=800, temperature=-10.0)
+        fits_paths = []
+        for i in range(4):
+            frame = make_synthetic_starfield(seed=10 + i, n_stars=12, noise_std=6.0)
+            p = tmp_path / f"light_{i:03d}.fits"
+            write_fits(p, frame, meta)
+            fits_paths.append(p)
+
+        pipeline = Pipeline([
+            LoadFramesStep(fits_paths),
+            ProdRegStep(upsample_factor=4, reference_frame_index=0),
+            ProdStackStep(method="mean"),
+            StretchStep(),
+        ])
+
+        progress_log: list[PipelineProgress] = []
+        ctx = PipelineContext()
+        result_ctx = pipeline.run(ctx, progress=lambda p: progress_log.append(p))
+
+        assert result_ctx.result is not None
+        assert result_ctx.result.shape == (128, 128)
+        assert result_ctx.result.min() >= 0.0
+        assert result_ctx.result.max() <= 1.0
+        assert np.isfinite(result_ctx.result).all()
+
+        assert "loaded_frame_paths" in result_ctx.metadata
+        assert len(result_ctx.metadata["loaded_frame_paths"]) == 4
+        assert result_ctx.metadata["registration_frames_aligned"] == 4
+        assert result_ctx.metadata["registration_reference_index"] == 0
+        assert result_ctx.metadata["stacking_method"] == "mean"
+        assert result_ctx.metadata["stacking_frame_count"] == 4
+
+        stages_seen = {p.stage for p in progress_log}
+        assert PipelineStage.CALIBRATION in stages_seen
+        assert PipelineStage.REGISTRATION in stages_seen
+        assert PipelineStage.STACKING in stages_seen
+
+    def test_full_chain_single_frame_skips_registration(self, tmp_path: Path) -> None:
+        from astroai.core.pipeline.load_frames_step import LoadFramesStep
+        from astroai.engine.registration.pipeline_step import (
+            RegistrationStep as ProdRegStep,
+        )
+        from astroai.engine.stacking.pipeline_step import (
+            StackingStep as ProdStackStep,
+        )
+
+        frame = make_synthetic_starfield(seed=77, n_stars=8)
+        p = tmp_path / "single.fits"
+        write_fits(p, frame)
+
+        pipeline = Pipeline([
+            LoadFramesStep([p]),
+            ProdRegStep(upsample_factor=4),
+            ProdStackStep(method="median"),
+            StretchStep(),
+        ])
+
+        result_ctx = pipeline.run(PipelineContext())
+
+        assert result_ctx.result is not None
+        assert result_ctx.result.shape == (128, 128)
+        assert result_ctx.metadata.get("stacking_frame_count") == 1
+        # Registration is skipped for single frame — metadata key absent
+        assert "registration_frames_aligned" not in result_ctx.metadata
+
+    def test_load_step_replaces_preexisting_context_images(
+        self, tmp_path: Path
+    ) -> None:
+        from astroai.core.pipeline.load_frames_step import LoadFramesStep
+
+        dummy = np.ones((64, 64), dtype=np.float32)
+        ctx = PipelineContext(images=[dummy, dummy])
+
+        frame = make_synthetic_starfield(seed=5)
+        p = tmp_path / "frame.fits"
+        write_fits(p, frame)
+
+        result = LoadFramesStep([p]).execute(ctx)
+
+        assert len(result.images) == 1
+        assert result.images[0].shape == (128, 128)
+        assert result.metadata["loaded_frame_paths"] == [str(p)]
+
+    def test_sigma_clip_stacking_full_chain(self, tmp_path: Path) -> None:
+        from astroai.core.pipeline.load_frames_step import LoadFramesStep
+        from astroai.engine.registration.pipeline_step import (
+            RegistrationStep as ProdRegStep,
+        )
+        from astroai.engine.stacking.pipeline_step import (
+            StackingStep as ProdStackStep,
+        )
+
+        meta = ImageMetadata(exposure=60.0, gain_iso=1600, temperature=-5.0)
+        fits_paths = []
+        for i in range(5):
+            frame = make_synthetic_starfield(seed=20 + i, n_stars=10)
+            p = tmp_path / f"sigma_{i}.fits"
+            write_fits(p, frame, meta)
+            fits_paths.append(p)
+
+        pipeline = Pipeline([
+            LoadFramesStep(fits_paths),
+            ProdRegStep(upsample_factor=4),
+            ProdStackStep(method="sigma_clip", sigma_low=2.0, sigma_high=2.0),
+            StretchStep(),
+        ])
+
+        result_ctx = pipeline.run(PipelineContext())
+
+        assert result_ctx.result is not None
+        assert result_ctx.metadata["stacking_method"] == "sigma_clip"
+        assert result_ctx.metadata["stacking_frame_count"] == 5
+        assert np.isfinite(result_ctx.result).all()
+
+    def test_frame_selection_then_registration_then_stack(
+        self, tmp_path: Path
+    ) -> None:
+        from astroai.core.pipeline.frame_selection_step import FrameSelectionStep
+        from astroai.core.pipeline.load_frames_step import LoadFramesStep
+        from astroai.engine.registration.pipeline_step import (
+            RegistrationStep as ProdRegStep,
+        )
+        from astroai.engine.stacking.pipeline_step import (
+            StackingStep as ProdStackStep,
+        )
+
+        meta = ImageMetadata(exposure=120.0, gain_iso=800, temperature=-10.0)
+        fits_paths = []
+        for i in range(5):
+            frame = make_synthetic_starfield(seed=30 + i, n_stars=15, noise_std=4.0)
+            p = tmp_path / f"sel_{i}.fits"
+            write_fits(p, frame, meta)
+            fits_paths.append(p)
+
+        pipeline = Pipeline([
+            LoadFramesStep(fits_paths),
+            FrameSelectionStep(min_score=0.0),
+            ProdRegStep(upsample_factor=4),
+            ProdStackStep(method="mean"),
+            StretchStep(),
+        ])
+
+        result_ctx = pipeline.run(PipelineContext())
+
+        assert result_ctx.result is not None
+        assert "frame_scores" in result_ctx.metadata
+        assert result_ctx.metadata["stacking_method"] == "mean"
+        assert np.isfinite(result_ctx.result).all()

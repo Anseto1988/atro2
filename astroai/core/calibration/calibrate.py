@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Callable, cast
 
@@ -14,6 +15,8 @@ from astroai.core.calibration.matcher import (
 from astroai.core.io.fits_io import ImageMetadata
 
 LoadDataFn = Callable[[Path], NDArray[np.floating[Any]]]
+
+logger = logging.getLogger(__name__)
 
 
 def apply_dark(
@@ -44,8 +47,8 @@ def calibrate_frame(
             engine = GPUCalibrationEngine()
             if engine.device_type != "cpu":
                 return engine.calibrate_frame_gpu(light, light_meta, library, load_data)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("GPU calibration unavailable (%s) — falling back to CPU", exc)
 
     result = light.copy()
 

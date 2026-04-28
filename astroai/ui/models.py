@@ -45,9 +45,21 @@ class PipelineModel(QObject):
     comet_stack_config_changed = Signal()
     comet_preview_changed = Signal()
     synthetic_flat_config_changed = Signal()
+    frame_selection_config_changed = Signal()
+    background_removal_config_changed = Signal()
+    denoise_config_changed = Signal()
+    stretch_config_changed = Signal()
+    star_processing_config_changed = Signal()
+    registration_config_changed = Signal()
+    stacking_config_changed = Signal()
+    annotation_config_changed = Signal()
+    export_config_changed = Signal()
+    curves_config_changed = Signal()
+    histogram_changed = Signal(object)  # ndarray emitted after pipeline finish or file load
 
     DEFAULT_STEPS = [
         ("calibrate", "Kalibrierung", False),
+        ("frame_selection", "Frame-Selektion", True),
         ("synthetic_flat", "Synth. Flat", True),
         ("register", "Registrierung", False),
         ("stack", "Stacking", False),
@@ -56,6 +68,8 @@ class PipelineModel(QObject):
         ("mosaic", "Mosaic", True),
         ("channel_combine", "Kanal-Kombination", True),
         ("stretch", "Stretching", False),
+        ("curves", "Kurven", True),
+        ("background_removal", "Hintergrundentfernung", True),
         ("color_calibration", "Farbkalibrierung", True),
         ("denoise", "Entrauschen", False),
         ("deconvolution", "Deconvolution", True),
@@ -93,6 +107,42 @@ class PipelineModel(QObject):
         self._synthetic_flat_enabled: bool = False
         self._synthetic_flat_tile_size: int = 64
         self._synthetic_flat_smoothing_sigma: float = 8.0
+        self._frame_selection_enabled: bool = False
+        self._frame_selection_min_score: float = 0.5
+        self._frame_selection_max_rejected_fraction: float = 0.8
+        self._curves_enabled: bool = False
+        self._curves_rgb_points: list[tuple[float, float]] = [(0.0, 0.0), (1.0, 1.0)]
+        self._curves_r_points: list[tuple[float, float]] = [(0.0, 0.0), (1.0, 1.0)]
+        self._curves_g_points: list[tuple[float, float]] = [(0.0, 0.0), (1.0, 1.0)]
+        self._curves_b_points: list[tuple[float, float]] = [(0.0, 0.0), (1.0, 1.0)]
+        self._background_removal_enabled: bool = False
+        self._background_removal_tile_size: int = 64
+        self._background_removal_method: str = "rbf"
+        self._background_removal_preserve_median: bool = True
+        self._denoise_strength: float = 1.0
+        self._denoise_tile_size: int = 512
+        self._denoise_tile_overlap: int = 64
+        self._stretch_target_background: float = 0.25
+        self._stretch_shadow_clipping_sigmas: float = -2.8
+        self._stretch_linked_channels: bool = True
+        self._star_detection_sigma: float = 4.0
+        self._star_min_area: int = 3
+        self._star_max_area: int = 5000
+        self._star_mask_dilation: int = 3
+        self._star_reduce_enabled: bool = False
+        self._star_reduce_factor: float = 0.5
+        self._annotation_show_dso: bool = True
+        self._annotation_show_stars: bool = True
+        self._annotation_show_boundaries: bool = False
+        self._annotation_show_grid: bool = False
+        self._output_path: str = ""
+        self._output_format: str = "fits"
+        self._output_filename: str = "output"
+        self._registration_upsample_factor: int = 10
+        self._registration_reference_frame_index: int = 0
+        self._stacking_method: str = "sigma_clip"
+        self._stacking_sigma_low: float = 2.5
+        self._stacking_sigma_high: float = 2.5
         self._comet_stack_enabled: bool = False
         self._comet_tracking_mode: str = "blend"
         self._comet_blend_factor: float = 0.5
@@ -106,6 +156,9 @@ class PipelineModel(QObject):
         self._update_color_calibration_step_state()
         self._update_comet_stack_step_state()
         self._update_synthetic_flat_step_state()
+        self._update_frame_selection_step_state()
+        self._update_background_removal_step_state()
+        self._update_curves_step_state()
 
     # -- starless config properties --
 
@@ -583,12 +636,477 @@ class PipelineModel(QObject):
             step.state = StepState.PENDING
             self.step_changed.emit("synthetic_flat", StepState.PENDING.value)
 
+    # -- frame selection config properties -----------------------------------
+
+    @property
+    def frame_selection_enabled(self) -> bool:
+        return self._frame_selection_enabled
+
+    @frame_selection_enabled.setter
+    def frame_selection_enabled(self, value: bool) -> None:
+        if self._frame_selection_enabled == value:
+            return
+        self._frame_selection_enabled = value
+        self._update_frame_selection_step_state()
+        self.frame_selection_config_changed.emit()
+
+    @property
+    def frame_selection_min_score(self) -> float:
+        return self._frame_selection_min_score
+
+    @frame_selection_min_score.setter
+    def frame_selection_min_score(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._frame_selection_min_score == value:
+            return
+        self._frame_selection_min_score = value
+        self.frame_selection_config_changed.emit()
+
+    @property
+    def frame_selection_max_rejected_fraction(self) -> float:
+        return self._frame_selection_max_rejected_fraction
+
+    @frame_selection_max_rejected_fraction.setter
+    def frame_selection_max_rejected_fraction(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._frame_selection_max_rejected_fraction == value:
+            return
+        self._frame_selection_max_rejected_fraction = value
+        self.frame_selection_config_changed.emit()
+
+    def _update_frame_selection_step_state(self) -> None:
+        step = self.step_by_key("frame_selection")
+        if step is None:
+            return
+        if not self._frame_selection_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("frame_selection", StepState.DISABLED.value)
+        elif self._frame_selection_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("frame_selection", StepState.PENDING.value)
+
+    # -- background removal config properties --------------------------------
+
+    @property
+    def background_removal_enabled(self) -> bool:
+        return self._background_removal_enabled
+
+    @background_removal_enabled.setter
+    def background_removal_enabled(self, value: bool) -> None:
+        if self._background_removal_enabled == value:
+            return
+        self._background_removal_enabled = value
+        self._update_background_removal_step_state()
+        self.background_removal_config_changed.emit()
+
+    @property
+    def background_removal_tile_size(self) -> int:
+        return self._background_removal_tile_size
+
+    @background_removal_tile_size.setter
+    def background_removal_tile_size(self, value: int) -> None:
+        value = max(16, min(256, value))
+        if self._background_removal_tile_size == value:
+            return
+        self._background_removal_tile_size = value
+        self.background_removal_config_changed.emit()
+
+    @property
+    def background_removal_method(self) -> str:
+        return self._background_removal_method
+
+    @background_removal_method.setter
+    def background_removal_method(self, value: str) -> None:
+        if self._background_removal_method == value:
+            return
+        self._background_removal_method = value
+        self.background_removal_config_changed.emit()
+
+    @property
+    def background_removal_preserve_median(self) -> bool:
+        return self._background_removal_preserve_median
+
+    @background_removal_preserve_median.setter
+    def background_removal_preserve_median(self, value: bool) -> None:
+        if self._background_removal_preserve_median == value:
+            return
+        self._background_removal_preserve_median = value
+        self.background_removal_config_changed.emit()
+
+    def _update_background_removal_step_state(self) -> None:
+        step = self.step_by_key("background_removal")
+        if step is None:
+            return
+        if not self._background_removal_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("background_removal", StepState.DISABLED.value)
+        elif self._background_removal_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("background_removal", StepState.PENDING.value)
+
+    # -- denoise config properties -------------------------------------------
+
+    @property
+    def denoise_strength(self) -> float:
+        return self._denoise_strength
+
+    @denoise_strength.setter
+    def denoise_strength(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._denoise_strength == value:
+            return
+        self._denoise_strength = value
+        self.denoise_config_changed.emit()
+
+    @property
+    def denoise_tile_size(self) -> int:
+        return self._denoise_tile_size
+
+    @denoise_tile_size.setter
+    def denoise_tile_size(self, value: int) -> None:
+        value = max(64, min(1024, value))
+        if self._denoise_tile_size == value:
+            return
+        self._denoise_tile_size = value
+        self.denoise_config_changed.emit()
+
+    @property
+    def denoise_tile_overlap(self) -> int:
+        return self._denoise_tile_overlap
+
+    @denoise_tile_overlap.setter
+    def denoise_tile_overlap(self, value: int) -> None:
+        value = max(0, min(256, value))
+        if self._denoise_tile_overlap == value:
+            return
+        self._denoise_tile_overlap = value
+        self.denoise_config_changed.emit()
+
+    # -- stretch config properties --------------------------------------------
+
+    @property
+    def stretch_target_background(self) -> float:
+        return self._stretch_target_background
+
+    @stretch_target_background.setter
+    def stretch_target_background(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._stretch_target_background == value:
+            return
+        self._stretch_target_background = value
+        self.stretch_config_changed.emit()
+
+    @property
+    def stretch_shadow_clipping_sigmas(self) -> float:
+        return self._stretch_shadow_clipping_sigmas
+
+    @stretch_shadow_clipping_sigmas.setter
+    def stretch_shadow_clipping_sigmas(self, value: float) -> None:
+        value = max(-10.0, min(0.0, value))
+        if self._stretch_shadow_clipping_sigmas == value:
+            return
+        self._stretch_shadow_clipping_sigmas = value
+        self.stretch_config_changed.emit()
+
+    @property
+    def stretch_linked_channels(self) -> bool:
+        return self._stretch_linked_channels
+
+    @stretch_linked_channels.setter
+    def stretch_linked_channels(self, value: bool) -> None:
+        if self._stretch_linked_channels == value:
+            return
+        self._stretch_linked_channels = value
+        self.stretch_config_changed.emit()
+
+    # -- curves config properties --------------------------------------------
+
+    @property
+    def curves_enabled(self) -> bool:
+        return self._curves_enabled
+
+    @curves_enabled.setter
+    def curves_enabled(self, value: bool) -> None:
+        if self._curves_enabled == value:
+            return
+        self._curves_enabled = value
+        self._update_curves_step_state()
+        self.curves_config_changed.emit()
+
+    @property
+    def curves_rgb_points(self) -> list[tuple[float, float]]:
+        return list(self._curves_rgb_points)
+
+    @curves_rgb_points.setter
+    def curves_rgb_points(self, value: list[tuple[float, float]]) -> None:
+        self._curves_rgb_points = list(value)
+        self.curves_config_changed.emit()
+
+    @property
+    def curves_r_points(self) -> list[tuple[float, float]]:
+        return list(self._curves_r_points)
+
+    @curves_r_points.setter
+    def curves_r_points(self, value: list[tuple[float, float]]) -> None:
+        self._curves_r_points = list(value)
+        self.curves_config_changed.emit()
+
+    @property
+    def curves_g_points(self) -> list[tuple[float, float]]:
+        return list(self._curves_g_points)
+
+    @curves_g_points.setter
+    def curves_g_points(self, value: list[tuple[float, float]]) -> None:
+        self._curves_g_points = list(value)
+        self.curves_config_changed.emit()
+
+    @property
+    def curves_b_points(self) -> list[tuple[float, float]]:
+        return list(self._curves_b_points)
+
+    @curves_b_points.setter
+    def curves_b_points(self, value: list[tuple[float, float]]) -> None:
+        self._curves_b_points = list(value)
+        self.curves_config_changed.emit()
+
+    def _update_curves_step_state(self) -> None:
+        step = self.step_by_key("curves")
+        if step is None:
+            return
+        if not self._curves_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("curves", StepState.DISABLED.value)
+        elif self._curves_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("curves", StepState.PENDING.value)
+
+    # -- star processing config properties -----------------------------------
+
+    @property
+    def star_detection_sigma(self) -> float:
+        return self._star_detection_sigma
+
+    @star_detection_sigma.setter
+    def star_detection_sigma(self, value: float) -> None:
+        value = max(1.0, min(10.0, value))
+        if self._star_detection_sigma == value:
+            return
+        self._star_detection_sigma = value
+        self.star_processing_config_changed.emit()
+
+    @property
+    def star_min_area(self) -> int:
+        return self._star_min_area
+
+    @star_min_area.setter
+    def star_min_area(self, value: int) -> None:
+        value = max(1, min(500, int(value)))
+        if self._star_min_area == value:
+            return
+        self._star_min_area = value
+        self.star_processing_config_changed.emit()
+
+    @property
+    def star_max_area(self) -> int:
+        return self._star_max_area
+
+    @star_max_area.setter
+    def star_max_area(self, value: int) -> None:
+        value = max(100, min(50000, int(value)))
+        if self._star_max_area == value:
+            return
+        self._star_max_area = value
+        self.star_processing_config_changed.emit()
+
+    @property
+    def star_mask_dilation(self) -> int:
+        return self._star_mask_dilation
+
+    @star_mask_dilation.setter
+    def star_mask_dilation(self, value: int) -> None:
+        value = max(0, min(20, int(value)))
+        if self._star_mask_dilation == value:
+            return
+        self._star_mask_dilation = value
+        self.star_processing_config_changed.emit()
+
+    @property
+    def star_reduce_enabled(self) -> bool:
+        return self._star_reduce_enabled
+
+    @star_reduce_enabled.setter
+    def star_reduce_enabled(self, value: bool) -> None:
+        if self._star_reduce_enabled == value:
+            return
+        self._star_reduce_enabled = value
+        self.star_processing_config_changed.emit()
+
+    @property
+    def star_reduce_factor(self) -> float:
+        return self._star_reduce_factor
+
+    @star_reduce_factor.setter
+    def star_reduce_factor(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._star_reduce_factor == value:
+            return
+        self._star_reduce_factor = value
+        self.star_processing_config_changed.emit()
+
+    # -- registration config properties -----------------------------------
+
+    @property
+    def registration_upsample_factor(self) -> int:
+        return self._registration_upsample_factor
+
+    @registration_upsample_factor.setter
+    def registration_upsample_factor(self, value: int) -> None:
+        value = max(1, min(100, int(value)))
+        if self._registration_upsample_factor == value:
+            return
+        self._registration_upsample_factor = value
+        self.registration_config_changed.emit()
+
+    @property
+    def registration_reference_frame_index(self) -> int:
+        return self._registration_reference_frame_index
+
+    @registration_reference_frame_index.setter
+    def registration_reference_frame_index(self, value: int) -> None:
+        value = max(0, int(value))
+        if self._registration_reference_frame_index == value:
+            return
+        self._registration_reference_frame_index = value
+        self.registration_config_changed.emit()
+
+    # -- stacking config properties -----------------------------------
+
+    @property
+    def stacking_method(self) -> str:
+        return self._stacking_method
+
+    @stacking_method.setter
+    def stacking_method(self, value: str) -> None:
+        if self._stacking_method == value:
+            return
+        self._stacking_method = value
+        self.stacking_config_changed.emit()
+
+    @property
+    def stacking_sigma_low(self) -> float:
+        return self._stacking_sigma_low
+
+    @stacking_sigma_low.setter
+    def stacking_sigma_low(self, value: float) -> None:
+        value = max(0.0, min(10.0, value))
+        if self._stacking_sigma_low == value:
+            return
+        self._stacking_sigma_low = value
+        self.stacking_config_changed.emit()
+
+    @property
+    def stacking_sigma_high(self) -> float:
+        return self._stacking_sigma_high
+
+    @stacking_sigma_high.setter
+    def stacking_sigma_high(self, value: float) -> None:
+        value = max(0.0, min(10.0, value))
+        if self._stacking_sigma_high == value:
+            return
+        self._stacking_sigma_high = value
+        self.stacking_config_changed.emit()
+
+    # -- annotation config properties -----------------------------------
+
+    @property
+    def annotation_show_dso(self) -> bool:
+        return self._annotation_show_dso
+
+    @annotation_show_dso.setter
+    def annotation_show_dso(self, value: bool) -> None:
+        value = bool(value)
+        if self._annotation_show_dso == value:
+            return
+        self._annotation_show_dso = value
+        self.annotation_config_changed.emit()
+
+    @property
+    def annotation_show_stars(self) -> bool:
+        return self._annotation_show_stars
+
+    @annotation_show_stars.setter
+    def annotation_show_stars(self, value: bool) -> None:
+        value = bool(value)
+        if self._annotation_show_stars == value:
+            return
+        self._annotation_show_stars = value
+        self.annotation_config_changed.emit()
+
+    @property
+    def annotation_show_boundaries(self) -> bool:
+        return self._annotation_show_boundaries
+
+    @annotation_show_boundaries.setter
+    def annotation_show_boundaries(self, value: bool) -> None:
+        value = bool(value)
+        if self._annotation_show_boundaries == value:
+            return
+        self._annotation_show_boundaries = value
+        self.annotation_config_changed.emit()
+
+    @property
+    def annotation_show_grid(self) -> bool:
+        return self._annotation_show_grid
+
+    @annotation_show_grid.setter
+    def annotation_show_grid(self, value: bool) -> None:
+        value = bool(value)
+        if self._annotation_show_grid == value:
+            return
+        self._annotation_show_grid = value
+        self.annotation_config_changed.emit()
+
+    # -- export config properties -------------------------------------------
+
+    @property
+    def output_path(self) -> str:
+        return self._output_path
+
+    @output_path.setter
+    def output_path(self, value: str) -> None:
+        if self._output_path == value:
+            return
+        self._output_path = value
+        self.export_config_changed.emit()
+
+    @property
+    def output_format(self) -> str:
+        return self._output_format
+
+    @output_format.setter
+    def output_format(self, value: str) -> None:
+        if self._output_format == value:
+            return
+        self._output_format = value
+        self.export_config_changed.emit()
+
+    @property
+    def output_filename(self) -> str:
+        return self._output_filename
+
+    @output_filename.setter
+    def output_filename(self, value: str) -> None:
+        if self._output_filename == value:
+            return
+        self._output_filename = value
+        self.export_config_changed.emit()
+
     # -- export config bridge --
 
     def export_config(self) -> dict[str, Any]:
         """Return ExportStep-compatible parameters derived from UI state."""
         return {
-            "fmt_value": self._starless_format,
+            "fmt_value": self._output_format,
             "export_starless": self._starless_enabled,
             "export_star_mask": self._starless_enabled and self._save_star_mask,
         }
@@ -629,6 +1147,9 @@ class PipelineModel(QObject):
             "color_calibration": self._color_calibration_enabled,
             "comet_stacking": self._comet_stack_enabled,
             "synthetic_flat": self._synthetic_flat_enabled,
+            "frame_selection": self._frame_selection_enabled,
+            "background_removal": self._background_removal_enabled,
+            "curves": self._curves_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):
