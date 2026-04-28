@@ -23,9 +23,10 @@ def write_tiff32(
         if channels == 1:
             img = Image.fromarray(data[0], mode="F")
         elif channels == 3:
-            img = Image.merge("RGB", [
-                Image.fromarray(data[c], mode="F") for c in range(3)
-            ])
+            import tifffile as _tf
+            hwc = data.transpose(1, 2, 0)  # CHW -> HWC float32
+            _tf.imwrite(str(path), hwc, photometric="rgb", compression="none")
+            return path
         else:
             raise ValueError(f"Unsupported channel count for TIFF: {channels}")
     elif data.ndim == 2:
@@ -45,7 +46,27 @@ def write_tiff32(
 
 def read_tiff(path: str | Path) -> tuple[NDArray[np.floating[Any]], ImageMetadata]:
     path = Path(path)
-    img = Image.open(str(path))
+
+    try:
+        img = Image.open(str(path))
+    except Exception:
+        img = None
+
+    if img is None:
+        # PIL can't open this TIFF (e.g. float32 multi-channel); fall back to tifffile
+        import tifffile as _tf
+        raw = _tf.imread(str(path))
+        data = np.asarray(raw, dtype=np.float32)
+        if data.ndim == 3:
+            data = data.transpose(2, 0, 1)  # HWC -> CHW
+            channels = data.shape[0]
+        else:
+            channels = 1
+        if data.ndim == 2:
+            height, width = data.shape
+        else:
+            _, height, width = data.shape
+        return data, ImageMetadata(width=width, height=height, channels=channels)
 
     if img.mode == "F":
         data = np.asarray(img, dtype=np.float32)

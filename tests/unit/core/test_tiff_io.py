@@ -52,9 +52,43 @@ class TestWriteTiff32:
         assert "2024-12-01" in loaded_meta.date_obs
 
 
+    def test_roundtrip_rgb_3d(self, tmp_path: Path) -> None:
+        """3-channel CHW array is written as RGB TIFF and read back correctly (lines 26-27, 53-56)."""
+        rng = np.random.default_rng(99)
+        original = rng.random((3, 16, 24)).astype(np.float32)
+        path = write_tiff32(tmp_path / "rgb.tif", original)
+        loaded, meta = read_tiff(path)
+        assert loaded.shape == (3, 16, 24)
+        assert meta.channels == 3
+        np.testing.assert_array_almost_equal(loaded, original, decimal=5)
+
+
 class TestReadTiff:
     def test_reads_float32(self, tmp_path: Path) -> None:
         data = np.ones((20, 30), dtype=np.float32) * 0.75
         path = write_tiff32(tmp_path / "test.tif", data)
         loaded, _meta = read_tiff(path)
         assert loaded.dtype == np.float32
+
+    def test_read_16bit_integer_tiff(self, tmp_path: Path) -> None:
+        """Reads 16-bit integer TIFF (I mode) and returns float32 (lines 57-59)."""
+        from PIL import Image as PILImage
+        data_uint16 = np.full((20, 30), 32768, dtype=np.uint32)  # PIL 'I' mode is int32
+        img = PILImage.fromarray(data_uint16, mode="I")
+        path = tmp_path / "int16.tif"
+        img.save(str(path), format="TIFF")
+        loaded, meta = read_tiff(path)
+        assert loaded.dtype == np.float32
+        assert meta.width == 30
+        assert meta.height == 20
+
+    def test_read_rgba_tiff_else_branch(self, tmp_path: Path) -> None:
+        """RGBA TIFF falls into else branch, returns CHW float32 (lines 60-66)."""
+        from PIL import Image as PILImage
+        rgba = np.full((20, 30, 4), 128, dtype=np.uint8)
+        img = PILImage.fromarray(rgba, mode="RGBA")
+        path = tmp_path / "rgba.tif"
+        img.save(str(path), format="TIFF")
+        loaded, meta = read_tiff(path)
+        assert loaded.dtype == np.float32
+        assert loaded.ndim == 3  # CHW after transpose
