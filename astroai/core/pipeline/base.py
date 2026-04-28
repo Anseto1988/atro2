@@ -36,7 +36,7 @@ class PipelineProgress:
 ProgressCallback = Callable[[PipelineProgress], None]
 
 
-def _noop_callback(_progress: PipelineProgress) -> None:
+def noop_callback(_progress: PipelineProgress) -> None:
     pass
 
 
@@ -62,7 +62,7 @@ class PipelineStep(ABC):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext: ...
 
 
@@ -77,7 +77,7 @@ class Pipeline:
     def run(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         total = len(self._steps)
         for i, step in enumerate(self._steps):

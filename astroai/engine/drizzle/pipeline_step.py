@@ -15,7 +15,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.engine.drizzle.engine import DrizzleEngine
 
@@ -50,7 +50,7 @@ class DrizzleStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         if not context.images:
             logger.warning("DrizzleStep: no images in context, skipping")

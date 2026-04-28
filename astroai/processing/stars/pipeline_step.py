@@ -14,7 +14,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.processing.stars.star_manager import StarManager
 
@@ -56,7 +56,7 @@ class StarRemovalStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         data = context.result if context.result is not None else (
             context.images[0] if context.images else None

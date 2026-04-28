@@ -14,7 +14,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 
 __all__ = ["AstrometryStep"]
@@ -64,7 +64,7 @@ class AstrometryStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         progress(PipelineProgress(
             stage=self.stage,

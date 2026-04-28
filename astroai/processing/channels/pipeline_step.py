@@ -13,7 +13,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.processing.channels.combiner import ChannelCombiner
 from astroai.processing.channels.narrowband_mapper import NarrowbandMapper, NarrowbandPalette
@@ -55,7 +55,7 @@ class ChannelCombineStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         progress(PipelineProgress(stage=self.stage, current=0, total=1, message="Kanal-Kombination läuft…"))
         result = self._combine()

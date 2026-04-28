@@ -17,7 +17,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.engine.platesolving.solver import PlateSolver, SolveError, SolveResult
 from astroai.engine.platesolving.wcs_writer import WCSWriter
@@ -79,7 +79,7 @@ class PlateSolvingStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         progress(PipelineProgress(
             stage=self.stage,

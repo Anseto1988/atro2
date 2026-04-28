@@ -8,7 +8,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.processing.background.extractor import BackgroundExtractor, ModelMethod
 from astroai.processing.background.gradient_remover import GradientRemover
@@ -47,7 +47,7 @@ class BackgroundRemovalStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         if context.result is not None:
             context.result = self._remover.remove(context.result)

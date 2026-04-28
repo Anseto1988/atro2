@@ -9,7 +9,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.processing.stretch.stretcher import IntelligentStretcher
 
@@ -44,7 +44,7 @@ class StretchStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         if context.result is not None:
             progress(PipelineProgress(

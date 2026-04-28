@@ -11,7 +11,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.engine.mosaic.engine import MosaicConfig, MosaicEngine
 
@@ -50,7 +50,7 @@ class MosaicStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         panel_paths = self._resolve_panel_paths(context)
         if not panel_paths:

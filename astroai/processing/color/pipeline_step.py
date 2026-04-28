@@ -10,7 +10,7 @@ from astroai.core.pipeline.base import (
     PipelineStage,
     PipelineStep,
     ProgressCallback,
-    _noop_callback,
+    noop_callback,
 )
 from astroai.processing.color.calibrator import (
     CatalogSource,
@@ -50,7 +50,7 @@ class ColorCalibrationStep(PipelineStep):
     def execute(
         self,
         context: PipelineContext,
-        progress: ProgressCallback = _noop_callback,
+        progress: ProgressCallback = noop_callback,
     ) -> PipelineContext:
         wcs = context.metadata.get("wcs")
         if wcs is None:
