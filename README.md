@@ -2,9 +2,27 @@
 
 AI-powered astrophotography processing suite.
 
-**Version:** 2.1.0-alpha
+**Version:** 2.2.0-alpha
+
+## What's New in v2.2
+
+### F-Comet: Comet Stacking (Dual-Tracking)
+- AI-powered comet nucleus detection via difference imaging (`CometTracker`)
+- Dual-Tracking: simultaneous star-aligned and comet-nucleus-aligned stacks from the same frame set
+- Configurable tracking mode: `stars` / `comet` / `blend` (adjustable blend factor)
+- `CometStackStep` pipeline integration — stores `comet_star_stack` and `comet_nucleus_stack` in context
+- _Screenshot: Dual-Stack output comparison — coming with the v2.2.0-alpha release_
 
 ## What's New in v2.1
+
+### F-5: Photometrische Farbkalibrierung (SPCC)
+- Spectrophotometric color calibration matching observed star colors against GAIA DR3 or 2MASS catalogs
+- Full 3×3 correction matrix with residual RMS diagnostics and per-channel white balance output
+- `SpectralColorCalibrator` + `ColorCalibrationStep` pipeline integration
+- `ColorCalibrationPanel` UI widget with catalog selection and minimum-star-count controls
+- _Screenshot: Before/After color calibration — coming with the v2.1.0-alpha release_
+
+## What's New in v2.0
 
 ### F-3: Drizzle Super-Resolution
 - WCS-based sub-pixel alignment using plate-solving output from F-1
@@ -17,8 +35,6 @@ AI-powered astrophotography processing suite.
 - Linear/average blend modes with gradient correction
 - `MosaicEngine` + `MosaicStep` pipeline integration
 - `MosaicPanel` UI widget for panel management and blend configuration
-
-## What's New in v2.0
 
 ### F-1: Plate Solving (ASTAP)
 - Automatic astrometric plate solving via ASTAP with astrometry.net fallback
@@ -41,6 +57,8 @@ AI-powered astrophotography processing suite.
 - GPU-accelerated calibration (Dark/Flat correction) with benchmark metrics
 - **Drizzle Super-Resolution** (WCS sub-pixel stacking, configurable drop-size)
 - **Mosaic Assembly** (multi-panel WCS stitching with gradient correction)
+- **Photometric Color Calibration** (SPCC via GAIA DR3 / 2MASS stellar catalogs)
+- **Comet Stacking** (Dual-Tracking: simultaneous star- and comet-aligned stacks)
 - Starless separation and star reduction
 - LRGB / Narrowband channel combination
 - Deconvolution (Richardson-Lucy)
@@ -49,6 +67,15 @@ AI-powered astrophotography processing suite.
 - Dark-theme GUI with histogram, workflow graph, and progress tracking
 - Project persistence (save/open `.astroai` project files)
 - Freemium licensing with offline activation
+
+## Releases
+
+| Version | Tag | Features |
+|---------|-----|----------|
+| v1.1.0-alpha | [v1.1.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v1.1.0-alpha) | E3–E6, Security S-01–S-04, Licensing API |
+| v2.0.0-alpha | [v2.0.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v2.0.0-alpha) | F-1 Plate Solving, F-2 GPU-Kalibrierung, F-3 Drizzle Super-Resolution, F-4 Mosaic-Assembly |
+| v2.1.0-alpha | [v2.1.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v2.1.0-alpha) | F-5 Photometrische Farbkalibrierung (SPCC) |
+| v2.2.0-alpha | [v2.2.0-alpha](https://github.com/Anseto1988/atro2/releases/tag/v2.2.0-alpha) | F-Comet Dual-Tracking Comet Stacking, Test-Suite 1278 Tests |
 
 ## Requirements
 
@@ -88,26 +115,32 @@ python benchmarks/calibration_gpu_bench.py
 
 ## Pre-built Bundles
 
-Download the latest release from the
-[GitHub Releases](https://github.com/Anseto1988/atro2/releases/tag/v2.0.0-alpha):
+Download the latest release from
+[GitHub Releases](https://github.com/Anseto1988/atro2/releases/tag/v2.2.0-alpha):
 
 | Platform | Archive |
 |----------|---------|
-| Windows  | [`astroai-2.0.0-alpha-win.zip`](https://github.com/Anseto1988/atro2/releases/download/v2.0.0-alpha/astroai-2.0.0-alpha-win.zip) |
-| Linux    | [`astroai-2.0.0-alpha-linux.tar.gz`](https://github.com/Anseto1988/atro2/releases/download/v2.0.0-alpha/astroai-2.0.0-alpha-linux.tar.gz) |
+| Windows  | [`astroai-2.2.0-alpha-win.zip`](https://github.com/Anseto1988/atro2/releases/download/v2.2.0-alpha/astroai-2.2.0-alpha-win.zip) |
+| Linux    | [`astroai-2.2.0-alpha-linux.tar.gz`](https://github.com/Anseto1988/atro2/releases/download/v2.2.0-alpha/astroai-2.2.0-alpha-linux.tar.gz) |
+
+**Older releases:**
+
+| Version | Windows | Linux |
+|---------|---------|-------|
+| v2.1.0-alpha | [`win.zip`](https://github.com/Anseto1988/atro2/releases/download/v2.1.0-alpha/astroai-2.1.0-alpha-win.zip) | [`linux.tar.gz`](https://github.com/Anseto1988/atro2/releases/download/v2.1.0-alpha/astroai-2.1.0-alpha-linux.tar.gz) |
+| v2.0.0-alpha | [`win.zip`](https://github.com/Anseto1988/atro2/releases/download/v2.0.0-alpha/astroai-2.0.0-alpha-win.zip) | [`linux.tar.gz`](https://github.com/Anseto1988/atro2/releases/download/v2.0.0-alpha/astroai-2.0.0-alpha-linux.tar.gz) |
 
 ### Windows
 
-1. Extract `astroai-2.0.0-alpha-win.zip`
+1. Extract the `.zip` archive
 2. Run `AstroAI/AstroAI.exe`
 
 ### Linux
 
 ```bash
-tar xzf astroai-2.0.0-alpha-linux.tar.gz
+tar xzf astroai-2.2.0-alpha-linux.tar.gz
 ./AstroAI/AstroAI
 ```
-
 
 ## Development
 
