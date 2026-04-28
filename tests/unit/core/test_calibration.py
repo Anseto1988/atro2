@@ -165,3 +165,35 @@ class TestMatcherEdgeCases:
 
         lib = CalibrationLibrary.from_config(_Cfg())
         assert lib.darks == []
+
+
+class TestCalibrateFrameLoadData:
+    def test_dark_loaded_via_load_data(self) -> None:
+        """calibrate_frame calls load_data for dark when data is None (line 56)."""
+        light = np.full((8, 8), 100.0, dtype=np.float32)
+        dark_data = np.full((8, 8), 20.0, dtype=np.float32)
+        light_meta = _meta(exposure=120.0)
+
+        dark_frame = CalibrationFrame(Path("d.fits"), _meta(exposure=120.0), data=None)
+        lib = CalibrationLibrary(darks=[dark_frame], flats=[], bias=[])
+
+        def _load(p: Path) -> "np.ndarray":
+            return dark_data
+
+        result = calibrate_frame(light, light_meta, lib, load_data=_load)
+        np.testing.assert_array_almost_equal(result, np.full((8, 8), 80.0))
+
+    def test_flat_loaded_via_load_data(self) -> None:
+        """calibrate_frame calls load_data for flat when data is None (line 64)."""
+        light = np.full((8, 8), 200.0, dtype=np.float32)
+        flat_data = np.full((8, 8), 1000.0, dtype=np.float32)
+        light_meta = _meta()
+
+        flat_frame = CalibrationFrame(Path("f.fits"), _meta(), data=None)
+        lib = CalibrationLibrary(darks=[], flats=[flat_frame], bias=[])
+
+        def _load(p: Path) -> "np.ndarray":
+            return flat_data
+
+        result = calibrate_frame(light, light_meta, lib, load_data=_load)
+        np.testing.assert_array_almost_equal(result, np.full((8, 8), 200.0))

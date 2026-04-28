@@ -69,3 +69,38 @@ class TestWriteFits:
         loaded, meta = read_fits(path)
         assert loaded.shape == (10, 10)
         assert meta.exposure is None
+
+
+class TestCoreIoInit:
+    def test_read_raw_lazy_import(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """core.io.__getattr__ provides read_raw lazily (lines 21-22)."""
+        import sys
+        from unittest.mock import MagicMock
+
+        mock_rawpy = MagicMock()
+        monkeypatch.setitem(sys.modules, "rawpy", mock_rawpy)
+        # Force reload of raw_io so the mock takes effect
+        monkeypatch.delitem(sys.modules, "astroai.core.io.raw_io", raising=False)
+
+        import astroai.core.io as io_pkg
+        fn = io_pkg.read_raw
+        assert callable(fn)
+
+    def test_raw_extensions_lazy_import(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """core.io.__getattr__ provides RAW_EXTENSIONS lazily (lines 24-25)."""
+        import sys
+        from unittest.mock import MagicMock
+
+        mock_rawpy = MagicMock()
+        monkeypatch.setitem(sys.modules, "rawpy", mock_rawpy)
+        monkeypatch.delitem(sys.modules, "astroai.core.io.raw_io", raising=False)
+
+        import astroai.core.io as io_pkg
+        exts = io_pkg.RAW_EXTENSIONS
+        assert ".cr2" in exts
+
+    def test_unknown_attr_raises(self) -> None:
+        """core.io.__getattr__ raises AttributeError for unknown names."""
+        import astroai.core.io as io_pkg
+        with pytest.raises(AttributeError):
+            _ = io_pkg.nonexistent_attribute  # type: ignore[attr-defined]
