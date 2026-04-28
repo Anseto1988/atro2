@@ -207,3 +207,50 @@ class TestReadXisfEdgeCases:
         assert meta.width == 16
         assert meta.height == 8
         assert meta.channels == 1
+
+    def test_invalid_geometry_raises(self, tmp_path: Path) -> None:
+        """Geometry with neither 2 nor 3 parts raises ValueError (line 182)."""
+        import struct
+        ns = "http://www.pixinsight.com/xisf"
+        root = ET.Element(f"{{{ns}}}xisf", attrib={"version": "1.0"})
+        ET.SubElement(root, f"{{{ns}}}Image", attrib={
+            "geometry": "100",  # only 1 part - invalid
+            "sampleFormat": "Float32",
+            "location": "attachment:256:400",
+        })
+        xml_bytes = ET.tostring(root, encoding="unicode").encode("utf-8")
+        padded_len = (len(xml_bytes) + 127) // 128 * 128
+        path = tmp_path / "badgeom.xisf"
+        with open(path, "wb") as f:
+            f.write(b"XISF0100")
+            f.write(struct.pack("<I", padded_len))
+            f.write(b"\x00" * 4)
+            f.write(xml_bytes.ljust(padded_len, b"\x00"))
+            f.write(b"\x00" * 400)
+        with pytest.raises(ValueError, match="Invalid geometry"):
+            read_xisf(path)
+
+    def test_inline_data_location(self, tmp_path: Path) -> None:
+        """Image data without attachment: prefix is read inline (line 195)."""
+        import struct
+        ns = "http://www.pixinsight.com/xisf"
+        data = np.ones((1, 4, 4), dtype=np.float32)
+        raw_bytes = data.tobytes()
+        root = ET.Element(f"{{{ns}}}xisf", attrib={"version": "1.0"})
+        ET.SubElement(root, f"{{{ns}}}Image", attrib={
+            "geometry": "4:4:1",
+            "sampleFormat": "Float32",
+            "location": "inline:encoded",  # not attachment:
+        })
+        xml_bytes = ET.tostring(root, encoding="unicode").encode("utf-8")
+        padded_len = (len(xml_bytes) + 127) // 128 * 128
+        path = tmp_path / "inline.xisf"
+        with open(path, "wb") as f:
+            f.write(b"XISF0100")
+            f.write(struct.pack("<I", padded_len))
+            f.write(b"\x00" * 4)
+            f.write(xml_bytes.ljust(padded_len, b"\x00"))
+            f.write(raw_bytes)
+        loaded, meta = read_xisf(path)
+        assert loaded.shape == (1, 4, 4)
+        assert meta.channels == 1

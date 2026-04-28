@@ -124,3 +124,15 @@ class TestReadTiff:
         assert meta.width == 24
         assert meta.height == 16
         assert meta.channels == 1
+
+    def test_read_palette_mode_2d_else_branch(self, tmp_path: Path) -> None:
+        """Palette/P mode TIFF falls into else branch with 2D data → channels=1 (line 87)."""
+        from PIL import Image as PILImage
+        # Palette mode ('P') is not F, RGB, I — triggers the else branch
+        gray = np.arange(256, dtype=np.uint8).reshape(16, 16)
+        img = PILImage.fromarray(gray, mode="L").convert("P")
+        path = tmp_path / "palette.tif"
+        img.save(str(path), format="TIFF")
+        loaded, meta = read_tiff(path)
+        assert loaded.dtype == np.float32
+        assert meta.channels == 1
