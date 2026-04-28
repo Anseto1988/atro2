@@ -44,6 +44,7 @@ class PipelineModel(QObject):
         ("stack", "Stacking", False),
         ("drizzle", "Drizzle", True),
         ("mosaic", "Mosaic", True),
+        ("channel_combine", "Kanal-Kombination", True),
         ("stretch", "Stretching", False),
         ("denoise", "Entrauschen", False),
         ("deconvolution", "Deconvolution", True),
@@ -79,6 +80,7 @@ class PipelineModel(QObject):
         self._update_deconvolution_step_state()
         self._update_drizzle_step_state()
         self._update_mosaic_step_state()
+        self._update_channel_combine_step_state()
 
     # -- starless config properties --
 
@@ -199,6 +201,7 @@ class PipelineModel(QObject):
         if self._channel_combine_enabled == value:
             return
         self._channel_combine_enabled = value
+        self._update_channel_combine_step_state()
         self.channel_combine_config_changed.emit()
 
     @property
@@ -222,6 +225,17 @@ class PipelineModel(QObject):
             return
         self._channel_combine_palette = value
         self.channel_combine_config_changed.emit()
+
+    def _update_channel_combine_step_state(self) -> None:
+        step = self.step_by_key("channel_combine")
+        if step is None:
+            return
+        if not self._channel_combine_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("channel_combine", StepState.DISABLED.value)
+        elif self._channel_combine_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("channel_combine", StepState.PENDING.value)
 
     # -- drizzle config properties -----------------------------------------
 
@@ -405,6 +419,7 @@ class PipelineModel(QObject):
             "deconvolution": self._deconvolution_enabled,
             "drizzle": self._drizzle_enabled,
             "mosaic": self._mosaic_enabled,
+            "channel_combine": self._channel_combine_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):

@@ -22,10 +22,12 @@ class TestPipelineModel:
 
     def test_default_steps(self, model: PipelineModel) -> None:
         steps = model.steps
-        assert len(steps) == 10
+        assert len(steps) == 11
         assert steps[0].key == "calibrate"
         assert steps[3].key == "drizzle"
         assert steps[4].key == "mosaic"
+        assert steps[5].key == "channel_combine"
+        assert steps[6].key == "stretch"
         assert steps[-1].key == "export"
 
     def test_step_by_key(self, model: PipelineModel) -> None:
@@ -81,7 +83,9 @@ class TestPipelineModel:
         assert steps[3].state is StepState.DISABLED
         # mosaic at index 4 is DISABLED (optional, not enabled)
         assert steps[4].state is StepState.DISABLED
-        assert steps[5].state is StepState.PENDING
+        # channel_combine at index 5 is DISABLED (optional, not enabled)
+        assert steps[5].state is StepState.DISABLED
+        assert steps[6].state is StepState.PENDING
 
     def test_step_changed_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
         with qtbot.waitSignal(model.step_changed, timeout=500):
@@ -285,5 +289,82 @@ class TestPipelineModelStarless:
         model.set_step_state("starless", StepState.DONE)
         model.reset()
         step = model.step_by_key("starless")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+
+class TestPipelineModelChannelCombine:
+    """Tests for PipelineModel channel_combine configuration properties and signals."""
+
+    @pytest.fixture()
+    def model(self) -> PipelineModel:
+        return PipelineModel()
+
+    def test_channel_combine_enabled_default(self, model: PipelineModel) -> None:
+        assert model.channel_combine_enabled is False
+
+    def test_channel_combine_step_initially_disabled(self, model: PipelineModel) -> None:
+        step = model.step_by_key("channel_combine")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_channel_combine_enabled_toggles_step_to_pending(self, model: PipelineModel) -> None:
+        model.channel_combine_enabled = True
+        step = model.step_by_key("channel_combine")
+        assert step is not None
+        assert step.state is StepState.PENDING
+
+    def test_channel_combine_enabled_toggles_step_to_disabled(self, model: PipelineModel) -> None:
+        model.channel_combine_enabled = True
+        model.channel_combine_enabled = False
+        step = model.step_by_key("channel_combine")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_channel_combine_enabled_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.channel_combine_config_changed, timeout=500):
+            model.channel_combine_enabled = True
+
+    def test_channel_combine_enabled_same_value_no_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        signals: list[bool] = []
+        model.channel_combine_config_changed.connect(lambda: signals.append(True))
+        model.channel_combine_enabled = False  # default
+        assert len(signals) == 0
+
+    def test_channel_combine_emits_step_changed(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.step_changed, timeout=500) as blocker:
+            model.channel_combine_enabled = True
+        assert blocker.args == ["channel_combine", StepState.PENDING.value]
+
+    def test_channel_combine_mode_default(self, model: PipelineModel) -> None:
+        assert model.channel_combine_mode == "lrgb"
+
+    def test_channel_combine_mode_setter(self, model: PipelineModel) -> None:
+        model.channel_combine_mode = "narrowband"
+        assert model.channel_combine_mode == "narrowband"
+
+    def test_channel_combine_mode_emits_signal(self, model: PipelineModel, qtbot) -> None:  # type: ignore[no-untyped-def]
+        with qtbot.waitSignal(model.channel_combine_config_changed, timeout=500):
+            model.channel_combine_mode = "narrowband"
+
+    def test_channel_combine_palette_default(self, model: PipelineModel) -> None:
+        assert model.channel_combine_palette == "SHO"
+
+    def test_channel_combine_palette_setter(self, model: PipelineModel) -> None:
+        model.channel_combine_palette = "HOO"
+        assert model.channel_combine_palette == "HOO"
+
+    def test_reset_keeps_channel_combine_disabled_when_not_enabled(self, model: PipelineModel) -> None:
+        model.set_step_state("channel_combine", StepState.ERROR)
+        model.reset()
+        step = model.step_by_key("channel_combine")
+        assert step is not None
+        assert step.state is StepState.DISABLED
+
+    def test_reset_sets_channel_combine_pending_when_enabled(self, model: PipelineModel) -> None:
+        model.channel_combine_enabled = True
+        model.set_step_state("channel_combine", StepState.DONE)
+        model.reset()
+        step = model.step_by_key("channel_combine")
         assert step is not None
         assert step.state is StepState.PENDING
