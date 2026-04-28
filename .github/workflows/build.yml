@@ -53,10 +53,14 @@ jobs:
             target: linux
             archive_ext: tar.gz
     runs-on: ${{ matrix.os }}
-    env:
-      VERSION: "0.1.0-alpha"
     steps:
       - uses: actions/checkout@v4
+      - name: Extract version from pyproject.toml
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -82,11 +86,11 @@ jobs:
       - name: Package artifact (Windows)
         if: matrix.target == 'win'
         shell: pwsh
-        run: Compress-Archive -Path dist/AstroAI -DestinationPath "astroai-${{ env.VERSION }}-win.zip"
+        run: Compress-Archive -Path dist/AstroAI -DestinationPath "astroai-${{ steps.version.outputs.version }}-win.zip"
       - name: Package artifact (Linux)
         if: matrix.target == 'linux'
-        run: tar -czf "astroai-${{ env.VERSION }}-linux.tar.gz" -C dist AstroAI
+        run: tar -czf "astroai-${{ steps.version.outputs.version }}-linux.tar.gz" -C dist AstroAI
       - uses: actions/upload-artifact@v4
         with:
-          name: astroai-${{ env.VERSION }}-${{ matrix.target }}
-          path: astroai-${{ env.VERSION }}-${{ matrix.target }}.${{ matrix.archive_ext }}
+          name: astroai-${{ steps.version.outputs.version }}-${{ matrix.target }}
+          path: astroai-${{ steps.version.outputs.version }}-${{ matrix.target }}.${{ matrix.archive_ext }}
