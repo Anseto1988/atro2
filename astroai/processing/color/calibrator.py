@@ -357,11 +357,13 @@ class SpectralColorCalibrator:
 
             rms = float(np.sqrt(np.mean(total_residual ** 2)))
             sigma = float(np.std(total_residual))
+            median_residual = float(np.median(total_residual))
 
-            if sigma < 1e-10:
+            if sigma < 1e-6 or median_residual < 1e-6:
                 break
 
-            inlier_mask = total_residual < self._outlier_sigma * sigma
+            threshold = max(self._outlier_sigma * sigma, median_residual * 3.0)
+            inlier_mask = total_residual < threshold
             new_current = [m for m, keep in zip(current, inlier_mask) if keep]
 
             if len(new_current) == len(current):
