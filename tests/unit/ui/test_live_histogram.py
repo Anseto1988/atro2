@@ -133,6 +133,7 @@ def canvas(qtbot) -> _HistogramCanvas:
     w = _HistogramCanvas()
     w.resize(300, 200)
     qtbot.addWidget(w)
+    w.show()
     return w
 
 

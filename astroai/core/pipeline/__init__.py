@@ -13,6 +13,8 @@ from astroai.core.pipeline.comet_stack_step import CometStackStep
 from astroai.core.pipeline.runner import PipelineWorker
 from astroai.core.pipeline.export_step import ExportFormat, ExportStep
 from astroai.core.pipeline.platesolving_step import PlateSolvingStep
+from astroai.core.pipeline.presets import PipelinePreset, PresetManager
+from astroai.core.pipeline.builtin_presets import BUILTIN_PRESET_NAMES, install_builtin_presets
 
 __all__ = [
     "CancelCheck",
@@ -29,4 +31,8 @@ __all__ = [
     "PlateSolvingStep",
     "ProgressCallback",
     "noop_cancel",
+    "PipelinePreset",
+    "PresetManager",
+    "BUILTIN_PRESET_NAMES",
+    "install_builtin_presets",
 ]

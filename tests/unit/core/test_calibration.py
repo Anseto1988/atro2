@@ -8,10 +8,14 @@ import pytest
 
 from astroai.core.calibration.calibrate import apply_dark, apply_flat, calibrate_frame
 from astroai.core.calibration.matcher import (
+    BatchMatchResult,
     CalibrationFrame,
     CalibrationLibrary,
+    FrameMatchResult,
+    batch_match,
     find_best_dark,
     find_best_flat,
+    suggest_calibration_config,
 )
 from astroai.core.io.fits_io import ImageMetadata
 
@@ -280,3 +284,113 @@ class TestCalibrateFrameGpuPaths:
             result = calibrate_frame(light, light_meta, lib, use_gpu=True)
 
         np.testing.assert_array_equal(result, light)
+
+
+class TestBatchMatch:
+    def _lib(self) -> CalibrationLibrary:
+        return CalibrationLibrary(
+            darks=[CalibrationFrame(Path("d120.fits"), _meta(exposure=120.0))],
+            flats=[CalibrationFrame(Path("f800.fits"), _meta(gain_iso=800))],
+            bias=[],
+        )
+
+    def test_empty_lights_returns_empty(self) -> None:
+        result = batch_match([], CalibrationLibrary.empty())
+        assert result.matches == []
+
+    def test_coverage_zero_when_no_lights(self) -> None:
+        assert batch_match([], CalibrationLibrary.empty()).coverage == 0.0
+
+    def test_single_light_matched(self) -> None:
+        lights = [(Path("l1.fits"), _meta(exposure=120.0, gain_iso=800))]
+        result = batch_match(lights, self._lib())
+        assert len(result.matches) == 1
+        m = result.matches[0]
+        assert m.light_path == Path("l1.fits")
+        assert m.dark is not None
+        assert m.flat is not None
+        assert m.bias is None
+
+    def test_coverage_full_when_all_matched(self) -> None:
+        lights = [(Path("l.fits"), _meta(exposure=120.0, gain_iso=800))]
+        result = batch_match(lights, self._lib())
+        assert result.coverage == 1.0
+
+    def test_coverage_zero_when_empty_library(self) -> None:
+        lights = [(Path("l.fits"), _meta())]
+        result = batch_match(lights, CalibrationLibrary.empty())
+        assert result.coverage == 0.0
+
+    def test_dark_coverage_property(self) -> None:
+        lights = [
+            (Path("l1.fits"), _meta(exposure=120.0)),
+            (Path("l2.fits"), _meta(exposure=999.0)),  # no dark match
+        ]
+        lib = CalibrationLibrary(
+            darks=[CalibrationFrame(Path("d.fits"), _meta(exposure=120.0))],
+            flats=[],
+            bias=[],
+        )
+        result = batch_match(lights, lib)
+        assert result.dark_coverage == 0.5
+
+    def test_flat_coverage_property(self) -> None:
+        lights = [(Path("l.fits"), _meta(gain_iso=800))]
+        lib = CalibrationLibrary(
+            darks=[],
+            flats=[CalibrationFrame(Path("f.fits"), _meta(gain_iso=800))],
+            bias=[],
+        )
+        result = batch_match(lights, lib)
+        assert result.flat_coverage == 1.0
+
+    def test_multiple_lights_get_individual_matches(self) -> None:
+        lights = [
+            (Path("l1.fits"), _meta(exposure=120.0)),
+            (Path("l2.fits"), _meta(exposure=120.0)),
+        ]
+        result = batch_match(lights, self._lib())
+        assert len(result.matches) == 2
+        assert all(m.dark is not None for m in result.matches)
+
+
+class TestSuggestCalibrationConfig:
+    def test_returns_calibration_config_with_paths(self) -> None:
+        from astroai.project.project_file import CalibrationConfig
+
+        dark = CalibrationFrame(Path("d.fits"), _meta())
+        flat = CalibrationFrame(Path("f.fits"), _meta())
+        result = BatchMatchResult(
+            matches=[FrameMatchResult(light_path=Path("l.fits"), dark=dark, flat=flat, bias=None)]
+        )
+        cfg = suggest_calibration_config(result)
+        assert isinstance(cfg, CalibrationConfig)
+        assert "d.fits" in cfg.dark_frames[0]
+        assert "f.fits" in cfg.flat_frames[0]
+
+    def test_deduplicates_paths(self) -> None:
+        dark = CalibrationFrame(Path("d.fits"), _meta())
+        result = BatchMatchResult(
+            matches=[
+                FrameMatchResult(light_path=Path("l1.fits"), dark=dark, flat=None, bias=None),
+                FrameMatchResult(light_path=Path("l2.fits"), dark=dark, flat=None, bias=None),
+            ]
+        )
+        cfg = suggest_calibration_config(result)
+        assert len(cfg.dark_frames) == 1
+
+    def test_empty_result_gives_empty_config(self) -> None:
+        from astroai.project.project_file import CalibrationConfig
+
+        cfg = suggest_calibration_config(BatchMatchResult(matches=[]))
+        assert isinstance(cfg, CalibrationConfig)
+        assert cfg.dark_frames == []
+        assert cfg.flat_frames == []
+
+    def test_none_matches_excluded(self) -> None:
+        result = BatchMatchResult(
+            matches=[FrameMatchResult(light_path=Path("l.fits"), dark=None, flat=None, bias=None)]
+        )
+        cfg = suggest_calibration_config(result)
+        assert cfg.dark_frames == []
+        assert cfg.flat_frames == []

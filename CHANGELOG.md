@@ -4,9 +4,166 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
-## [2.3.0-alpha] — unreleased
+## [2.4.0-alpha] — 2026-04-28
 
 ### Added
+- **F-CoverageImprovement: LiveHistogramView Test-Abdeckung von 79% auf 100%**
+  - `_HistogramCanvas`-Fixture in `test_live_histogram.py` um `w.show()` ergänzt — `repaint()` triggert jetzt tatsächlich `paintEvent`; paintEvent-Zeilen sowie `_draw_channel` vollständig abgedeckt
+  - Gesamtabdeckung aller Tests verbessert von 96% auf 97%
+- **F-CoverageImprovement: SplitCompareView Test-Abdeckung von 77% auf 93%**
+  - 10 neue Tests in `TestSplitCompareViewZoom` und `TestSplitCompareViewMouseAndKey`
+  - WheelEvent-Tests (Zoom in/out), Maus-Drag-Tests (press/release pan-drag), Tasten-Tests (Links/Rechts/Hoch/Runter-Pfeile), Tile-Cache-Hit-Test
+- **F-CoverageImprovement: CurvesPanel Test-Abdeckung von 43% auf 93%**
+  - Neues `tests/unit/ui/test_curves_panel.py` mit 23 Tests für `CurveEditor` und `CurvesPanel`
+  - `CurveEditor`-Tests: `get_points`, `set_points`, `reset`, `_plot_rect`, `_to_widget/_from_widget`, `_nearest_point_idx`, Linksklick-Hinzufügen, Rechtsklick-Entfernen (Mittel- und Endpunkt), `mouseReleaseEvent`, Max-Punkte-Grenze
+  - `CurvesPanel`-Tests: Reset aller Kanäle, Channel-Wechsel, `_on_points_changed` für alle 4 Kanäle (RGB, R, G, B)
+  - Deprecation-Warnings durch Verwendung von `qtbot.mouseClick` statt manueller `QMouseEvent`-Konstruktion beseitigt
+- **F-ImportFolderAction: Ordner-Import (rekursiv) für Light-Frames**
+  - Frames importieren > "Ordner importieren..." (Ctrl+Shift+F) — `QFileDialog.getExistingDirectory`, dann `Path.rglob("*")` nach `.fits/.fit/.fts`; delegiert an `_add_light_frames()` (DRY)
+  - Zeigt Status "Keine FITS-Dateien gefunden in: <Ordnername>" wenn Ordner leer ist
+  - `ShortcutsDialog` um "Ctrl+Shift+F" ergänzt
+  - 4 neue Tests in `TestMainWindowImportFrames` (cancelled, finds 2 files, recursive subdir, empty folder message)
+- **F-CalibStatusLabel: Kalibrierungs-Status in der Statusleiste**
+  - Permanente `QLabel` `_calib_status_label` in der Statusleiste zeigt Anzahl konfigurierter Dark/Flat/Bias-Frames (Format: "Kalib.: 5D / 3F / 0B" bzw. "Kalib.: —" wenn leer)
+  - `_refresh_calib_status()` Hilfsmethode liest `project.calibration.{dark,flat,bias}_frames` und aktualisiert das Label
+  - Wird automatisch aufgerufen nach: Dark/Flat/Bias-Import, Auto-Match-Kalibrierung, Projekt-Laden
+  - Label steht links von "Zoom: …" und "Lizenz"-Badge
+  - 6 neue Tests in `TestCalibStatusLabel` in `tests/unit/ui/test_main_window.py`
+- **F-FrameNotesField: Freitext-Notizen auf einzelnen Frames**
+  - `FrameEntry` erhält neues optionales Feld `notes: str = ""` (rückwärtskompatibel — `from_dict` füllt fehlende Schlüssel mit Default)
+  - `FrameListPanel`: Dateiname-Zelle zeigt Präfix `"* "` wenn Notiz vorhanden; Tooltip enthält Notiz ("Notiz: …")
+  - Kontextmenü erhält "Notiz bearbeiten…" (aktiv nur bei Einzelauswahl) → `QInputDialog.getText` → speichert gekürzten Text in `entry.notes`; aktualisiert Tabelle sofort
+  - Abbrechen des Dialogs lässt `entry.notes` unverändert; leere Eingabe löscht die Notiz
+  - `_edit_notes(row)` schützt gegen out-of-range-Index ohne Exception
+  - 6 neue Tests in `TestFrameListPanelNotes`; 3 neue Tests in `TestAstroProject` für Notes-Roundtrip und Backward-Compat
+- **F-FramePreviewOnClick: Frame-Vorschau aus Kontextmenü**
+  - `FrameListPanel` erhält neues Signal `preview_requested = Signal(str)` (absoluter Dateipfad)
+  - Kontextmenü enthält neuen Eintrag "Vorschau anzeigen" (erster Eintrag, mit Trennlinie) — aktiv nur wenn genau 1 Zeile markiert ist; mehrfachauswahl deaktiviert die Aktion
+  - Auslösen emittiert `preview_requested` mit `entry.path` des gewählten Frames
+  - `MainWindow._connect_signals()` verbindet `preview_requested` → `_on_frame_preview_requested(path)`
+  - `_on_frame_preview_requested` delegiert an `self._file_loader.load(Path(path))` — lädt das FITS-File direkt in den Viewer
+  - 4 neue Tests in `TestFrameListPanelPreviewSignal` in `tests/unit/ui/test_widgets.py`
+- **F-SavePreviewImage: Vorschau-Bild als PNG/JPEG/TIFF speichern**
+  - Bearbeiten-Menü erhält "Vorschau-Bild speichern..." (Ctrl+Shift+P); aktiviert sobald ein Bild geladen ist
+  - `_on_save_preview_image()` Slot öffnet `QFileDialog.getSaveFileName` mit Filter PNG/JPEG/TIFF; speichert via `QImage.save()`; zeigt Fehler-QMessageBox bei Schreibfehler
+  - `render_full_qimage()` aus `ImageViewer` wiederverwendet (DRY) — gleiche min/max-Normalisierung wie Clipboard-Aktion
+  - Shortcut "Ctrl+Shift+P" in `ShortcutsDialog` ergänzt
+  - 6 neue Tests in `TestSavePreviewImage` in `tests/unit/ui/test_main_window.py`
+- **F-ShortcutsDialog: Tastaturkürzel-Referenz**
+  - `ShortcutsDialog(parent)` in `astroai/ui/widgets/shortcuts_dialog.py` — modaler QDialog mit gruppierten Shortcut-Tabellen (5 Abschnitte: Projekt, Frames & Kalibrierung, Ansicht, Pipeline, Hilfe)
+  - Jeder Abschnitt als `QGroupBox` mit read-only `QTableWidget` (Funktion / Kürzel), Alternating Row Colors, keine Bearbeitung, kein Fokus
+  - `WA_DeleteOnClose` gesetzt; Schließen-Button via `QDialogButtonBox`
+  - Hilfe-Menü erhält "Tastaturkürzel..." (Ctrl+?) → `_on_show_shortcuts` Slot öffnet Dialog (nicht-modal)
+  - `_SECTIONS` als öffentliche Konstante für Testbarkeit
+  - 13 neue Tests in `tests/unit/ui/test_shortcuts_dialog.py`
+- **F-DragDropFrameImport: Drag & Drop FITS Import in Frame-Liste**
+  - `FrameListPanel` akzeptiert jetzt Drag-&-Drop von FITS-Dateien (`.fits`, `.fit`, `.fts`) direkt aus dem Datei-Manager
+  - `files_dropped = Signal(list)` emittiert absolute Dateipfade aller gedropten FITS-Dateien
+  - `dragEnterEvent` akzeptiert nur wenn mindestens eine URL mit FITS-Endung vorhanden; verwirft alles andere (PNG, TXT, etc.)
+  - `dropEvent` filtert URLs auf FITS-Endungen, emittiert `files_dropped` mit validen Pfaden, ignoriert leere Listen
+  - `_FITS_SUFFIXES: frozenset[str]` als Klassen-Konstante für konsistente Endungen-Prüfung
+  - `MainWindow` verbindet `files_dropped` mit `_on_frames_dropped(paths)` Slot — delegiert an `_add_light_frames()`
+  - `_add_light_frames()` extrahiert die DRY-Logik aus `_on_import_lights`: Duplikat-Check, `_enrich_fits_entry`, `refresh()`, Status-Bar-Meldung
+  - 7 neue Tests in `TestFrameListPanelDragDrop` in `tests/unit/ui/test_widgets.py`
+- **F-SmartCalibUI: Smart-Kalibrierungs-Scanner-Panel (FR-2.3)**
+  - `SmartCalibPanel` in `astroai/ui/widgets/smart_calib_panel.py` — Dock-Widget mit Verzeichnis-Picker, optionalem Rekursiv-Scan, Scan-Button und Ergebnistabelle (Typ/Anzahl für Dark/Flat/Bias/Light/Unbekannt)
+  - Auto-Match-Button ruft `build_calibration_library` → `batch_match` → `suggest_calibration_config` auf und schreibt das Ergebnis direkt in `AstroProject.calibration`; markiert Projekt als dirty via `touch()`
+  - Coverage-Anzeige zeigt `dark_coverage` und `flat_coverage` als Prozentwerte nach erfolgreichem Match
+  - Fehlermeldungen bei ungültigem Verzeichnis, fehlendem Projekt oder fehlenden Light-Frames
+  - `MainWindow._setup_docks()` integriert das Panel als "Smart-Kalibrierung"-Dock im linken Bereich; `SmartCalibPanel(lambda: self._project)` liefert immer das aktuelle Projekt
+  - Return-Typen von `build_calibration_library` und `suggest_calibration_config` präzisiert (von `object` auf konkrete Typen via `TYPE_CHECKING`); alle mypy-Errors bereinigt
+  - 26 neue Tests in `tests/unit/ui/test_smart_calib_panel.py`
+- **F-BuiltinPresets: Eingebaute Pipeline-Preset-Bibliothek**
+  - `astroai/core/pipeline/builtin_presets.py` liefert 4 fertige Presets: `Deepsky LRGB` (Sigma-Clipping, verknüpfte Kanäle, Hintergrundabzug), `Narrowband SHO` (Hubble-Palette, entkoppelte Kanäle, Dekonvolution), `Narrowband HOO` (Median-Stacking, sanfter Stretch) und `Planetarisch` (Lucky-Imaging-Selektion, Drizzle 2×, kein Hintergrundabzug)
+  - `BUILTIN_PRESETS: list[PipelinePreset]` und `BUILTIN_PRESET_NAMES: tuple[str, ...]` als Konstanten exportiert; `install_builtin_presets(manager) -> int` installiert fehlende Presets (idempotent, gibt Anzahl installierter Presets zurück)
+  - `MainWindow._setup_presets()` ruft `install_builtin_presets` beim Start auf (vor `_setup_menus()`), sodass die 4 Presets beim ersten App-Start automatisch angelegt werden
+  - `_rebuild_preset_menu()` trennt eingebaute von Benutzer-Presets durch eine `QMenu`-Trennlinie; eingebaute Presets erscheinen oben
+  - `BUILTIN_PRESET_NAMES` und `install_builtin_presets` aus `astroai.core.pipeline` exportiert
+  - 19 neue Tests in `tests/unit/core/test_builtin_presets.py`: Preset-Definitionen, Konfigurationswerte, `install_builtin_presets`-Idempotenz und Verzeichniserstellung
+- **F-ProjectSummary: Project Statistics Overview**
+  - `compute_summary(project) -> ProjectSummary` in `astroai/project/summary.py` — aggregates: total/selected frame counts, total exposure (s), exposure groups, quality score stats (mean/min/max), temperature range
+  - `ProjectSummary.total_exposure_hms` property formats seconds to human-readable string (e.g. `1h 23m 45s`)
+  - `ExposureGroup` dataclass: `exposure_s`, `count`; groups sorted by exposure value
+  - Hilfe menu gains "Projektübersicht..." (Ctrl+I) — shows `QMessageBox.information` with formatted project stats (HTML bold labels, exposure groups, quality percentages, temperature range)
+  - `ProjectSummary`, `ExposureGroup`, `compute_summary` exported from `astroai.project`
+  - 18 new tests in `tests/unit/project/test_summary.py`
+- **F-PresetUI: Pipeline Preset Menu Integration**
+  - Pipeline menu gains "Preset speichern..." (opens `QInputDialog` for name → `capture_from_model` + `save`) and "Preset laden" submenu (auto-populated from saved presets via `_rebuild_preset_menu()`)
+  - `_on_save_preset()` slot captures current `PipelineModel` state and writes to `~/.config/astroai/presets/`; status bar confirms name
+  - `_on_load_preset(name)` slot loads and applies preset to `PipelineModel`; shows `QMessageBox.warning` if file no longer exists and rebuilds menu
+  - `PresetManager` instance stored on `MainWindow` as `_preset_manager`
+- **F-ProjectValidation: Pre-Run Project Validator**
+  - `validate_project(project) -> ValidationResult` in `astroai/project/validator.py` — runs structured checks with typed `ValidationIssue` (level: `"error"` / `"warning"` / `"info"`, machine-readable `code`)
+  - Checks: no frames (`NO_FRAMES`), all deselected (`NO_SELECTED_FRAMES`), missing light files (`MISSING_LIGHT_FILES`), missing dark/flat/bias calibration files (`MISSING_{DARK/FLAT/BIAS}_FILES`), output directory missing (`OUTPUT_DIR_MISSING`)
+  - `ValidationResult` properties: `has_errors`, `has_warnings`, `errors`, `warnings`, `summary()`
+  - `_validate_before_run()` helper in `MainWindow` — calls `validate_project` before `_on_run_full_pipeline`; shows `QMessageBox.warning` listing all error messages and aborts if errors found
+  - `ValidationIssue`, `ValidationResult`, `validate_project` exported from `astroai.project`
+  - 17 new tests in `tests/unit/project/test_validator.py`
+- **F-PipelinePreset: Named Pipeline Configuration Presets**
+  - `PipelinePreset` dataclass in `astroai/core/pipeline/presets.py`: `name`, `description`, `config` dict; `to_dict()` / `from_dict()` for JSON persistence
+  - `PresetManager` class: `save()`, `load()`, `delete()`, `exists()`, `list_names()`; stores presets as JSON files in `~/.config/astroai/presets/` (Win: `%LOCALAPPDATA%/AstroAI/presets/`)
+  - `capture_from_model(name, model)` — snapshots 24 `PipelineModel` properties (stacking, stretch, denoise, background removal, drizzle, frame selection, comet, synflat, deconvolution, starless) into a `PipelinePreset`
+  - `apply_to_model(preset, model)` — applies preset config to any model via `setattr`; silently skips unknown keys for forward compatibility
+  - `_safe_name()` strips filesystem-unsafe characters; names capped at 64 chars
+  - Both `PipelinePreset` and `PresetManager` exported from `astroai.core.pipeline`
+  - 23 new tests in `tests/unit/core/test_pipeline_presets.py` covering persistence, round-trip, model integration, sorting, and platform paths
+- **F-FrameExportStats: Export Frame Statistics to CSV**
+  - `export_frame_stats(frames, dest) -> int` in `astroai/core/io/frame_stats_export.py` — writes a CSV with columns `filename`, `path`, `exposure_s`, `gain_iso`, `temperature_c`, `quality_score`, `selected`; silently skips non-`FrameEntry` objects; creates parent directory if missing; returns row count
+  - File menu action "Frames-Statistik exportieren..." (Ctrl+Shift+E) opens a save dialog and calls `export_frame_stats` on the current project's `input_frames`; status bar shows exported row count and filename
+  - 14 new tests in `tests/unit/core/test_frame_stats_export.py`
+- **F-CalibScan: Calibration Frame Directory Scanner (FR-2.3)**
+  - `scan_directory(directory, *, recursive=False) -> list[ScannedFrame]` — scans a directory for FITS files (`.fits`, `.fit`, `.fts`) and classifies each by `IMAGETYP` header keyword (also checks `FRAME` fallback); silently skips unreadable files and non-FITS files
+  - `_classify_imagetyp(imagetyp)` — normalizes and maps raw keyword values to `"dark"`, `"flat"`, `"bias"`, `"light"`, or `"unknown"` (case-insensitive, handles common variants: `Dark Frame`, `Flat Field`, `Flatfield`, `BiasFrame`, `offset`, `zero`, etc.)
+  - `partition_by_type(frames) -> dict[str, list[ScannedFrame]]` — groups scanned frames by type for downstream use
+  - `build_calibration_library(frames, load_data=False) -> CalibrationLibrary` — converts pre-scanned frames directly to a `CalibrationLibrary`; light/unknown frames are excluded; `load_data=True` eagerly loads pixel arrays
+  - `ScannedFrame` dataclass: `path`, `frame_type`, `metadata`; exported from `astroai.core.calibration`
+  - 27 new tests in `tests/unit/core/test_calib_scanner.py` covering classification, recursive scanning, corrupt file skipping, mixed-type directories, and `build_calibration_library`
+- **F-CalibMatchBatch: Smart Calibration Batch Matching (FR-2.3)**
+  - `batch_match(lights, library) -> BatchMatchResult` — matches every light frame to its optimal dark/flat from a `CalibrationLibrary` in one call; bias slot reserved as `None` (future extension)
+  - `BatchMatchResult` dataclass with `matches: list[FrameMatchResult]`, `coverage`, `dark_coverage`, `flat_coverage` properties (all [0.0, 1.0])
+  - `FrameMatchResult` dataclass — per-frame result linking `light_path`, `dark`, `flat`, `bias`
+  - `suggest_calibration_config(result) -> CalibrationConfig` — collapses `BatchMatchResult` into a deduplicated `CalibrationConfig` (ready to assign to `AstroProject.calibration`); preserves insertion order; filters out `None` matches
+  - `batch_match`, `BatchMatchResult`, `FrameMatchResult`, `suggest_calibration_config` exported from `astroai.core.calibration.__init__`
+  - 12 new tests split across `TestBatchMatch` (8) and `TestSuggestCalibrationConfig` (4) in `test_calibration.py`
+- **F-CopyImageToClipboard: Copy Displayed Image to Clipboard**
+  - `ImageViewer.render_full_qimage()` renders the full `_raw_data` array to a `QImage` (Grayscale8) with min/max normalization; returns `None` when no image is loaded
+  - "Bearbeiten" menu added to menu bar (between Datei and Ansicht) with "Bild kopieren" action (Ctrl+C); enabled when an image is loaded
+  - `_on_copy_image()` slot calls `render_full_qimage()` and pushes the result to `QApplication.clipboard().setImage()`; updates status bar with confirmation message
+  - 4 new `ImageViewer` tests; 5 new `TestCopyImageToClipboard` tests
+- **F-FrameQualityThreshold: Quality Threshold Auto-Selection**
+  - `QDoubleSpinBox` (0–100 %, step 5) + "Anwenden" button added to `FrameListPanel` header area for threshold-based frame rejection
+  - `apply_quality_threshold(min_pct)` public method: sets `entry.selected = score >= threshold` for all scored frames; unscored frames are untouched; emits `selection_changed` only for rows that actually changed
+  - `_on_apply_threshold()` slot reads spinbox value and delegates to `apply_quality_threshold()`
+  - 9 new unit tests in `TestFrameListPanel`
+- **F-FrameFilterBar: Frame List Text Filter**
+  - `QLineEdit` with placeholder "Frames filtern…" and built-in clear button added above the frame table in `FrameListPanel`
+  - `_on_filter_changed(text)` updates `_filter_text` and calls `_apply_filter()`
+  - `_apply_filter()` calls `QTableWidget.setRowHidden(row, not visible)` for each row — hides non-matching entries without changing row indices or disrupting signal emission
+  - Filter is case-insensitive substring match on filename (basename only)
+  - Filter state persists across `refresh()` calls — re-applied automatically after `_repopulate_table()`
+  - 7 new unit tests in `TestFrameListPanel`
+- **F-AutoStretch: One-Click Preview Auto-Stretch**
+  - `_apply_auto_stretch(data)` module-level function: clips to [p0.5, p99.5] percentiles, normalizes to [0, 1] float32; no-op when hi == lo; does not modify source array
+  - View menu action "Auto-Stretch Vorschau" (Ctrl+Shift+A, checkable); enabled when an image is loaded
+  - `_display_image_data(img)` helper centralizes viewer/histogram/stats push — applies stretch when `_auto_stretch=True`; used by `_on_image_loaded`, `_on_pipeline_finished`, and the toggle slot
+  - `_on_toggle_auto_stretch(checked)`: toggles flag and immediately re-renders current image with/without stretch
+  - 9 new tests in `TestAutoStretch`
+- **F-ProjectDirty: Unsaved Changes Tracking**
+  - `AstroProject.is_dirty` property backed by `_dirty` instance attribute set in `__post_init__`; does NOT appear in `to_dict()` / `asdict()` so it never bleeds into serialized files
+  - `AstroProject.touch()` now also sets `_dirty = True` alongside updating `modified_at`
+  - `AstroProject.mark_clean()` clears dirty flag; called after successful `_save_project()`
+  - `MainWindow._update_title()` calls `setWindowModified(is_dirty)` with `[*]` placeholder in title — Qt auto-shows `*` when modified
+  - Frame selection changes, frame removes, and session note edits now all call `self._project.touch()` + `_update_title()`
+  - `closeEvent` prompts user (Save/Discard/Cancel) only when `event.spontaneous()` — programmatic closes (e.g. test teardown) skip the dialog
+  - `_maybe_discard_changes()` helper reused by `_on_new_project`, `_on_open_project`, and `closeEvent`
+  - 7 new `TestAstroProjectDirty` tests in `test_project_file.py`; 10 new `TestMainWindowProjectDirty` tests in `test_main_window.py`
+- **F-ZoomStatusBar: Permanent Zoom Indicator**
+  - Zoom level shown as a permanent `QLabel` widget in the status bar right side (e.g. "Zoom: 150%") — always visible, never overwritten by transient status messages
+  - `SplitCompareView.zoom_changed = Signal(float)` added; emitted on wheel zoom, keyboard +/−, and `fit_to_view()`; `zoom_level` property added
+  - `MainWindow._on_zoom_changed` now updates `_zoom_label` directly instead of embedding in the message string
+  - Both `ImageViewer` and `SplitCompareView` zoom events feed the same label — label reflects whichever view is active
+  - `_on_pixel_hovered` simplified: no longer needs to split `|`-separated zoom text out of the status message
+  - 7 new tests in `TestSplitCompareViewZoom`; `test_on_zoom_changed` updated to check the permanent label
 - **F-FrameSort: Sortable Frame List Columns**
   - `FrameListPanel` columns (Dateiname, Belichtung, Qualität, Ausgewählt) are now sortable by clicking the header — first click ascending, second click descending, switching columns resets to ascending
   - `_on_header_clicked(col)` sorts `_entries` list in-place so all existing signal/row-index logic remains correct without any mapping overhead

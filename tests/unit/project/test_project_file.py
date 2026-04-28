@@ -66,6 +66,23 @@ class TestAstroProject:
         assert restored.stacking.method == "median"
         assert restored.denoise.strength == 0.8
 
+    def test_frame_entry_notes_default_empty(self) -> None:
+        entry = FrameEntry(path="/tmp/frame.fits")
+        assert entry.notes == ""
+
+    def test_frame_entry_notes_roundtrip(self) -> None:
+        proj = AstroProject(
+            input_frames=[FrameEntry(path="/tmp/f.fits", notes="cloudy pass")]
+        )
+        data = proj.to_dict()
+        restored = AstroProject.from_dict(data)
+        assert restored.input_frames[0].notes == "cloudy pass"
+
+    def test_frame_entry_notes_backward_compat(self) -> None:
+        data = {"input_frames": [{"path": "/tmp/old.fits", "selected": True}]}
+        proj = AstroProject.from_dict(data)
+        assert proj.input_frames[0].notes == ""
+
     def test_from_dict_missing_keys_uses_defaults(self):
         proj = AstroProject.from_dict({})
         assert proj.metadata.version == PROJECT_FILE_VERSION
@@ -270,3 +287,48 @@ class TestAnnotationConfig:
         restored = AstroProject.from_dict(data)
         assert restored.annotation.show_dso is True
         assert restored.annotation.show_boundaries is False
+
+
+class TestAstroProjectDirty:
+    def test_new_project_is_clean(self):
+        proj = AstroProject()
+        assert proj.is_dirty is False
+
+    def test_touch_marks_dirty(self):
+        proj = AstroProject()
+        proj.touch()
+        assert proj.is_dirty is True
+
+    def test_mark_clean_clears_dirty(self):
+        proj = AstroProject()
+        proj.touch()
+        proj.mark_clean()
+        assert proj.is_dirty is False
+
+    def test_touch_updates_modified_at(self):
+        import time
+        proj = AstroProject()
+        before = proj.metadata.modified_at
+        time.sleep(0.01)
+        proj.touch()
+        assert proj.metadata.modified_at > before
+
+    def test_dirty_not_in_to_dict(self):
+        proj = AstroProject()
+        proj.touch()
+        data = proj.to_dict()
+        assert "_dirty" not in data
+        assert "is_dirty" not in data
+
+    def test_loaded_project_starts_clean(self):
+        proj = AstroProject()
+        proj.touch()
+        data = proj.to_dict()
+        restored = AstroProject.from_dict(data)
+        assert restored.is_dirty is False
+
+    def test_multiple_touch_still_dirty(self):
+        proj = AstroProject()
+        proj.touch()
+        proj.touch()
+        assert proj.is_dirty is True

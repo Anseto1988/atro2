@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 from astroai.core.io.fits_io import ImageMetadata
+
+if TYPE_CHECKING:
+    from astroai.project.project_file import CalibrationConfig
 
 
 @dataclass(frozen=True)
@@ -105,3 +108,78 @@ def find_best_flat(
     scored.sort(key=lambda x: x[1], reverse=True)
     best_frame, best_score = scored[0]
     return best_frame if best_score > 0 else None
+
+
+@dataclass
+class FrameMatchResult:
+    """Calibration match result for a single light frame."""
+
+    light_path: Path
+    dark: CalibrationFrame | None
+    flat: CalibrationFrame | None
+    bias: CalibrationFrame | None
+
+
+@dataclass
+class BatchMatchResult:
+    """Aggregate match results for all light frames."""
+
+    matches: list[FrameMatchResult]
+
+    @property
+    def coverage(self) -> float:
+        """Fraction of frames that received at least one calibration frame."""
+        if not self.matches:
+            return 0.0
+        matched = sum(1 for m in self.matches if m.dark or m.flat or m.bias)
+        return matched / len(self.matches)
+
+    @property
+    def dark_coverage(self) -> float:
+        if not self.matches:
+            return 0.0
+        return sum(1 for m in self.matches if m.dark) / len(self.matches)
+
+    @property
+    def flat_coverage(self) -> float:
+        if not self.matches:
+            return 0.0
+        return sum(1 for m in self.matches if m.flat) / len(self.matches)
+
+
+def batch_match(
+    lights: list[tuple[Path, ImageMetadata]],
+    library: CalibrationLibrary,
+) -> BatchMatchResult:
+    """Match every light frame in *lights* to its best dark/flat from *library*."""
+    matches = [
+        FrameMatchResult(
+            light_path=path,
+            dark=find_best_dark(meta, library),
+            flat=find_best_flat(meta, library),
+            bias=None,
+        )
+        for path, meta in lights
+    ]
+    return BatchMatchResult(matches=matches)
+
+
+def suggest_calibration_config(result: BatchMatchResult) -> "CalibrationConfig":
+    """Collapse a BatchMatchResult into a deduplicated CalibrationConfig.
+
+    Returns a CalibrationConfig with unique paths from all matched frames,
+    ready to assign to AstroProject.calibration.
+    """
+    from astroai.project.project_file import CalibrationConfig
+
+    def _unique(frames: list[CalibrationFrame | None]) -> list[str]:
+        seen: dict[str, None] = {}
+        for f in frames:
+            if f is not None:
+                seen[str(f.path)] = None
+        return list(seen)
+
+    darks = _unique([m.dark for m in result.matches])
+    flats = _unique([m.flat for m in result.matches])
+    bias = _unique([m.bias for m in result.matches])
+    return CalibrationConfig(dark_frames=darks, flat_frames=flats, bias_frames=bias)

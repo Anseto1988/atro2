@@ -1,7 +1,8 @@
-"""Pipeline step for phase-correlation frame registration."""
+"""Pipeline step for frame registration (star-detection or phase-correlation)."""
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from astroai.core.pipeline.base import (
     PipelineContext,
@@ -12,22 +13,32 @@ from astroai.core.pipeline.base import (
     noop_callback,
 )
 from astroai.engine.registration.aligner import FrameAligner
+from astroai.engine.registration.star_aligner import StarAligner
 
 __all__ = ["RegistrationStep"]
 
 logger = logging.getLogger(__name__)
 
+RegistrationMethod = Literal["star", "phase_correlation"]
+
 
 class RegistrationStep(PipelineStep):
-    """Align all frames in context.images to a reference using phase correlation."""
+    """Align frames using star detection (LoG) or phase correlation."""
 
     def __init__(
         self,
         upsample_factor: int = 10,
         reference_frame_index: int = 0,
+        method: RegistrationMethod = "star",
     ) -> None:
-        self._aligner = FrameAligner(upsample_factor=upsample_factor)
         self._ref_index = max(0, reference_frame_index)
+        self._method: RegistrationMethod = method
+        if method == "star":
+            self._aligner: FrameAligner | StarAligner = StarAligner(
+                upsample_factor=upsample_factor
+            )
+        else:
+            self._aligner = FrameAligner(upsample_factor=upsample_factor)
 
     @property
     def name(self) -> str:
@@ -52,7 +63,7 @@ class RegistrationStep(PipelineStep):
 
         progress(PipelineProgress(
             stage=self.stage, current=0, total=n,
-            message=f"Registriere {n} Frames…",
+            message=f"Registriere {n} Frames ({self._method})…",
         ))
 
         aligned = []
@@ -70,5 +81,9 @@ class RegistrationStep(PipelineStep):
         context.images = aligned
         context.metadata["registration_reference_index"] = ref_idx
         context.metadata["registration_frames_aligned"] = n
-        logger.info("Registration complete: %d frames aligned to index %d", n, ref_idx)
+        context.metadata["registration_method"] = self._method
+        logger.info(
+            "Registration complete: %d frames aligned to index %d (method=%s)",
+            n, ref_idx, self._method,
+        )
         return context

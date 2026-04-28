@@ -140,6 +140,7 @@ class PipelineModel(QObject):
         self._output_filename: str = "output"
         self._registration_upsample_factor: int = 10
         self._registration_reference_frame_index: int = 0
+        self._registration_method: str = "star"
         self._stacking_method: str = "sigma_clip"
         self._stacking_sigma_low: float = 2.5
         self._stacking_sigma_high: float = 2.5
@@ -977,6 +978,19 @@ class PipelineModel(QObject):
         if self._registration_reference_frame_index == value:
             return
         self._registration_reference_frame_index = value
+        self.registration_config_changed.emit()
+
+    @property
+    def registration_method(self) -> str:
+        return self._registration_method
+
+    @registration_method.setter
+    def registration_method(self, value: str) -> None:
+        if value not in ("star", "phase_correlation"):
+            value = "star"
+        if self._registration_method == value:
+            return
+        self._registration_method = value
         self.registration_config_changed.emit()
 
     # -- stacking config properties -----------------------------------

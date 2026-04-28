@@ -272,6 +272,48 @@ class TestMainWindowImportFrames:
         assert "/b1.fits" in win._project.calibration.bias_frames
         assert "Bias" in win.statusBar().currentMessage()
 
+    def test_on_import_from_folder_cancelled(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **kw: "")
+        win._on_import_from_folder()
+        assert len(win._project.input_frames) == 0
+
+    def test_on_import_from_folder_finds_fits(
+        self, win: MainWindow, tmp_path: Path, monkeypatch
+    ) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        (tmp_path / "frame1.fits").write_bytes(b"")
+        (tmp_path / "frame2.fit").write_bytes(b"")
+        (tmp_path / "notes.txt").write_bytes(b"")
+        monkeypatch.setattr(
+            QFileDialog, "getExistingDirectory", lambda *a, **kw: str(tmp_path)
+        )
+        win._on_import_from_folder()
+        assert len(win._project.input_frames) == 2
+
+    def test_on_import_from_folder_recursive(
+        self, win: MainWindow, tmp_path: Path, monkeypatch
+    ) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        (subdir / "frame.fits").write_bytes(b"")
+        monkeypatch.setattr(
+            QFileDialog, "getExistingDirectory", lambda *a, **kw: str(tmp_path)
+        )
+        win._on_import_from_folder()
+        assert len(win._project.input_frames) == 1
+
+    def test_on_import_from_folder_empty_shows_message(
+        self, win: MainWindow, tmp_path: Path, monkeypatch
+    ) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        monkeypatch.setattr(
+            QFileDialog, "getExistingDirectory", lambda *a, **kw: str(tmp_path)
+        )
+        win._on_import_from_folder()
+        assert "gefunden" in win.statusBar().currentMessage().lower()
+
 
 class TestMainWindowOpenImagePath:
     @patch("astroai.ui.main.app.QFileDialog.getOpenFileName")
@@ -739,3 +781,251 @@ class TestMainWindowFrameSelection:
     ) -> None:
         win._project.input_frames = []
         win._on_frames_remove_requested([99])  # must not raise
+
+
+class TestMainWindowProjectDirty:
+    def test_new_project_title_has_no_asterisk(self, win: MainWindow) -> None:
+        assert not win._project.is_dirty
+        assert "*" not in win.windowTitle() or not win.isWindowModified()
+
+    def test_touch_marks_project_dirty(self, win: MainWindow) -> None:
+        win._project.touch()
+        assert win._project.is_dirty
+
+    def test_update_title_sets_window_modified(self, win: MainWindow) -> None:
+        win._project.touch()
+        win._update_title()
+        assert win.isWindowModified()
+
+    def test_save_project_marks_clean(self, win: MainWindow, tmp_path) -> None:
+        from unittest.mock import patch
+        win._project.touch()
+        assert win._project.is_dirty
+        path = tmp_path / "test.astroai"
+        with patch.object(win, "_on_save_project_as"):
+            win._save_project(path)
+        assert not win._project.is_dirty
+
+    def test_save_project_clears_window_modified(self, win: MainWindow, tmp_path) -> None:
+        from unittest.mock import patch
+        win._project.touch()
+        win._update_title()
+        path = tmp_path / "test.astroai"
+        with patch.object(win, "_on_save_project_as"):
+            win._save_project(path)
+        assert not win.isWindowModified()
+
+    def test_frame_selection_change_marks_dirty(self, win: MainWindow) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [FrameEntry(path="/a.fits", selected=True)]
+        win._on_frame_selection_changed(0, False)
+        assert win._project.is_dirty
+
+    def test_frames_remove_marks_dirty(self, win: MainWindow) -> None:
+        from astroai.project.project_file import FrameEntry
+        win._project.input_frames = [FrameEntry(path="/a.fits")]
+        win._on_frames_remove_requested([0])
+        assert win._project.is_dirty
+
+    def test_session_notes_change_marks_dirty(self, win: MainWindow) -> None:
+        win._on_session_notes_changed("neue Notiz")
+        assert win._project.is_dirty
+
+    def test_close_event_accepted_when_clean(self, win: MainWindow) -> None:
+        from PySide6.QtGui import QCloseEvent
+        event = QCloseEvent()
+        win.closeEvent(event)
+        assert event.isAccepted()
+
+    def test_maybe_discard_returns_true_when_clean(self, win: MainWindow) -> None:
+        assert win._maybe_discard_changes() is True
+
+
+class TestAutoStretch:
+    def test_apply_auto_stretch_returns_float32(self) -> None:
+        import numpy as np
+        from astroai.ui.main.app import _apply_auto_stretch
+        data = np.random.rand(64, 64).astype(np.float32) * 0.01  # dark image
+        result = _apply_auto_stretch(data)
+        assert result.dtype == np.float32
+
+    def test_apply_auto_stretch_range_zero_to_one(self) -> None:
+        import numpy as np
+        from astroai.ui.main.app import _apply_auto_stretch
+        data = np.random.rand(64, 64).astype(np.float32) * 0.01
+        result = _apply_auto_stretch(data)
+        assert float(result.min()) >= 0.0
+        assert float(result.max()) <= 1.0
+
+    def test_apply_auto_stretch_does_not_modify_source(self) -> None:
+        import numpy as np
+        from astroai.ui.main.app import _apply_auto_stretch
+        data = np.random.rand(32, 32).astype(np.float32) * 0.01
+        original = data.copy()
+        _apply_auto_stretch(data)
+        np.testing.assert_array_equal(data, original)
+
+    def test_apply_auto_stretch_3d_array(self) -> None:
+        import numpy as np
+        from astroai.ui.main.app import _apply_auto_stretch
+        data = np.random.rand(3, 64, 64).astype(np.float32) * 0.01
+        result = _apply_auto_stretch(data)
+        assert result.shape == data.shape
+        assert float(result.min()) >= 0.0
+        assert float(result.max()) <= 1.0
+
+    def test_apply_auto_stretch_constant_array_no_crash(self) -> None:
+        import numpy as np
+        from astroai.ui.main.app import _apply_auto_stretch
+        data = np.full((16, 16), 0.5, dtype=np.float32)
+        result = _apply_auto_stretch(data)  # hi == lo case
+        assert result is not None
+
+    def test_toggle_auto_stretch_sets_state(self, win: MainWindow) -> None:
+        win._on_toggle_auto_stretch(True)
+        assert win._auto_stretch is True
+        win._on_toggle_auto_stretch(False)
+        assert win._auto_stretch is False
+
+    def test_auto_stretch_action_initially_disabled(self, win: MainWindow) -> None:
+        assert not win._auto_stretch_act.isEnabled()
+
+    def test_auto_stretch_action_enabled_after_image_load(
+        self, win: MainWindow
+    ) -> None:
+        import numpy as np
+        img = np.random.rand(64, 64).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        assert win._auto_stretch_act.isEnabled()
+
+    def test_toggle_with_image_updates_viewer(self, win: MainWindow) -> None:
+        import numpy as np
+        img = np.random.rand(64, 64).astype(np.float32) * 0.01
+        win._on_image_loaded(img, "test.fits")
+        win._on_toggle_auto_stretch(True)
+        # Viewer should have data (not None)
+        assert win._viewer._raw_data is not None
+
+
+class TestCopyImageToClipboard:
+    def test_copy_action_initially_disabled(self, win: MainWindow) -> None:
+        assert not win._copy_image_act.isEnabled()
+
+    def test_copy_action_enabled_after_image_load(
+        self, win: MainWindow
+    ) -> None:
+        import numpy as np
+        img = np.random.rand(64, 64).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        assert win._copy_image_act.isEnabled()
+
+    def test_on_copy_image_no_crash_without_image(
+        self, win: MainWindow
+    ) -> None:
+        win._on_copy_image()  # must not raise (viewer has no data)
+
+    def test_on_copy_image_updates_status(self, win: MainWindow) -> None:
+        import numpy as np
+        img = np.random.rand(32, 32).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        win._on_copy_image()
+        assert "Zwischenablage" in win._status_bar.currentMessage()
+
+    def test_on_copy_image_puts_image_on_clipboard(
+        self, win: MainWindow
+    ) -> None:
+        import numpy as np
+        from PySide6.QtWidgets import QApplication
+        img = np.random.rand(32, 32).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        win._on_copy_image()
+        cb = QApplication.clipboard().image()
+        assert not cb.isNull()
+        assert cb.width() == 32
+        assert cb.height() == 32
+
+
+class TestSavePreviewImage:
+    def test_save_preview_action_initially_disabled(self, win: MainWindow) -> None:
+        assert not win._save_preview_act.isEnabled()
+
+    def test_save_preview_enabled_after_image_load(self, win: MainWindow) -> None:
+        import numpy as np
+        img = np.random.rand(32, 32).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        assert win._save_preview_act.isEnabled()
+
+    def test_on_save_preview_no_crash_without_image(self, win: MainWindow, monkeypatch) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **kw: ("", ""))
+        win._on_save_preview_image()  # must not raise
+
+    def test_on_save_preview_writes_file(self, win: MainWindow, tmp_path, monkeypatch) -> None:
+        import numpy as np
+        from PySide6.QtWidgets import QFileDialog
+
+        out_path = str(tmp_path / "preview.png")
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName",
+            lambda *a, **kw: (out_path, "PNG-Bild (*.png)"),
+        )
+        img = np.random.rand(32, 32).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        win._on_save_preview_image()
+        assert (tmp_path / "preview.png").exists()
+
+    def test_on_save_preview_updates_status(self, win: MainWindow, tmp_path, monkeypatch) -> None:
+        import numpy as np
+        from PySide6.QtWidgets import QFileDialog
+
+        out_path = str(tmp_path / "out.png")
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName",
+            lambda *a, **kw: (out_path, "PNG-Bild (*.png)"),
+        )
+        img = np.random.rand(32, 32).astype(np.float32)
+        win._on_image_loaded(img, "test.fits")
+        win._on_save_preview_image()
+        assert "out.png" in win._status_bar.currentMessage()
+
+    def test_on_save_preview_no_dialog_if_no_image(self, win: MainWindow, monkeypatch) -> None:
+        called = []
+        from PySide6.QtWidgets import QFileDialog
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName",
+            lambda *a, **kw: called.append(True) or ("", ""),
+        )
+        win._on_save_preview_image()
+        assert called == []  # dialog not opened when no image loaded
+
+
+class TestCalibStatusLabel:
+    def test_calib_status_label_exists(self, win: MainWindow) -> None:
+        assert hasattr(win, "_calib_status_label")
+
+    def test_initial_label_is_dash(self, win: MainWindow) -> None:
+        assert "—" in win._calib_status_label.text()
+
+    def test_refresh_with_darks(self, win: MainWindow) -> None:
+        win._project.calibration.dark_frames = ["/tmp/d1.fits", "/tmp/d2.fits"]
+        win._refresh_calib_status()
+        assert "2D" in win._calib_status_label.text()
+
+    def test_refresh_with_flats(self, win: MainWindow) -> None:
+        win._project.calibration.flat_frames = ["/tmp/f1.fits"]
+        win._refresh_calib_status()
+        assert "1F" in win._calib_status_label.text()
+
+    def test_refresh_with_darks_and_flats(self, win: MainWindow) -> None:
+        win._project.calibration.dark_frames = ["/d.fits"]
+        win._project.calibration.flat_frames = ["/f1.fits", "/f2.fits"]
+        win._refresh_calib_status()
+        text = win._calib_status_label.text()
+        assert "1D" in text
+        assert "2F" in text
+
+    def test_refresh_empty_config_shows_dash(self, win: MainWindow) -> None:
+        win._project.calibration.dark_frames = []
+        win._project.calibration.flat_frames = []
+        win._refresh_calib_status()
+        assert "—" in win._calib_status_label.text()

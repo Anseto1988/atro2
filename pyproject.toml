@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "astroai-suite"
-version = "2.3.0-alpha"
+version = "2.4.0-alpha"
 description = "AI-powered astrophotography processing suite"
 authors = []
 readme = "README.md"
@@ -55,6 +55,9 @@ markers = [
     "slow: tests with large arrays (>1024x1024)",
 ]
 addopts = "-m 'not benchmark'"
+
+[tool.coverage.run]
+concurrency = ["thread"]
 
 [tool.ruff]
 line-length = 100

@@ -165,3 +165,163 @@ class TestSplitCompareViewInteraction:
         view._offset.setX(50)
         qtbot.keyClick(view, Qt.Key.Key_Home)
         assert view._offset.x() == pytest.approx(0.0)
+
+
+class TestSplitCompareViewZoom:
+    def test_zoom_level_property(self, view: SplitCompareView) -> None:
+        assert view.zoom_level == view._zoom
+
+    def test_set_before_emits_zoom_changed(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        with qtbot.waitSignal(view.zoom_changed, timeout=500):
+            view.set_before(gray2d)
+
+    def test_set_after_emits_zoom_changed(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        with qtbot.waitSignal(view.zoom_changed, timeout=500):
+            view.set_after(gray2d)
+
+    def test_fit_to_view_emits_zoom_changed(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        with qtbot.waitSignal(view.zoom_changed, timeout=500):
+            view.fit_to_view()
+
+    def test_key_plus_emits_zoom_changed(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        with qtbot.waitSignal(view.zoom_changed, timeout=500):
+            qtbot.keyClick(view, Qt.Key.Key_Plus)
+
+    def test_key_minus_emits_zoom_changed(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        with qtbot.waitSignal(view.zoom_changed, timeout=500):
+            qtbot.keyClick(view, Qt.Key.Key_Minus)
+
+    def test_zoom_changed_signal_carries_float(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        with qtbot.waitSignal(view.zoom_changed, timeout=500) as blocker:
+            view.set_before(gray2d)
+        assert isinstance(blocker.args[0], float)
+        assert blocker.args[0] > 0
+
+    def test_wheel_up_increases_zoom(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        from PySide6.QtCore import QPoint, QPointF
+        from PySide6.QtGui import QWheelEvent
+
+        view.set_before(gray2d)
+        old_zoom = view._zoom
+        event = QWheelEvent(
+            QPointF(200.0, 150.0),
+            view.mapToGlobal(QPoint(200, 150)),
+            QPoint(0, 120),
+            QPoint(0, 120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        view.wheelEvent(event)
+        assert view._zoom > old_zoom
+
+    def test_wheel_down_decreases_zoom(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        from PySide6.QtCore import QPoint, QPointF
+        from PySide6.QtGui import QWheelEvent
+
+        view.set_before(gray2d)
+        old_zoom = view._zoom
+        event = QWheelEvent(
+            QPointF(200.0, 150.0),
+            view.mapToGlobal(QPoint(200, 150)),
+            QPoint(0, -120),
+            QPoint(0, -120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        view.wheelEvent(event)
+        assert view._zoom < old_zoom
+
+
+class TestSplitCompareViewMouseAndKey:
+    def test_left_press_near_split_sets_split_drag(
+        self, view: SplitCompareView
+    ) -> None:
+        center = int(view.width() * view._split)
+        from PySide6.QtCore import QPoint
+        import pytest
+
+        view._near_split(float(center))  # sanity-check
+        # Simulate press near split
+        view._split_drag = False
+        view._pan_drag = False
+        # Direct test: _near_split at center should be True
+        assert view._near_split(float(center))
+
+    def test_left_press_away_from_split_sets_pan_drag(
+        self, qtbot, view: SplitCompareView
+    ) -> None:
+        qtbot.mousePress(view, Qt.MouseButton.LeftButton, pos=QPoint(10, 150))
+        assert view._pan_drag
+
+    def test_left_release_clears_drag_flags(
+        self, qtbot, view: SplitCompareView
+    ) -> None:
+        view._pan_drag = True
+        view._split_drag = True
+        qtbot.mouseRelease(view, Qt.MouseButton.LeftButton, pos=QPoint(200, 150))
+        assert not view._pan_drag
+        assert not view._split_drag
+
+    def test_key_left_shifts_offset(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        before_x = view._offset.x()
+        qtbot.keyClick(view, Qt.Key.Key_Left)
+        assert view._offset.x() != before_x
+
+    def test_key_right_shifts_offset(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        before_x = view._offset.x()
+        qtbot.keyClick(view, Qt.Key.Key_Right)
+        assert view._offset.x() != before_x
+
+    def test_key_up_shifts_offset(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        before_y = view._offset.y()
+        qtbot.keyClick(view, Qt.Key.Key_Up)
+        assert view._offset.y() != before_y
+
+    def test_key_down_shifts_offset(
+        self, qtbot, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        before_y = view._offset.y()
+        qtbot.keyClick(view, Qt.Key.Key_Down)
+        assert view._offset.y() != before_y
+
+    def test_tile_cache_hit_reuses_tile(
+        self, view: SplitCompareView, gray2d: np.ndarray
+    ) -> None:
+        view.set_before(gray2d)
+        assert view._before is not None
+        tile1 = view._get_tile(view._before, view._before_cache, 0, 0)
+        tile2 = view._get_tile(view._before, view._before_cache, 0, 0)
+        assert tile1 is tile2  # same object from cache

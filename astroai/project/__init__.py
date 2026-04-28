@@ -13,6 +13,8 @@ from astroai.project.project_file import (
     StretchConfig,
 )
 from astroai.project.serializer import ProjectSerializer
+from astroai.project.summary import ExposureGroup, ProjectSummary, compute_summary
+from astroai.project.validator import ValidationIssue, ValidationResult, validate_project
 
 __all__ = [
     "AstroProject",
@@ -25,4 +27,10 @@ __all__ = [
     "StackingConfig",
     "StarProcessingConfig",
     "StretchConfig",
+    "ValidationIssue",
+    "ValidationResult",
+    "validate_project",
+    "ExposureGroup",
+    "ProjectSummary",
+    "compute_summary",
 ]

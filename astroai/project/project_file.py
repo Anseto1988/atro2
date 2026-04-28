@@ -27,6 +27,7 @@ class FrameEntry:
     temperature: float | None = None
     quality_score: float | None = None
     selected: bool = True
+    notes: str = ""
 
 
 @dataclass
@@ -202,8 +203,19 @@ class AstroProject:
     output_path: str = ""
     output_format: str = "fits"
 
+    def __post_init__(self) -> None:
+        self._dirty: bool = False
+
+    @property
+    def is_dirty(self) -> bool:
+        return self._dirty
+
+    def mark_clean(self) -> None:
+        self._dirty = False
+
     def touch(self) -> None:
         self.metadata.modified_at = datetime.now(timezone.utc).isoformat()
+        self._dirty = True
 
     def to_dict(self) -> dict[str, Any]:
         from dataclasses import asdict

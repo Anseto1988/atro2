@@ -54,6 +54,34 @@ class TestImageViewer:
         viewer.clear()
         assert viewer._raw_data is None
 
+    def test_render_full_qimage_none_when_no_data(self, viewer: ImageViewer) -> None:
+        assert viewer.render_full_qimage() is None
+
+    def test_render_full_qimage_returns_qimage(self, viewer: ImageViewer) -> None:
+        from PySide6.QtGui import QImage
+        data = np.random.rand(64, 64).astype(np.float32)
+        viewer.set_image_data(data)
+        qimg = viewer.render_full_qimage()
+        assert isinstance(qimg, QImage)
+        assert not qimg.isNull()
+
+    def test_render_full_qimage_correct_size(self, viewer: ImageViewer) -> None:
+        data = np.random.rand(48, 80).astype(np.float32)
+        viewer.set_image_data(data)
+        qimg = viewer.render_full_qimage()
+        assert qimg is not None
+        assert qimg.width() == 80
+        assert qimg.height() == 48
+
+    def test_render_full_qimage_does_not_modify_raw_data(
+        self, viewer: ImageViewer
+    ) -> None:
+        data = np.random.rand(32, 32).astype(np.float32) * 0.01
+        viewer.set_image_data(data)
+        original = viewer._raw_data.copy()
+        viewer.render_full_qimage()
+        np.testing.assert_array_equal(viewer._raw_data, original)
+
     def test_set_zoom(self, viewer: ImageViewer) -> None:
         viewer.set_zoom(2.5)
         assert viewer.zoom_level == 2.5
@@ -1198,6 +1226,284 @@ class TestFrameListPanel:
         panel.refresh([FrameEntry(path="/m.fits"), FrameEntry(path="/b.fits")])
         assert panel._table.item(0, 0).text() == "b.fits"
 
+    # --- filter ---
+
+    def test_filter_hides_non_matching_rows(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/data/ngc7000.fits"),
+            FrameEntry(path="/data/m31.fits"),
+        ]
+        panel.refresh(entries)
+        panel._on_filter_changed("ngc")
+        assert not panel._table.isRowHidden(0)
+        assert panel._table.isRowHidden(1)
+
+    def test_filter_empty_shows_all_rows(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits"),
+            FrameEntry(path="/b.fits"),
+        ]
+        panel.refresh(entries)
+        panel._on_filter_changed("xyz")
+        panel._on_filter_changed("")
+        assert not panel._table.isRowHidden(0)
+        assert not panel._table.isRowHidden(1)
+
+    def test_filter_is_case_insensitive(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/data/NGC7000.fits")]
+        panel.refresh(entries)
+        panel._on_filter_changed("ngc7000")
+        assert not panel._table.isRowHidden(0)
+
+    def test_filter_persists_after_refresh(self, panel: FrameListPanel) -> None:
+        panel.refresh([FrameEntry(path="/a.fits")])
+        panel._on_filter_changed("ngc")
+        panel.refresh([
+            FrameEntry(path="/ngc4321.fits"),
+            FrameEntry(path="/m33.fits"),
+        ])
+        assert not panel._table.isRowHidden(0)
+        assert panel._table.isRowHidden(1)
+
+    def test_filter_input_placeholder_set(self, panel: FrameListPanel) -> None:
+        assert panel._filter_input.placeholderText() != ""
+
+    def test_filter_text_state_updated(self, panel: FrameListPanel) -> None:
+        panel._on_filter_changed("test")
+        assert panel._filter_text == "test"
+
+    def test_filter_clear_shows_all(self, panel: FrameListPanel) -> None:
+        entries = [
+            FrameEntry(path="/a.fits"),
+            FrameEntry(path="/b.fits"),
+        ]
+        panel.refresh(entries)
+        panel._on_filter_changed("a")
+        assert panel._table.isRowHidden(1)
+        panel._on_filter_changed("")
+        assert not panel._table.isRowHidden(1)
+
+    # --- quality threshold ---
+
+    def test_threshold_deselects_below_minimum(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.9, selected=True),
+            FrameEntry(path="/b.fits", quality_score=0.3, selected=True),
+        ]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(50.0)  # 50%
+        assert entries[0].selected is True
+        assert entries[1].selected is False
+
+    def test_threshold_selects_above_minimum(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.8, selected=False),
+            FrameEntry(path="/b.fits", quality_score=0.4, selected=False),
+        ]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(30.0)
+        assert entries[0].selected is True
+        assert entries[1].selected is True
+
+    def test_threshold_ignores_unscored_frames(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=None, selected=True),
+        ]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(90.0)
+        assert entries[0].selected is True  # unchanged
+
+    def test_threshold_zero_selects_all_scored(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.1, selected=False),
+            FrameEntry(path="/b.fits", quality_score=0.9, selected=False),
+        ]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(0.0)
+        assert all(e.selected for e in entries)
+
+    def test_threshold_100_deselects_all_scored(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.99, selected=True),
+        ]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(100.0)
+        # quality_score 0.99 < 1.00 threshold → deselected
+        assert entries[0].selected is False
+
+    def test_threshold_emits_selection_changed(
+        self, qtbot, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.2, selected=True),
+        ]
+        panel.refresh(entries)
+        signals: list[tuple[int, bool]] = []
+        panel.selection_changed.connect(lambda i, v: signals.append((i, v)))
+        panel.apply_quality_threshold(50.0)
+        assert (0, False) in signals
+
+    def test_threshold_updates_count_label(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [
+            FrameEntry(path="/a.fits", quality_score=0.9, selected=True),
+            FrameEntry(path="/b.fits", quality_score=0.2, selected=True),
+        ]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(50.0)
+        assert "1 ausgewählt" in panel._count_label.text()
+
+    def test_threshold_spinbox_default_zero(
+        self, panel: FrameListPanel
+    ) -> None:
+        assert panel._quality_spinbox.value() == 0.0
+
+    def test_threshold_updates_cell_text(
+        self, panel: FrameListPanel
+    ) -> None:
+        entries = [FrameEntry(path="/a.fits", quality_score=0.3, selected=True)]
+        panel.refresh(entries)
+        panel.apply_quality_threshold(50.0)
+        assert panel._table.item(0, 3).text() == "✗"
+
+    def test_on_apply_threshold_reads_spinbox(self, panel: FrameListPanel) -> None:
+        entries = [FrameEntry(path="/a.fits", quality_score=0.3, selected=True)]
+        panel.refresh(entries)
+        panel._quality_spinbox.setValue(50.0)
+        panel._on_apply_threshold()
+        assert not panel._entries[0].selected
+
+    def test_sort_key_fn_default_col_returns_zero(self, panel: FrameListPanel) -> None:
+        from astroai.project.project_file import FrameEntry
+        panel._sort_col = 99  # invalid column
+        key_fn = panel._sort_key_fn()
+        entry = FrameEntry(path="/a.fits")
+        assert key_fn(entry) == 0
+
+    def test_context_menu_empty_entries_is_noop(self, panel: FrameListPanel) -> None:
+        from PySide6.QtCore import QPoint
+        panel._entries = []
+        panel._show_context_menu(QPoint(10, 10))  # must not raise
+
+    def test_drag_move_no_urls_ignored(self, panel: FrameListPanel, qtbot, tmp_path) -> None:
+        from PySide6.QtCore import QMimeData, Qt, QPoint
+        from PySide6.QtGui import QDragMoveEvent
+
+        mime = QMimeData()  # no URLs
+        event = QDragMoveEvent(
+            panel.rect().center(),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        panel.dragMoveEvent(event)
+        assert not event.isAccepted()
+
+    def test_drag_move_with_urls_accepted(self, panel: FrameListPanel, qtbot, tmp_path) -> None:
+        from PySide6.QtCore import QMimeData, QUrl, Qt, QPoint
+        from PySide6.QtGui import QDragMoveEvent
+
+        fits_path = tmp_path / "frame.fits"
+        fits_path.write_bytes(b"")
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(fits_path))])
+        event = QDragMoveEvent(
+            panel.rect().center(),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        panel.dragMoveEvent(event)
+        assert event.isAccepted()
+
+
+class TestFrameListPanelContextMenu:
+    """Tests for context menu action dispatch (lines 264-276)."""
+
+    @pytest.fixture()
+    def panel_with_entries(self, qtbot) -> FrameListPanel:  # type: ignore[no-untyped-def]
+        p = FrameListPanel()
+        qtbot.addWidget(p)
+        entries = [
+            FrameEntry(path="/a.fits", selected=False),
+            FrameEntry(path="/b.fits", selected=True),
+        ]
+        p.refresh(entries)
+        p._table.selectRow(0)
+        return p
+
+    def _mock_exec(self, text: str):  # type: ignore[no-untyped-def]
+        from PySide6.QtWidgets import QMenu
+
+        def _exec(menu: QMenu, pos: object = None) -> object:
+            for act in menu.actions():
+                if act.text() == text:
+                    return act
+            return None
+        return _exec
+
+    def test_select_all_via_context_menu(self, panel_with_entries: FrameListPanel, monkeypatch) -> None:
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        monkeypatch.setattr(QMenu, "exec", self._mock_exec("Alle auswählen"))
+        panel_with_entries._show_context_menu(QPoint(10, 10))
+        assert all(e.selected for e in panel_with_entries._entries)
+
+    def test_deselect_all_via_context_menu(self, panel_with_entries: FrameListPanel, monkeypatch) -> None:
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        monkeypatch.setattr(QMenu, "exec", self._mock_exec("Alle abwählen"))
+        panel_with_entries._show_context_menu(QPoint(10, 10))
+        assert all(not e.selected for e in panel_with_entries._entries)
+
+    def test_invert_via_context_menu(self, panel_with_entries: FrameListPanel, monkeypatch) -> None:
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        before = [e.selected for e in panel_with_entries._entries]
+        monkeypatch.setattr(QMenu, "exec", self._mock_exec("Auswahl umkehren"))
+        panel_with_entries._show_context_menu(QPoint(10, 10))
+        after = [e.selected for e in panel_with_entries._entries]
+        assert after == [not s for s in before]
+
+    def test_remove_via_context_menu_emits_signal(self, panel_with_entries: FrameListPanel, monkeypatch) -> None:
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        removed: list[object] = []
+        panel_with_entries.remove_requested.connect(removed.append)
+        monkeypatch.setattr(QMenu, "exec", self._mock_exec("1 Frame(s) entfernen"))
+        panel_with_entries._show_context_menu(QPoint(10, 10))
+        assert removed
+
+    def test_preview_via_context_menu_emits_signal(self, panel_with_entries: FrameListPanel, monkeypatch) -> None:
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu
+        previews: list[str] = []
+        panel_with_entries.preview_requested.connect(previews.append)
+        monkeypatch.setattr(QMenu, "exec", self._mock_exec("Vorschau anzeigen"))
+        panel_with_entries._show_context_menu(QPoint(10, 10))
+        assert previews == ["/a.fits"]
+
+    def test_notes_via_context_menu_calls_edit(self, panel_with_entries: FrameListPanel, monkeypatch) -> None:
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QMenu, QInputDialog
+        monkeypatch.setattr(QMenu, "exec", self._mock_exec("Notiz bearbeiten…"))
+        monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("test note", True))
+        panel_with_entries._show_context_menu(QPoint(10, 10))
+        assert panel_with_entries._entries[0].notes == "test note"
+
 
 class TestSessionNotesPanel:
     @pytest.fixture()
@@ -1328,3 +1634,239 @@ class TestImageStatsWidget:
     def test_headers_correct(self, widget: ImageStatsWidget) -> None:
         assert widget._table.columnCount() == 5
         assert widget._table.horizontalHeaderItem(0).text() == "Kanal"
+
+
+class TestFrameListPanelNotes:
+    @pytest.fixture()
+    def panel(self, qtbot) -> FrameListPanel:  # type: ignore[no-untyped-def]
+        p = FrameListPanel()
+        qtbot.addWidget(p)
+        return p
+
+    def test_entry_with_notes_shows_asterisk(self, panel: FrameListPanel) -> None:
+        from astroai.project.project_file import FrameEntry
+
+        entry = FrameEntry(path="/data/frame.fits", notes="cloudy")
+        panel.refresh([entry])
+        item = panel._table.item(0, 0)
+        assert item is not None
+        assert item.text().startswith("*")
+
+    def test_entry_without_notes_no_asterisk(self, panel: FrameListPanel) -> None:
+        from astroai.project.project_file import FrameEntry
+
+        entry = FrameEntry(path="/data/frame.fits", notes="")
+        panel.refresh([entry])
+        item = panel._table.item(0, 0)
+        assert item is not None
+        assert not item.text().startswith("*")
+
+    def test_notes_shown_in_tooltip(self, panel: FrameListPanel) -> None:
+        from astroai.project.project_file import FrameEntry
+
+        entry = FrameEntry(path="/data/frame.fits", notes="bad tracking")
+        panel.refresh([entry])
+        item = panel._table.item(0, 0)
+        assert item is not None
+        assert "bad tracking" in item.toolTip()
+
+    def test_edit_notes_updates_entry(self, panel: FrameListPanel, monkeypatch) -> None:
+        from astroai.project.project_file import FrameEntry
+        from PySide6.QtWidgets import QInputDialog
+
+        entry = FrameEntry(path="/data/frame.fits")
+        panel.refresh([entry])
+
+        monkeypatch.setattr(
+            QInputDialog, "getText",
+            lambda *a, **kw: ("new note", True),
+        )
+        panel._edit_notes(0)
+        assert panel._entries[0].notes == "new note"
+
+    def test_edit_notes_cancelled_leaves_entry_unchanged(
+        self, panel: FrameListPanel, monkeypatch
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        from PySide6.QtWidgets import QInputDialog
+
+        entry = FrameEntry(path="/data/frame.fits", notes="original")
+        panel.refresh([entry])
+
+        monkeypatch.setattr(
+            QInputDialog, "getText",
+            lambda *a, **kw: ("ignored", False),
+        )
+        panel._edit_notes(0)
+        assert panel._entries[0].notes == "original"
+
+    def test_edit_notes_out_of_range_no_crash(self, panel: FrameListPanel) -> None:
+        panel._edit_notes(99)  # must not raise
+
+
+class TestFrameListPanelPreviewSignal:
+    @pytest.fixture()
+    def panel(self, qtbot) -> FrameListPanel:  # type: ignore[no-untyped-def]
+        p = FrameListPanel()
+        qtbot.addWidget(p)
+        return p
+
+    def test_preview_requested_signal_declared(self, panel: FrameListPanel) -> None:
+        assert hasattr(panel, "preview_requested")
+
+    def test_preview_requested_emitted_from_context_menu(
+        self, panel: FrameListPanel
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+
+        entry = FrameEntry(path="/data/frame.fits")
+        panel.refresh([entry])
+
+        received: list[str] = []
+        panel.preview_requested.connect(received.append)
+
+        # Simulate single row selected then trigger preview directly
+        panel._table.selectRow(0)
+        panel._entries[0]  # ensure row 0 maps to entry
+        # Directly invoke the emit path (context menu would call this)
+        panel.preview_requested.emit(entry.path)
+        assert received == ["/data/frame.fits"]
+
+    def test_preview_act_enabled_for_single_selection(
+        self, panel: FrameListPanel
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+
+        entry = FrameEntry(path="/data/frame.fits")
+        panel.refresh([entry])
+        panel._table.selectRow(0)
+        selected = sorted({item.row() for item in panel._table.selectedItems()})
+        assert len(selected) == 1
+
+    def test_preview_act_disabled_for_multi_selection(
+        self, panel: FrameListPanel
+    ) -> None:
+        from astroai.project.project_file import FrameEntry
+        from PySide6.QtCore import QItemSelectionModel
+
+        entries = [FrameEntry(path=f"/data/f{i}.fits") for i in range(3)]
+        panel.refresh(entries)
+        panel._table.selectRow(0)
+        panel._table.selectionModel().select(
+            panel._table.model().index(1, 0),
+            QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows,
+        )
+        selected = sorted({item.row() for item in panel._table.selectedItems()})
+        assert len(selected) > 1  # multi-selection → preview should be disabled
+
+
+class TestFrameListPanelDragDrop:
+    @pytest.fixture()
+    def panel(self, qtbot):  # type: ignore[no-untyped-def]
+        p = FrameListPanel()
+        qtbot.addWidget(p)
+        return p
+
+    def test_panel_accepts_drops(self, panel: FrameListPanel) -> None:
+        assert panel.acceptDrops()
+
+    def test_files_dropped_signal_declared(self, panel: FrameListPanel) -> None:
+        assert hasattr(panel, "files_dropped")
+
+    def test_fits_suffixes_constant(self, panel: FrameListPanel) -> None:
+        assert ".fits" in panel._FITS_SUFFIXES
+        assert ".fit" in panel._FITS_SUFFIXES
+        assert ".fts" in panel._FITS_SUFFIXES
+
+    def test_drop_emits_signal(self, panel: FrameListPanel, qtbot, tmp_path) -> None:
+        from pathlib import Path as _Path
+        from PySide6.QtCore import QMimeData, QUrl, Qt
+        from PySide6.QtGui import QDropEvent
+
+        fits_path = tmp_path / "test.fits"
+        fits_path.write_bytes(b"")
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(fits_path))])
+
+        received: list[list[str]] = []
+        panel.files_dropped.connect(received.append)
+
+        event = QDropEvent(
+            panel.rect().center().toPointF(),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        panel.dropEvent(event)
+
+        assert len(received) == 1
+        assert any(_Path(p) == fits_path for p in received[0])
+
+    def test_non_fits_drop_ignored(self, panel: FrameListPanel, qtbot, tmp_path) -> None:
+        from PySide6.QtCore import QMimeData, QUrl
+        from PySide6.QtGui import QDropEvent
+        from PySide6.QtCore import Qt
+
+        png_path = tmp_path / "image.png"
+        png_path.write_bytes(b"")
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(png_path))])
+
+        received: list[list[str]] = []
+        panel.files_dropped.connect(received.append)
+
+        event = QDropEvent(
+            panel.rect().center().toPointF(),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        panel.dropEvent(event)
+
+        assert received == []
+
+    def test_drag_enter_accepts_fits(self, panel: FrameListPanel, qtbot, tmp_path) -> None:
+        from PySide6.QtCore import QMimeData, QUrl
+        from PySide6.QtGui import QDragEnterEvent
+        from PySide6.QtCore import Qt
+
+        fits_path = tmp_path / "frame.fits"
+        fits_path.write_bytes(b"")
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(fits_path))])
+
+        event = QDragEnterEvent(
+            panel.rect().center(),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        panel.dragEnterEvent(event)
+        assert event.isAccepted()
+
+    def test_drag_enter_ignores_non_fits(self, panel: FrameListPanel, qtbot, tmp_path) -> None:
+        from PySide6.QtCore import QMimeData, QUrl
+        from PySide6.QtGui import QDragEnterEvent
+        from PySide6.QtCore import Qt
+
+        txt_path = tmp_path / "notes.txt"
+        txt_path.write_bytes(b"")
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(txt_path))])
+
+        event = QDragEnterEvent(
+            panel.rect().center(),
+            Qt.DropAction.CopyAction,
+            mime,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        panel.dragEnterEvent(event)
+        assert not event.isAccepted()

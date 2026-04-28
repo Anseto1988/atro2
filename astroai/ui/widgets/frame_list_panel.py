@@ -4,11 +4,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import QPoint, Qt, Signal, Slot
+from PySide6.QtCore import QPoint, QUrl, Qt, Signal, Slot
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import (
+    QDoubleSpinBox,
     QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QMenu,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -54,13 +60,19 @@ class FrameListPanel(QWidget):
 
     selection_changed = Signal(int, bool)   # (frame_index, new_selected)
     remove_requested = Signal(list)         # list[int] — row indices to remove
+    files_dropped = Signal(list)            # list[str] — absolute file paths dropped onto panel
+    preview_requested = Signal(str)         # str — absolute path of frame to preview
+
+    _FITS_SUFFIXES: frozenset[str] = frozenset({".fits", ".fit", ".fts"})
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._entries: list[FrameEntry] = []
         self._sort_col: int = -1
         self._sort_asc: bool = True
+        self._filter_text: str = ""
         self._setup_ui()
+        self.setAcceptDrops(True)
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -72,6 +84,32 @@ class FrameListPanel(QWidget):
         self._count_label = QLabel("Keine Frames geladen")
         self._count_label.setStyleSheet("color: #888; font-size: 11px;")
         group_layout.addWidget(self._count_label)
+
+        self._filter_input = QLineEdit()
+        self._filter_input.setPlaceholderText("Frames filtern…")
+        self._filter_input.setClearButtonEnabled(True)
+        self._filter_input.setToolTip("Filtert Frames nach Dateiname (Groß/Kleinschreibung wird ignoriert)")
+        self._filter_input.textChanged.connect(self._on_filter_changed)
+        group_layout.addWidget(self._filter_input)
+
+        threshold_row = QHBoxLayout()
+        threshold_row.addWidget(QLabel("Min. Qualität:"))
+        self._quality_spinbox = QDoubleSpinBox()
+        self._quality_spinbox.setRange(0.0, 100.0)
+        self._quality_spinbox.setSingleStep(5.0)
+        self._quality_spinbox.setSuffix(" %")
+        self._quality_spinbox.setValue(0.0)
+        self._quality_spinbox.setToolTip(
+            "Frames unterhalb dieser Qualität werden abgewählt"
+        )
+        threshold_row.addWidget(self._quality_spinbox)
+        self._threshold_btn = QPushButton("Anwenden")
+        self._threshold_btn.setToolTip(
+            "Alle Frames unterhalb der Qualitätsschwelle abwählen"
+        )
+        self._threshold_btn.clicked.connect(self._on_apply_threshold)
+        threshold_row.addWidget(self._threshold_btn)
+        group_layout.addLayout(threshold_row)
 
         self._table = QTableWidget(0, len(_HEADERS))
         self._table.setHorizontalHeaderLabels(_HEADERS)
@@ -104,8 +142,14 @@ class FrameListPanel(QWidget):
         """Fill table rows from current _entries order and refresh count label."""
         self._table.setRowCount(len(self._entries))
         for row, entry in enumerate(self._entries):
-            name_item = QTableWidgetItem(Path(entry.path).name)
-            name_item.setToolTip(entry.path)
+            display_name = Path(entry.path).name
+            if entry.notes:
+                display_name = f"* {display_name}"
+            name_item = QTableWidgetItem(display_name)
+            tooltip = entry.path
+            if entry.notes:
+                tooltip = f"{entry.path}\n\nNotiz: {entry.notes}"
+            name_item.setToolTip(tooltip)
             name_item.setTextAlignment(
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             )
@@ -134,7 +178,24 @@ class FrameListPanel(QWidget):
             self._table.setItem(row, _COL_SCORE, score_item)
             self._table.setItem(row, _COL_SEL, sel_item)
 
+        self._apply_filter()
         self._refresh_count_label()
+
+    # ------------------------------------------------------------------
+    # Filter
+    # ------------------------------------------------------------------
+
+    @Slot(str)
+    def _on_filter_changed(self, text: str) -> None:
+        self._filter_text = text
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        """Show/hide rows based on current filter text (matched against filename)."""
+        pattern = self._filter_text.lower()
+        for row, entry in enumerate(self._entries):
+            visible = not pattern or pattern in Path(entry.path).name.lower()
+            self._table.setRowHidden(row, not visible)
 
     def _sort_key_fn(self) -> Callable[[FrameEntry], Any]:
         """Return a sort key function for the active sort column."""
@@ -183,6 +244,11 @@ class FrameListPanel(QWidget):
             return
         selected_rows = sorted({item.row() for item in self._table.selectedItems()})
         menu = QMenu(self)
+        preview_act = menu.addAction("Vorschau anzeigen")
+        preview_act.setEnabled(len(selected_rows) == 1)
+        notes_act = menu.addAction("Notiz bearbeiten…")
+        notes_act.setEnabled(len(selected_rows) == 1)
+        menu.addSeparator()
         select_all_act = menu.addAction("Alle auswählen")
         deselect_all_act = menu.addAction("Alle abwählen")
         invert_act = menu.addAction("Auswahl umkehren")
@@ -195,7 +261,12 @@ class FrameListPanel(QWidget):
         remove_act.setEnabled(bool(selected_rows))
 
         action = menu.exec(self._table.mapToGlobal(pos))
-        if action == select_all_act:
+        if action == preview_act and len(selected_rows) == 1:
+            entry = self._entries[selected_rows[0]]
+            self.preview_requested.emit(entry.path)
+        elif action == notes_act and len(selected_rows) == 1:
+            self._edit_notes(selected_rows[0])
+        elif action == select_all_act:
             self._set_all_selected(True)
         elif action == deselect_all_act:
             self._set_all_selected(False)
@@ -203,6 +274,24 @@ class FrameListPanel(QWidget):
             self._invert_selection()
         elif action == remove_act and selected_rows:
             self.remove_requested.emit(selected_rows)
+
+    # ------------------------------------------------------------------
+    # Frame notes
+    # ------------------------------------------------------------------
+
+    def _edit_notes(self, row: int) -> None:
+        if row < 0 or row >= len(self._entries):
+            return
+        entry = self._entries[row]
+        text, ok = QInputDialog.getText(
+            self,
+            "Notiz bearbeiten",
+            f"Notiz für {Path(entry.path).name}:",
+            text=entry.notes,
+        )
+        if ok:
+            entry.notes = text.strip()
+            self._repopulate_table()
 
     # ------------------------------------------------------------------
     # Bulk selection helpers
@@ -237,6 +326,29 @@ class FrameListPanel(QWidget):
         self._refresh_count_label()
 
     # ------------------------------------------------------------------
+    # Quality threshold
+    # ------------------------------------------------------------------
+
+    @Slot()
+    def _on_apply_threshold(self) -> None:
+        self.apply_quality_threshold(self._quality_spinbox.value())
+
+    def apply_quality_threshold(self, min_pct: float) -> None:
+        """Deselect frames whose quality_score < min_pct/100. Unscored frames unchanged."""
+        threshold = min_pct / 100.0
+        for i, entry in enumerate(self._entries):
+            if entry.quality_score is None:
+                continue
+            new_selected = entry.quality_score >= threshold
+            if entry.selected != new_selected:
+                entry.selected = new_selected
+                item = self._table.item(i, _COL_SEL)
+                if item is not None:
+                    item.setText("✓" if new_selected else "✗")
+                self.selection_changed.emit(i, new_selected)
+        self._refresh_count_label()
+
+    # ------------------------------------------------------------------
     # Single-row toggle
     # ------------------------------------------------------------------
 
@@ -267,3 +379,36 @@ class FrameListPanel(QWidget):
             self._count_label.setText(
                 f"{n} Frame(s) — {selected} ausgewählt{exp_str} — {scored} bewertet"
             )
+
+    # ------------------------------------------------------------------
+    # Drag & drop support
+    # ------------------------------------------------------------------
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            fits_urls = [
+                u for u in event.mimeData().urls()
+                if Path(u.toLocalFile()).suffix.lower() in self._FITS_SUFFIXES
+            ]
+            if fits_urls:
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        paths = [
+            u.toLocalFile()
+            for u in event.mimeData().urls()
+            if Path(u.toLocalFile()).suffix.lower() in self._FITS_SUFFIXES
+        ]
+        if paths:
+            self.files_dropped.emit(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()

@@ -80,10 +80,11 @@ class PipelineBuilder:
         return Pipeline(steps)
 
     def build_registration_pipeline(self, model: PipelineModel) -> Pipeline:
-        """Registration pipeline: phase-correlation frame alignment."""
+        """Registration pipeline: star-detection or phase-correlation."""
         step = RegistrationStep(
             upsample_factor=model.registration_upsample_factor,
             reference_frame_index=model.registration_reference_frame_index,
+            method=model.registration_method,  # type: ignore[arg-type]
         )
         return Pipeline([step])
 
@@ -185,6 +186,7 @@ class PipelineBuilder:
             RegistrationStep(
                 upsample_factor=model.registration_upsample_factor,
                 reference_frame_index=model.registration_reference_frame_index,
+                method=model.registration_method,  # type: ignore[arg-type]
             ),
             StackingStep(
                 method=model.stacking_method,

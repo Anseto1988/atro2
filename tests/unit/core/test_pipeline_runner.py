@@ -15,7 +15,7 @@ from astroai.core.pipeline.base import (
     ProgressCallback,
     noop_callback,
 )
-from astroai.core.pipeline.runner import PipelineWorker
+from astroai.core.pipeline.runner import PipelineWorker, _RunnerWorker
 
 
 class _PassthroughStep(PipelineStep):
@@ -334,3 +334,44 @@ class TestPipelineCancelledError:
         ctx = PipelineContext()
         result = pipeline.run(ctx, cancel_check=lambda: False)
         assert result.result is not None
+
+
+class TestRunnerWorkerDirect:
+    """Direct unit tests for _RunnerWorker, bypassing QThread for coverage."""
+
+    def _make(self, pipeline: Pipeline, cancelled: bool = False) -> _RunnerWorker:
+        import threading
+        cancel_event = threading.Event()
+        if cancelled:
+            cancel_event.set()
+        return _RunnerWorker(pipeline, PipelineContext(), cancel_event)
+
+    def test_run_emits_finished_on_success(self) -> None:
+        worker = self._make(Pipeline([_PassthroughStep()]))
+        results: list[object] = []
+        worker.finished.connect(results.append)
+        worker.run()
+        assert len(results) == 1
+        assert isinstance(results[0], PipelineContext)
+
+    def test_run_emits_error_on_exception(self) -> None:
+        worker = self._make(Pipeline([_ErrorStep()]))
+        errors: list[str] = []
+        worker.error.connect(errors.append)
+        worker.run()
+        assert errors and "deliberate" in errors[0]
+
+    def test_run_emits_cancelled_when_pre_cancelled(self) -> None:
+        worker = self._make(Pipeline([_PassthroughStep()]), cancelled=True)
+        cancelled: list[bool] = []
+        worker.cancelled.connect(lambda: cancelled.append(True))
+        worker.run()
+        assert cancelled == [True]
+
+    def test_emit_progress_relays_signal(self) -> None:
+        worker = self._make(Pipeline([_PassthroughStep()]))
+        received: list[object] = []
+        worker.progress.connect(received.append)
+        p = PipelineProgress(stage=PipelineStage.PROCESSING, current=1, total=1)
+        worker._emit_progress(p)
+        assert received == [p]

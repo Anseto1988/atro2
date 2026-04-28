@@ -103,3 +103,23 @@ class TestLoadFramesStepBasic:
             out = step.execute(ctx)
             assert len(out.images) == 1
             assert out.images[0].shape == (4, 4)
+
+    def test_fits_with_no_data_raises(self) -> None:
+        from astropy.io import fits
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "empty.fits"
+            hdu = fits.PrimaryHDU()  # no data array
+            hdu.writeto(str(p), overwrite=True)
+            step = LoadFramesStep([p])
+            with pytest.raises(ValueError, match="No image data"):
+                step.execute(PipelineContext())
+
+    def test_loads_png_via_pil(self) -> None:
+        from PIL import Image as PILImage
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "frame.png"
+            PILImage.fromarray(np.zeros((8, 8), dtype=np.uint8)).save(str(p))
+            step = LoadFramesStep([p])
+            out = step.execute(PipelineContext())
+            assert len(out.images) == 1
+            assert out.images[0].dtype == np.float32

@@ -64,6 +64,17 @@ class ImageViewer(QWidget):
         self._tile_cache.clear()
         self.update()
 
+    def render_full_qimage(self) -> QImage | None:
+        """Render entire raw data to a single QImage (for clipboard / export)."""
+        if self._raw_data is None:
+            return None
+        lo = float(np.min(self._raw_data))
+        hi = float(np.max(self._raw_data))
+        rng = hi - lo if hi > lo else 1.0
+        norm = ((self._raw_data - lo) / rng * 255).clip(0, 255).astype(np.uint8)
+        h, w = norm.shape
+        return QImage(norm.data, w, h, w, QImage.Format.Format_Grayscale8).copy()
+
     @property
     def zoom_level(self) -> float:
         return self._zoom
