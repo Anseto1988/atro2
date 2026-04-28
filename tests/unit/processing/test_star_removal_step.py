@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
 
@@ -143,3 +147,102 @@ class TestCustomParameters:
         ctx = PipelineContext(result=_make_starfield())
         out = step.execute(ctx)
         assert out.star_mask is not None
+
+
+# ---------------------------------------------------------------------------
+# StarRemovalStep — ONNX success paths
+# ---------------------------------------------------------------------------
+
+class TestOnnxPaths:
+    def test_try_load_onnx_returns_cached_session(self) -> None:
+        """_try_load_onnx returns existing session without re-loading (line 90)."""
+        step = StarRemovalStep()
+        mock_session = MagicMock()
+        step._onnx_session = mock_session
+        assert step._try_load_onnx() is mock_session
+
+    def test_load_from_path_success(self, tmp_path: Path) -> None:
+        """_load_from_path loads and caches session when model file exists (lines 106-109)."""
+        fake_model = tmp_path / "starnet.onnx"
+        fake_model.write_bytes(b"onnxdata")
+
+        mock_session = MagicMock()
+        mock_ort = MagicMock()
+        mock_ort.InferenceSession.return_value = mock_session
+
+        step = StarRemovalStep(onnx_model_path=str(fake_model))
+        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+            session = step._load_from_path(str(fake_model))
+
+        assert session is mock_session
+        assert step._onnx_session is mock_session
+
+    def test_load_from_registry_success(self) -> None:
+        """_load_from_registry loads ONNX when model is available in registry (lines 122-125)."""
+        mock_session = MagicMock()
+        mock_dl = MagicMock()
+        mock_dl.is_available.return_value = True
+        mock_dl.load_onnx_session.return_value = mock_session
+        mock_dl_module = MagicMock()
+        mock_dl_module.ModelDownloader.return_value = mock_dl
+
+        step = StarRemovalStep()
+        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+            session = step._load_from_registry()
+
+        assert session is mock_session
+        assert step._onnx_session is mock_session
+
+    def test_remove_onnx_grayscale(self) -> None:
+        """_remove_onnx handles 2D grayscale frame (lines 138, 141, 146-148)."""
+        h, w = 32, 32
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 1, h, w), dtype=np.float32) * 0.3
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = StarRemovalStep()
+        starless, star_mask = step._remove_onnx(frame, mock_session)
+
+        assert starless.shape == (h, w)
+        assert star_mask.shape == (h, w)
+        assert star_mask.dtype == np.float32
+
+    def test_remove_onnx_rgb(self) -> None:
+        """_remove_onnx transposes CHW output back to HWC for RGB and produces 2D mask (lines 135-136, 143-144, 163-164)."""
+        h, w = 16, 24
+        frame = np.ones((h, w, 3), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 3, h, w), dtype=np.float32) * 0.3
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = StarRemovalStep()
+        starless, star_mask = step._remove_onnx(frame, mock_session)
+
+        assert starless.shape == (h, w, 3)
+        assert star_mask.shape == (h, w)
+        assert star_mask.dtype == np.float32
+
+    def test_execute_uses_onnx_when_session_cached(self) -> None:
+        """execute logs and calls ONNX path when session is pre-loaded (lines 72-74)."""
+        h, w = 32, 32
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 1, h, w), dtype=np.float32) * 0.3
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = StarRemovalStep()
+        step._onnx_session = mock_session
+
+        ctx = PipelineContext(result=frame)
+        out = step.execute(ctx)
+
+        assert out.starless_image is not None
+        assert out.star_mask is not None
+        mock_session.run.assert_called_once()

@@ -1,6 +1,10 @@
 """Tests for DeconvolutionStep pipeline integration and Deconvolver algorithm."""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
 
@@ -216,3 +220,99 @@ class TestCustomParameters:
         ctx = PipelineContext(result=_make_blurred_frame())
         out = s.execute(ctx)
         assert out.result is not None
+
+
+# ---------------------------------------------------------------------------
+# DeconvolutionStep — ONNX success paths
+# ---------------------------------------------------------------------------
+
+class TestOnnxPaths:
+    def test_try_load_onnx_returns_cached_session(self) -> None:
+        """_try_load_onnx returns existing session without re-loading (line 92)."""
+        step = DeconvolutionStep()
+        mock_session = MagicMock()
+        step._onnx_session = mock_session
+        assert step._try_load_onnx() is mock_session
+
+    def test_load_from_path_success(self, tmp_path: Path) -> None:
+        """_load_from_path loads and caches session when model file exists (lines 106-109)."""
+        fake_model = tmp_path / "model.onnx"
+        fake_model.write_bytes(b"onnxdata")
+
+        mock_session = MagicMock()
+        mock_ort = MagicMock()
+        mock_ort.InferenceSession.return_value = mock_session
+
+        step = DeconvolutionStep(onnx_model_path=str(fake_model))
+        with patch.dict(sys.modules, {"onnxruntime": mock_ort}):
+            session = step._load_from_path(str(fake_model))
+
+        assert session is mock_session
+        assert step._onnx_session is mock_session
+
+    def test_load_from_registry_success(self) -> None:
+        """_load_from_registry loads ONNX when model is available in registry (lines 122-125)."""
+        mock_session = MagicMock()
+        mock_dl = MagicMock()
+        mock_dl.is_available.return_value = True
+        mock_dl.load_onnx_session.return_value = mock_session
+        mock_dl_module = MagicMock()
+        mock_dl_module.ModelDownloader.return_value = mock_dl
+
+        step = DeconvolutionStep()
+        with patch.dict(sys.modules, {"astroai.inference.models.downloader": mock_dl_module}):
+            session = step._load_from_registry()
+
+        assert session is mock_session
+        assert step._onnx_session is mock_session
+
+    def test_deconvolve_onnx_grayscale(self) -> None:
+        """_deconvolve_onnx handles 2D grayscale frame (lines 141, 143-144, 149)."""
+        h, w = 32, 32
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 1, h, w), dtype=np.float32) * 0.6
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = DeconvolutionStep()
+        result = step._deconvolve_onnx(frame, mock_session)
+
+        assert result.shape == (h, w)
+        assert result.dtype == np.float32
+        mock_session.run.assert_called_once()
+
+    def test_deconvolve_onnx_rgb(self) -> None:
+        """_deconvolve_onnx transposes CHW ONNX output back to HWC for RGB frames (lines 138-139, 146-148)."""
+        h, w = 16, 24
+        frame = np.ones((h, w, 3), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 3, h, w), dtype=np.float32) * 0.7
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = DeconvolutionStep()
+        result = step._deconvolve_onnx(frame, mock_session)
+
+        assert result.shape == (h, w, 3)
+        assert result.dtype == np.float32
+
+    def test_process_routes_through_onnx_when_session_cached(self) -> None:
+        """_process logs and calls ONNX path when session is pre-loaded (lines 82-84)."""
+        h, w = 16, 16
+        frame = np.ones((h, w), dtype=np.float32) * 0.5
+        onnx_out = np.ones((1, 1, h, w), dtype=np.float32) * 0.9
+
+        mock_session = MagicMock()
+        mock_session.get_inputs.return_value = [MagicMock(name="input")]
+        mock_session.run.return_value = [onnx_out]
+
+        step = DeconvolutionStep()
+        step._onnx_session = mock_session
+
+        result = step._process(frame)
+
+        assert result.shape == (h, w)
+        mock_session.run.assert_called_once()
