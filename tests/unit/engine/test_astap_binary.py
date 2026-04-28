@@ -37,8 +37,9 @@ class TestDetectPlatformKey:
 
     @patch("platform.system", return_value="Darwin")
     @patch("platform.machine", return_value="x86_64")
-    def test_darwin_x86_64_maps_to_arm64(self, _m: object, _s: object) -> None:
-        assert _detect_platform_key() == "darwin-arm64"
+    def test_darwin_x86_64_raises(self, _m: object, _s: object) -> None:
+        with pytest.raises(AstapNotFoundError, match="Intel Mac"):
+            _detect_platform_key()
 
     @patch("platform.system", return_value="Windows")
     @patch("platform.machine", return_value="AMD64")

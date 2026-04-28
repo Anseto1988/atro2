@@ -13,7 +13,7 @@ from astroai.processing.channels import (
 )
 from astroai.processing.deconvolution import Deconvolver, DeconvolutionStep, gaussian_psf
 from astroai.processing.denoise import Denoiser, SimpleUNet
-from astroai.processing.stars import StarManager
+from astroai.processing.stars import StarManager, StarRemovalStep
 from astroai.processing.stretch import IntelligentStretcher
 
 __all__ = [
@@ -32,5 +32,6 @@ __all__ = [
     "NarrowbandPalette",
     "SimpleUNet",
     "StarManager",
+    "StarRemovalStep",
     "gaussian_psf",
 ]

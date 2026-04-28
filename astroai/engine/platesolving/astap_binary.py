@@ -66,7 +66,10 @@ def _detect_platform_key() -> str:
     if system == "darwin" and machine in ("arm64", "aarch64"):
         return "darwin-arm64"
     if system == "darwin" and machine in ("x86_64", "amd64"):
-        return "darwin-arm64"
+        raise AstapNotFoundError(
+            "Intel Mac (x86_64) is not supported by the bundled ASTAP binary. "
+            "Install ASTAP manually and ensure it is on PATH."
+        )
     if system == "windows" and machine in ("amd64", "x86_64"):
         return "win32-x86_64"
 
@@ -156,7 +159,7 @@ def _extract_archive(archive: Path, dest_dir: Path) -> None:
 
     if name.endswith(".tar.gz") or name.endswith(".tgz"):
         with tarfile.open(archive, "r:gz") as tf:
-            tf.extractall(dest_dir)  # noqa: S202
+            tf.extractall(dest_dir, filter="data")
     elif name.endswith(".zip"):
         with zipfile.ZipFile(archive) as zf:
             zf.extractall(dest_dir)

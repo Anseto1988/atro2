@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 
 __all__ = [
     "CalibrationResult",
+    "CatalogQueryResult",
     "CatalogSource",
     "SpectralColorCalibrator",
 ]

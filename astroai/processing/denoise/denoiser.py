@@ -58,9 +58,9 @@ class SimpleUNet(nn.Module):
         e2 = self.enc2(F.max_pool2d(e1, 2))
         e3 = self.enc3(F.max_pool2d(e2, 2))
         b = self.bottleneck(F.max_pool2d(e3, 2))
-        d3 = self.dec3(torch.cat([self._match_and_cat(self.up3(b), e3)], dim=0).unsqueeze(0).squeeze(0))
-        d2 = self.dec2(torch.cat([self._match_and_cat(self.up2(d3), e2)], dim=0).unsqueeze(0).squeeze(0))
-        d1 = self.dec1(torch.cat([self._match_and_cat(self.up1(d2), e1)], dim=0).unsqueeze(0).squeeze(0))
+        d3 = self.dec3(self._match_and_cat(self.up3(b), e3))
+        d2 = self.dec2(self._match_and_cat(self.up2(d3), e2))
+        d1 = self.dec1(self._match_and_cat(self.up1(d2), e1))
         return cast(torch.Tensor, self.out_conv(d1))
 
     @staticmethod
