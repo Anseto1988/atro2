@@ -307,3 +307,21 @@ class TestCatalogManager:
         url = mgr.download_url(AstapCatalog.H18)
         assert "h18" in url.lower()
         assert "sourceforge" in url
+
+    def test_catalog_dir_property(self, tmp_path: Path) -> None:
+        """catalog_dir property returns the configured directory (line 117)."""
+        mgr = CatalogManager(catalog_dir=tmp_path)
+        assert mgr.catalog_dir == tmp_path
+
+    def test_default_catalog_dir_darwin(self) -> None:
+        """_default_catalog_dir returns macOS path on Darwin (line 179-180)."""
+        with patch("platform.system", return_value="Darwin"):
+            mgr = CatalogManager()
+        assert "Applications" in str(mgr.catalog_dir)
+
+    def test_default_catalog_dir_linux(self) -> None:
+        """_default_catalog_dir returns Linux path otherwise (line 181)."""
+        with patch("platform.system", return_value="Linux"):
+            mgr = CatalogManager()
+        parts = mgr.catalog_dir.parts
+        assert "opt" in parts and "astap" in parts

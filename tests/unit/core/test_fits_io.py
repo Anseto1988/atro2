@@ -104,3 +104,35 @@ class TestCoreIoInit:
         import astroai.core.io as io_pkg
         with pytest.raises(AttributeError):
             _ = io_pkg.nonexistent_attribute  # type: ignore[attr-defined]
+
+
+class TestFitsIoEdgeCases:
+    def test_extra_headers_stored_from_custom_keys(self, tmp_path: Path) -> None:
+        """Non-standard FITS keys end up in ImageMetadata.extra (line 42)."""
+        from astropy.io import fits as astrofits
+        from astroai.core.io.fits_io import read_fits
+        data = np.zeros((10, 10), dtype=np.float32)
+        hdr = astrofits.Header()
+        hdr["CUSTOM1"] = "myvalue"
+        astrofits.PrimaryHDU(data=data, header=hdr).writeto(tmp_path / "custom.fits")
+        _, meta = read_fits(tmp_path / "custom.fits")
+        assert meta.extra.get("CUSTOM1") == "myvalue"
+
+    def test_naxis_less_than_2_returns_zero_dimensions(self, tmp_path: Path) -> None:
+        """NAXIS < 2 → width=height=channels=0 (line 50)."""
+        from astropy.io import fits as astrofits
+        from astroai.core.io.fits_io import read_fits
+        # Write a 1D FITS (NAXIS=1)
+        data1d = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+        astrofits.PrimaryHDU(data=data1d).writeto(tmp_path / "1d.fits")
+        _, meta = read_fits(tmp_path / "1d.fits")
+        assert meta.width == 0
+        assert meta.height == 0
+
+    def test_write_fits_extra_headers(self, tmp_path: Path) -> None:
+        """write_fits with extra_headers adds them to FITS header (lines 95-96)."""
+        from astroai.core.io.fits_io import read_fits, write_fits
+        data = np.zeros((8, 8), dtype=np.float32)
+        path = write_fits(tmp_path / "out.fits", data, extra_headers={"MYKEY": "myval"})
+        _, meta = read_fits(path)
+        assert meta.extra.get("MYKEY") == "myval"

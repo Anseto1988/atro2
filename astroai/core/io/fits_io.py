@@ -38,7 +38,7 @@ def _extract_fits_metadata(header: fits.Header) -> ImageMetadata:
         mapped = _FITS_KEY_MAP.get(key.upper())
         if mapped and mapped not in vals:
             vals[mapped] = header[key]
-        elif key and not key.startswith(("SIMPLE", "BITPIX", "NAXIS", "EXTEND", "")):
+        elif key and not key.startswith(("SIMPLE", "BITPIX", "NAXIS", "EXTEND")):
             extra[key] = header[key]
 
     naxis = header.get("NAXIS", 0)
