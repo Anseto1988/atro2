@@ -30,6 +30,12 @@ _hidden_imports = [
     "astroai.engine.drizzle",
     "astroai.engine.drizzle.engine",
     "astroai.engine.drizzle.pipeline_step",
+    "astroai.engine.mosaic",
+    "astroai.engine.mosaic.engine",
+    "astroai.engine.mosaic.pipeline_step",
+    "astroai.processing.color",
+    "astroai.processing.color.calibrator",
+    "astroai.processing.color.pipeline_step",
     "astroai.inference.backends.gpu",
     "astroai.inference.models.registry",
     "astroai.inference.scoring.frame_scorer",
@@ -60,6 +66,8 @@ _hidden_imports = [
     "astroai.ui.widgets.workflow_graph",
     "astroai.ui.widgets.progress_widget",
     "astroai.ui.widgets.drizzle_panel",
+    "astroai.ui.widgets.mosaic_panel",
+    "astroai.ui.widgets.color_calibration_panel",
     "PySide6.QtCore",
     "PySide6.QtGui",
     "PySide6.QtWidgets",
@@ -71,6 +79,9 @@ _hidden_imports = [
     "tqdm",
     "onnxruntime",
     "reproject",
+    "astroquery",
+    "astroquery.gaia",
+    "astroquery.vizier",
 ]
 
 if IS_WIN:
@@ -145,7 +156,7 @@ if IS_MAC:
         icon=None,
         bundle_identifier="com.astroai.suite",
         info_plist={
-            "CFBundleShortVersionString": "2.0.0-alpha",
+            "CFBundleShortVersionString": "2.1.0-alpha",
             "CFBundleDisplayName": "AstroAI Suite",
             "CFBundleName": "AstroAI",
             "CFBundlePackageType": "APPL",

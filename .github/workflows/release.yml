@@ -33,8 +33,9 @@ jobs:
 
             - **F-1** ASTAP Plate Solving — Engine, Pipeline Step, Sky Overlay, AI-Koordinaten-Extraktion + Sky-Atlas
             - **F-2** GPU-Kalibrierung — GPUCalibrationEngine (CUDA/MPS/CPU-Fallback), CalibrationBenchmarkWidget
-            - **F-3** Drizzle Super-Resolution — 2x/3x Sub-Pixel-Upscaling (reproject-basiert)
-            - **F-4** Mosaic-Workflow — MosaicStep Pipeline-Integration, MosaicPanel UI-Widget, Multi-Panel-Stitching
+            - **F-3** Drizzle Super-Resolution — Sub-Pixel-Upscaling (reproject-basiert), Drop-Size/Pixfrac konfigurierbar
+            - **F-4** Mosaic-Workflow — WCS-basiertes Multi-Panel-Stitching, Gradientenkorrektur, blend modes
+            - **F-5** Photometrische Farbkalibrierung — GAIA DR3 + 2MASS Sternkatalog, Apertur-Photometrie, Sigma-Clipping, SPCC-äquivalent
 
             ### Alle Features
 
@@ -47,6 +48,7 @@ jobs:
             - **F-2** GPU-Kalibrierung (CUDA/MPS/CPU)
             - **F-3** Drizzle Super-Resolution (reproject-basiert)
             - **F-4** Mosaic-Workflow (MosaicStep + MosaicPanel)
+            - **F-5** Photometrische Farbkalibrierung (SpectralColorCalibrator + GAIA DR3)
             - Cloudflare Workers Licensing API
             - Security Hardening S-01 bis S-04
 
