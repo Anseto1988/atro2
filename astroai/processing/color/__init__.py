@@ -14,6 +14,11 @@ from astroai.processing.color.background_neutralizer import (
     BackgroundNeutralizationStep,
     SampleMode,
 )
+from astroai.processing.color.color_grading import (
+    ColorGradingConfig,
+    ColorGrader,
+    ColorGradingStep,
+)
 
 __all__ = [
     "CalibrationResult",
@@ -25,4 +30,7 @@ __all__ = [
     "BackgroundNeutralizer",
     "BackgroundNeutralizationStep",
     "SampleMode",
+    "ColorGradingConfig",
+    "ColorGrader",
+    "ColorGradingStep",
 ]

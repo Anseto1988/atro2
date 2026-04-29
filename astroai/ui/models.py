@@ -56,6 +56,7 @@ class PipelineModel(QObject):
     mtf_stretch_config_changed = Signal()
     clahe_config_changed = Signal()
     star_reduction_config_changed = Signal()
+    color_grading_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -170,6 +171,17 @@ class PipelineModel(QObject):
         self._star_reduction_amount: float = 0.5
         self._star_reduction_radius: int = 2
         self._star_reduction_threshold: float = 0.5
+        # color grading
+        self._color_grading_enabled: bool = False
+        self._cg_shadow_r: float = 0.0
+        self._cg_shadow_g: float = 0.0
+        self._cg_shadow_b: float = 0.0
+        self._cg_midtone_r: float = 0.0
+        self._cg_midtone_g: float = 0.0
+        self._cg_midtone_b: float = 0.0
+        self._cg_highlight_r: float = 0.0
+        self._cg_highlight_g: float = 0.0
+        self._cg_highlight_b: float = 0.0
         self._saturation_reds: float = 1.0
         self._saturation_oranges: float = 1.0
         self._saturation_yellows: float = 1.0
@@ -1324,6 +1336,137 @@ class PipelineModel(QObject):
         self._star_reduction_threshold = value
         self.star_reduction_config_changed.emit()
 
+    # -- color grading config properties -------------------------------------
+
+    @property
+    def color_grading_enabled(self) -> bool:
+        return self._color_grading_enabled
+
+    @color_grading_enabled.setter
+    def color_grading_enabled(self, value: bool) -> None:
+        if self._color_grading_enabled == value:
+            return
+        self._color_grading_enabled = value
+        self.color_grading_config_changed.emit()
+
+    def _cg_shift_getter(self, attr: str) -> float:
+        return getattr(self, attr)
+
+    def _cg_shift_setter(self, attr: str, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if getattr(self, attr) == value:
+            return
+        setattr(self, attr, value)
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_shadow_r(self) -> float:
+        return self._cg_shadow_r
+
+    @cg_shadow_r.setter
+    def cg_shadow_r(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_shadow_r == value:
+            return
+        self._cg_shadow_r = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_shadow_g(self) -> float:
+        return self._cg_shadow_g
+
+    @cg_shadow_g.setter
+    def cg_shadow_g(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_shadow_g == value:
+            return
+        self._cg_shadow_g = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_shadow_b(self) -> float:
+        return self._cg_shadow_b
+
+    @cg_shadow_b.setter
+    def cg_shadow_b(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_shadow_b == value:
+            return
+        self._cg_shadow_b = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_midtone_r(self) -> float:
+        return self._cg_midtone_r
+
+    @cg_midtone_r.setter
+    def cg_midtone_r(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_midtone_r == value:
+            return
+        self._cg_midtone_r = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_midtone_g(self) -> float:
+        return self._cg_midtone_g
+
+    @cg_midtone_g.setter
+    def cg_midtone_g(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_midtone_g == value:
+            return
+        self._cg_midtone_g = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_midtone_b(self) -> float:
+        return self._cg_midtone_b
+
+    @cg_midtone_b.setter
+    def cg_midtone_b(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_midtone_b == value:
+            return
+        self._cg_midtone_b = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_highlight_r(self) -> float:
+        return self._cg_highlight_r
+
+    @cg_highlight_r.setter
+    def cg_highlight_r(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_highlight_r == value:
+            return
+        self._cg_highlight_r = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_highlight_g(self) -> float:
+        return self._cg_highlight_g
+
+    @cg_highlight_g.setter
+    def cg_highlight_g(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_highlight_g == value:
+            return
+        self._cg_highlight_g = value
+        self.color_grading_config_changed.emit()
+
+    @property
+    def cg_highlight_b(self) -> float:
+        return self._cg_highlight_b
+
+    @cg_highlight_b.setter
+    def cg_highlight_b(self, value: float) -> None:
+        value = max(-0.5, min(0.5, value))
+        if self._cg_highlight_b == value:
+            return
+        self._cg_highlight_b = value
+        self.color_grading_config_changed.emit()
+
     # -- stretch config properties --------------------------------------------
 
     @property
@@ -1785,6 +1928,16 @@ class PipelineModel(QObject):
         "_clahe_clip_limit",
         "_clahe_tile_size",
         "_clahe_channel_mode",
+        "_color_grading_enabled",
+        "_cg_shadow_r",
+        "_cg_shadow_g",
+        "_cg_shadow_b",
+        "_cg_midtone_r",
+        "_cg_midtone_g",
+        "_cg_midtone_b",
+        "_cg_highlight_r",
+        "_cg_highlight_g",
+        "_cg_highlight_b",
     )
 
     def snapshot_processing_params(self) -> dict[str, object]:

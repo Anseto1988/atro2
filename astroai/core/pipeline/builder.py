@@ -250,6 +250,20 @@ class PipelineBuilder:
                 threshold=model.star_reduction_threshold,
             )))
 
+        if model.color_grading_enabled:
+            from astroai.processing.color.color_grading import ColorGradingConfig, ColorGradingStep
+            steps.append(ColorGradingStep(config=ColorGradingConfig(
+                shadow_r=model.cg_shadow_r,
+                shadow_g=model.cg_shadow_g,
+                shadow_b=model.cg_shadow_b,
+                midtone_r=model.cg_midtone_r,
+                midtone_g=model.cg_midtone_g,
+                midtone_b=model.cg_midtone_b,
+                highlight_r=model.cg_highlight_r,
+                highlight_g=model.cg_highlight_g,
+                highlight_b=model.cg_highlight_b,
+            )))
+
         if model.starless_enabled:
             steps.append(StarRemovalStep(
                 detection_sigma=model.star_detection_sigma,
