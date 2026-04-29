@@ -136,6 +136,7 @@ class PipelineModel(QObject):
         self._denoise_tile_size: int = 512
         self._denoise_tile_overlap: int = 64
         self._adaptive_denoise_enabled: bool = False
+        self._denoise_backend: str = "nafnet"
         self._sharpening_enabled: bool = False
         self._sharpening_radius: float = 1.0
         self._sharpening_amount: float = 0.5
@@ -866,6 +867,20 @@ class PipelineModel(QObject):
         if self._adaptive_denoise_enabled == value:
             return
         self._adaptive_denoise_enabled = value
+        self.denoise_config_changed.emit()
+
+    @property
+    def denoise_backend(self) -> str:
+        """Active denoising backend: 'nafnet' or 'basic'."""
+        return self._denoise_backend
+
+    @denoise_backend.setter
+    def denoise_backend(self, value: str) -> None:
+        if value not in ("nafnet", "basic"):
+            value = "nafnet"
+        if self._denoise_backend == value:
+            return
+        self._denoise_backend = value
         self.denoise_config_changed.emit()
 
     # -- sharpening config properties -----------------------------------------

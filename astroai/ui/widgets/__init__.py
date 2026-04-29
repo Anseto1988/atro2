@@ -22,6 +22,8 @@ from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
 from astroai.ui.widgets.pipeline_timeline_widget import PipelineTimelineWidget
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
 from astroai.ui.widgets.channel_balance_panel import ChannelBalancePanel
+from astroai.ui.widgets.frame_quality_dashboard import FrameQualityDashboard
+from astroai.ui.widgets.model_manager_panel import ModelManagerPanel
 
 __all__ = [
     "CalibrationBenchmarkWidget",
@@ -47,4 +49,6 @@ __all__ = [
     "UpgradeDialog",
     "WorkflowGraph",
     "ChannelBalancePanel",
+    "FrameQualityDashboard",
+    "ModelManagerPanel",
 ]

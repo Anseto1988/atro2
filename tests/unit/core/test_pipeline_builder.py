@@ -20,7 +20,10 @@ from astroai.processing.color.pipeline_step import ColorCalibrationStep
 from astroai.processing.curves.pipeline_step import CurvesStep
 from astroai.processing.deconvolution.pipeline_step import DeconvolutionStep
 from astroai.core.pipeline.adaptive_denoise_step import AdaptiveDenoiseStep
+from astroai.core.pipeline.onnx_denoise_step import OnnxDenoiseStep
 from astroai.processing.denoise.pipeline_step import DenoiseStep
+
+_DENOISE_STEP_TYPES = (DenoiseStep, OnnxDenoiseStep)
 from astroai.processing.flat.pipeline_step import SyntheticFlatStep
 from astroai.processing.stars.pipeline_step import StarRemovalStep
 from astroai.processing.stretch.pipeline_step import StretchStep
@@ -107,7 +110,7 @@ class TestBuildProcessingPipeline:
         self, builder: PipelineBuilder, model: PipelineModel
     ) -> None:
         pipeline = builder.build_processing_pipeline(model)
-        assert any(isinstance(s, DenoiseStep) for s in pipeline._steps)
+        assert any(isinstance(s, _DENOISE_STEP_TYPES) for s in pipeline._steps)
 
     def test_stretch_uses_model_target_background(
         self, builder: PipelineBuilder, model: PipelineModel
@@ -120,6 +123,7 @@ class TestBuildProcessingPipeline:
     def test_denoise_uses_model_strength(
         self, builder: PipelineBuilder, model: PipelineModel
     ) -> None:
+        model.denoise_backend = "basic"
         model.denoise_strength = 0.5
         pipeline = builder.build_processing_pipeline(model)
         step = next(s for s in pipeline._steps if isinstance(s, DenoiseStep))
@@ -128,6 +132,7 @@ class TestBuildProcessingPipeline:
     def test_denoise_uses_model_tile_size(
         self, builder: PipelineBuilder, model: PipelineModel
     ) -> None:
+        model.denoise_backend = "basic"
         model.denoise_tile_size = 256
         pipeline = builder.build_processing_pipeline(model)
         step = next(s for s in pipeline._steps if isinstance(s, DenoiseStep))
@@ -227,7 +232,10 @@ class TestBuildProcessingPipeline:
     ) -> None:
         pipeline = builder.build_processing_pipeline(model)
         types = [type(s) for s in pipeline._steps]
-        assert types.index(StretchStep) < types.index(DenoiseStep)
+        denoise_idx = next(
+            i for i, s in enumerate(pipeline._steps) if isinstance(s, _DENOISE_STEP_TYPES)
+        )
+        assert types.index(StretchStep) < denoise_idx
 
     def test_all_optional_steps_included_together(
         self, builder: PipelineBuilder, model: PipelineModel
@@ -245,7 +253,7 @@ class TestBuildProcessingPipeline:
         assert StarRemovalStep in step_types
         assert ChannelCombineStep in step_types
         assert StretchStep in step_types
-        assert DenoiseStep in step_types
+        assert any(issubclass(t, _DENOISE_STEP_TYPES) for t in step_types)
 
 
 class TestBuildExportStep:
@@ -415,7 +423,7 @@ class TestBuildFullPipeline:
         pipeline = builder.build_full_pipeline(model, [])
         types = {type(s) for s in pipeline._steps}
         assert StretchStep in types
-        assert DenoiseStep in types
+        assert any(issubclass(t, _DENOISE_STEP_TYPES) for t in types)
 
     def test_load_step_has_given_paths(
         self, builder: PipelineBuilder, model: PipelineModel
@@ -534,6 +542,7 @@ class TestBuildProcessingPipelineOptional:
         self, builder: PipelineBuilder, model: PipelineModel
     ) -> None:
         model.adaptive_denoise_enabled = False
+        model.denoise_backend = "basic"
         pipeline = builder.build_processing_pipeline(model)
         assert any(isinstance(s, DenoiseStep) for s in pipeline._steps)
 

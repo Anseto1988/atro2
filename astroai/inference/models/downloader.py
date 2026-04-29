@@ -94,6 +94,13 @@ class ModelDownloader:
         path = self._models_dir / manifest[name].filename
         return path.exists() and self._verify_checksum(path, manifest[name].sha256)
 
+    def is_downloadable(self, name: str) -> bool:
+        """Return True if the model has a public download URL available."""
+        for source in (_NAFNET_MANIFEST, _STARNET_MANIFEST):
+            if name in source:
+                return bool(source[name].get("available", True))
+        return False
+
     def ensure_model(self, name: str) -> Path:
         manifest = self.get_manifest()
         if name not in manifest:

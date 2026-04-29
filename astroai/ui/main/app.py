@@ -56,10 +56,12 @@ from astroai.ui.widgets.color_calibration_panel import ColorCalibrationPanel
 from astroai.ui.widgets.shortcuts_dialog import ShortcutsDialog
 from astroai.ui.widgets.smart_calib_panel import SmartCalibPanel
 from astroai.ui.widgets.synthetic_flat_panel import SyntheticFlatPanel
+from astroai.ui.widgets.frame_quality_dashboard import FrameQualityDashboard
 from astroai.ui.widgets.frame_selection_panel import FrameSelectionPanel
 from astroai.ui.widgets.registration_panel import RegistrationPanel
 from astroai.ui.widgets.background_removal_panel import BackgroundRemovalPanel
 from astroai.ui.widgets.denoise_panel import DenoisePanel
+from astroai.ui.widgets.model_manager_panel import ModelManagerPanel
 from astroai.ui.widgets.curves_panel import CurvesPanel
 from astroai.ui.widgets.stretch_panel import StretchPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
@@ -376,6 +378,15 @@ class MainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, frame_sel_dock)
 
+        self._frame_quality_dashboard = FrameQualityDashboard()
+        fq_dock = QDockWidget("Frame-Qualitaets-Dashboard", self)
+        fq_dock.setWidget(self._frame_quality_dashboard)
+        fq_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+            | Qt.DockWidgetArea.BottomDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, fq_dock)
+
         self._registration_panel = RegistrationPanel(self._pipeline)
         registration_dock = QDockWidget("Registrierung", self)
         registration_dock.setWidget(self._registration_panel)
@@ -458,6 +469,16 @@ class MainWindow(QMainWindow):
         self._log_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._log_dock)
         self._log_widget.install_root_handler()
+
+        self._model_manager = ModelManagerPanel()
+        self._model_manager_dock = QDockWidget("KI-Modelle", self)
+        self._model_manager_dock.setWidget(self._model_manager)
+        self._model_manager_dock.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._model_manager_dock)
+        self._model_manager_dock.setVisible(False)
+        self._model_manager.status_message.connect(self._on_status_message)
 
     def _setup_menus(self) -> None:
         menu_bar = self.menuBar()
@@ -628,6 +649,12 @@ class MainWindow(QMainWindow):
         self._rebuild_preset_menu()
         pipeline_menu.addMenu(self._preset_menu)
 
+        extras_menu = menu_bar.addMenu("&Extras")
+        model_mgr_act = QAction("KI-&Modelle verwalten...", self)
+        model_mgr_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_M))  # type: ignore[operator]
+        model_mgr_act.triggered.connect(self._on_show_model_manager)
+        extras_menu.addAction(model_mgr_act)
+
         help_menu = menu_bar.addMenu("&Hilfe")
         summary_act = QAction("&Projektübersicht...", self)
         summary_act.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_I))  # type: ignore[operator]
@@ -729,6 +756,7 @@ class MainWindow(QMainWindow):
         self._frame_list_panel.remove_requested.connect(self._on_frames_remove_requested)
         self._frame_list_panel.files_dropped.connect(self._on_frames_dropped)
         self._frame_list_panel.preview_requested.connect(self._on_frame_preview_requested)
+        self._denoise_panel.download_model_requested.connect(self._on_download_model_requested)
 
     @Slot()
     def _on_open_image(self) -> None:
@@ -1388,6 +1416,22 @@ class MainWindow(QMainWindow):
         dlg = ShortcutsDialog(self)
         dlg.show()
 
+    @Slot()
+    def _on_show_model_manager(self) -> None:
+        self._model_manager_dock.setVisible(True)
+        self._model_manager_dock.raise_()
+        self._model_manager.refresh()
+
+    @Slot(str)
+    def _on_download_model_requested(self, model_name: str) -> None:
+        self._model_manager_dock.setVisible(True)
+        self._model_manager_dock.raise_()
+        self._model_manager.start_download(model_name)
+
+    @Slot(str)
+    def _on_status_message(self, message: str) -> None:
+        self._status_bar.showMessage(message, 5000)
+
     def set_wcs_solution(
         self,
         wcs: object | None,
@@ -1604,11 +1648,15 @@ class MainWindow(QMainWindow):
 
         # Write frame quality scores back to the project when available
         frame_scores: list[float] = context.metadata.get("frame_scores", [])
+        rejected_indices: list[int] = context.metadata.get("frame_selection_rejected", [])
         if frame_scores and self._project.input_frames:
             for i, score in enumerate(frame_scores):
                 if i < len(self._project.input_frames):
                     self._project.input_frames[i].quality_score = score
             self._frame_list_panel.refresh(self._project.input_frames)
+            self._frame_quality_dashboard.set_scores(frame_scores, rejected_indices)
+        elif not frame_scores:
+            self._frame_quality_dashboard.clear()
 
         from astroai.ui.models import StepState
         active = self._pipeline.active_step()

@@ -4,6 +4,32 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
+## [2.10.0-alpha] — 2026-04-29
+
+### Added
+- **F-NAFNetDenoiser: NAFNet ONNX-Backend + OnnxDenoiseStep (VER-433)**
+  - `astroai/inference/backends/nafnet.py` — `NAFNetDenoiser` (tile-basierter ONNX-Denoiser, Stärke-Blending, lazy Session-Load via OnnxModelRegistry, grayscale + RGB)
+  - `astroai/core/pipeline/onnx_denoise_step.py` — `OnnxDenoiseStep` (PipelineStep): NAFNet wenn Modell verfügbar, sonst automatischer Fallback auf `DenoiseStep`
+  - `astroai/core/pipeline/builder.py` — `PipelineBuilder.build_processing_pipeline()`: wählt `OnnxDenoiseStep` wenn `denoise_backend == "nafnet"`, sonst `DenoiseStep`
+  - `astroai/ui/widgets/denoise_panel.py` — Backend-ComboBox (NAFNet/Basis), Download-Button, `download_model_requested` Signal
+  - `astroai/ui/models.py` — `denoise_backend` Property (`nafnet`|`basic`), `denoise_config_changed` Signal
+  - 35 Tests in `tests/unit/processing/test_onnx_nafnet_denoiser.py` (NAFNetDenoiser, OnnxDenoiseStep, PipelineModel)
+- **F-FrameQualityDashboard: Per-Frame Score-Tabelle mit CSV-Export (VER-433)**
+  - `astroai/ui/widgets/frame_quality_dashboard.py` — `FrameQualityDashboard` (sortierbare QTableWidget, Accepted/Rejected Status, CSV-Export, Summary-Label)
+  - Integration in `app.py`: Dock-Widget, Befüllung nach Pipeline-Fertigstellung via `frame_scores`/`frame_selection_rejected` Kontext-Metadata
+  - 33 Tests in `tests/unit/ui/test_frame_quality_dashboard.py`
+- **F-ModelManager: ONNX Modell-Manager Download/Verify/Delete (VER-433)**
+  - `astroai/ui/widgets/model_manager_panel.py` — `ModelManagerPanel` (QTable mit Status/Größe/Fortschritt, QThread-Worker `_DownloadWorker`, Download/Verify/Delete-Buttons, `start_download()` public API)
+  - Integration in `app.py`: Extras-Menü Ctrl+Shift+M, `download_model_requested` Signal aus `DenoisePanel` verbunden
+  - 47 Tests in `tests/unit/ui/test_model_manager_panel.py`
+
+### Stats
+- **+115 neue Tests** (NAFNetDenoiser 35, FrameQualityDashboard 33, ModelManager 47)
+- **~4213 Tests gesamt**
+- **5 neue Dateien**, ~7 modifizierte Dateien
+
+---
+
 ## [2.9.0-alpha] — 2026-04-29
 
 ### Added

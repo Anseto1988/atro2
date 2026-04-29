@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QGroupBox,
     QHBoxLayout,
@@ -19,6 +20,9 @@ from astroai.ui.models import PipelineModel
 
 __all__ = ["DenoisePanel"]
 
+_BACKEND_LABELS = ("NAFNet (KI)", "Basis (statistisch)")
+_BACKEND_KEYS = ("nafnet", "basic")
+
 
 class DenoisePanel(QWidget):
     """Panel for configuring the AI denoising step."""
@@ -26,6 +30,7 @@ class DenoisePanel(QWidget):
     PREVIEW_STEP = "denoise"
     preview_requested = Signal(dict)
     noise_detect_requested = Signal()
+    download_model_requested = Signal(str)  # emits model name, e.g. "nafnet_denoise"
 
     def __init__(self, model: PipelineModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -41,6 +46,32 @@ class DenoisePanel(QWidget):
         self._settings_group = QGroupBox("KI-Entrauschung (NAFNet)")
         group_layout = QVBoxLayout(self._settings_group)
 
+        # --- Backend selection ---
+        backend_row = QHBoxLayout()
+        backend_label = QLabel("Backend:")
+        backend_label.setMinimumWidth(130)
+        self._backend_combo = QComboBox()
+        for lbl in _BACKEND_LABELS:
+            self._backend_combo.addItem(lbl)
+        self._backend_combo.setAccessibleName("Denoising-Backend auswählen")
+        backend_row.addWidget(backend_label)
+        backend_row.addWidget(self._backend_combo, stretch=1)
+        group_layout.addLayout(backend_row)
+
+        # --- Download button ---
+        dl_row = QHBoxLayout()
+        self._download_btn = QPushButton("NAFNet-Modell herunterladen")
+        self._download_btn.setToolTip(
+            "Lädt das NAFNet ONNX-Modell von GitHub (~50 MB) herunter"
+        )
+        self._download_btn.setAccessibleName("NAFNet Modell herunterladen")
+        self._backend_status_label = QLabel("")
+        self._backend_status_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        dl_row.addWidget(self._download_btn)
+        dl_row.addWidget(self._backend_status_label, stretch=1)
+        group_layout.addLayout(dl_row)
+
+        # --- Strength ---
         strength_row = QHBoxLayout()
         strength_label = QLabel("Stärke:")
         strength_label.setMinimumWidth(130)
@@ -54,6 +85,7 @@ class DenoisePanel(QWidget):
         strength_row.addWidget(self._strength_spin, stretch=1)
         group_layout.addLayout(strength_row)
 
+        # --- Tile size ---
         tile_row = QHBoxLayout()
         tile_label = QLabel("Kachel-Größe:")
         tile_label.setMinimumWidth(130)
@@ -67,6 +99,7 @@ class DenoisePanel(QWidget):
         tile_row.addWidget(self._tile_spin, stretch=1)
         group_layout.addLayout(tile_row)
 
+        # --- Overlap ---
         overlap_row = QHBoxLayout()
         overlap_label = QLabel("Überlappung:")
         overlap_label.setMinimumWidth(130)
@@ -115,6 +148,8 @@ class DenoisePanel(QWidget):
         self._overlap_spin.valueChanged.connect(self._on_overlap_changed)
         self._adaptive_cb.stateChanged.connect(self._on_adaptive_changed)
         self._auto_btn.clicked.connect(self.noise_detect_requested)
+        self._backend_combo.currentIndexChanged.connect(self._on_backend_changed)
+        self._download_btn.clicked.connect(self._on_download_clicked)
         self._model.denoise_config_changed.connect(self._sync_from_model)
         self._model.pipeline_reset.connect(self._sync_from_model)
 
@@ -137,11 +172,20 @@ class DenoisePanel(QWidget):
 
         self._strength_spin.setEnabled(not self._model.adaptive_denoise_enabled)
 
+        backend = self._model.denoise_backend
+        idx = _BACKEND_KEYS.index(backend) if backend in _BACKEND_KEYS else 0
+        self._backend_combo.blockSignals(True)
+        self._backend_combo.setCurrentIndex(idx)
+        self._backend_combo.blockSignals(False)
+
+        self._download_btn.setVisible(backend == "nafnet")
+
     def _emit_preview(self) -> None:
         self.preview_requested.emit({
             "strength": self._model.denoise_strength,
             "tile_size": self._model.denoise_tile_size,
             "tile_overlap": self._model.denoise_tile_overlap,
+            "backend": self._model.denoise_backend,
         })
 
     @Slot(float)
@@ -163,6 +207,22 @@ class DenoisePanel(QWidget):
     def _on_overlap_changed(self, value: int) -> None:
         self._model.denoise_tile_overlap = value
         self._emit_preview()
+
+    @Slot(int)
+    def _on_backend_changed(self, index: int) -> None:
+        if 0 <= index < len(_BACKEND_KEYS):
+            self._model.denoise_backend = _BACKEND_KEYS[index]
+            self._download_btn.setVisible(_BACKEND_KEYS[index] == "nafnet")
+            self._emit_preview()
+
+    @Slot()
+    def _on_download_clicked(self) -> None:
+        self._backend_status_label.setText("Download läuft…")
+        self.download_model_requested.emit("nafnet_denoise")
+
+    def set_backend_status(self, message: str) -> None:
+        """Update the backend status label (call from download callback)."""
+        self._backend_status_label.setText(message)
 
     def apply_estimate(self, estimate: NoiseEstimate) -> None:
         """Apply a NoiseEstimate: set strength and update status label."""

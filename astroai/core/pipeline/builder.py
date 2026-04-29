@@ -161,6 +161,13 @@ class PipelineBuilder:
                 tile_size=model.denoise_tile_size,
                 tile_overlap=model.denoise_tile_overlap,
             ))
+        elif model.denoise_backend == "nafnet":
+            from astroai.core.pipeline.onnx_denoise_step import OnnxDenoiseStep
+            steps.append(OnnxDenoiseStep(
+                strength=model.denoise_strength,
+                tile_size=model.denoise_tile_size,
+                tile_overlap=model.denoise_tile_overlap,
+            ))
         else:
             steps.append(DenoiseStep(
                 strength=model.denoise_strength,
