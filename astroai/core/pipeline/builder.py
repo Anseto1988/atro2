@@ -234,6 +234,14 @@ class PipelineBuilder:
                 highlights=model.mtf_highlights,
             )))
 
+        if model.clahe_enabled:
+            from astroai.processing.contrast.clahe import CLAHEConfig, CLAHEStep
+            steps.append(CLAHEStep(config=CLAHEConfig(
+                clip_limit=model.clahe_clip_limit,
+                tile_size=model.clahe_tile_size,
+                channel_mode=model.clahe_channel_mode,
+            )))
+
         if model.starless_enabled:
             steps.append(StarRemovalStep(
                 detection_sigma=model.star_detection_sigma,

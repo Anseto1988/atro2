@@ -54,6 +54,7 @@ class PipelineModel(QObject):
     background_neutralization_config_changed = Signal()
     asinh_stretch_config_changed = Signal()
     mtf_stretch_config_changed = Signal()
+    clahe_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -158,6 +159,11 @@ class PipelineModel(QObject):
         self._mtf_midpoint: float = 0.25
         self._mtf_shadows_clipping: float = 0.0
         self._mtf_highlights: float = 1.0
+        # CLAHE local contrast enhancement
+        self._clahe_enabled: bool = False
+        self._clahe_clip_limit: float = 2.0
+        self._clahe_tile_size: int = 64
+        self._clahe_channel_mode: str = "luminance"
         self._saturation_reds: float = 1.0
         self._saturation_oranges: float = 1.0
         self._saturation_yellows: float = 1.0
@@ -1213,6 +1219,56 @@ class PipelineModel(QObject):
         self._mtf_highlights = value
         self.mtf_stretch_config_changed.emit()
 
+    # -- CLAHE config properties ----------------------------------------------
+
+    @property
+    def clahe_enabled(self) -> bool:
+        return self._clahe_enabled
+
+    @clahe_enabled.setter
+    def clahe_enabled(self, value: bool) -> None:
+        if self._clahe_enabled == value:
+            return
+        self._clahe_enabled = value
+        self.clahe_config_changed.emit()
+
+    @property
+    def clahe_clip_limit(self) -> float:
+        return self._clahe_clip_limit
+
+    @clahe_clip_limit.setter
+    def clahe_clip_limit(self, value: float) -> None:
+        value = max(1.0, min(10.0, value))
+        if self._clahe_clip_limit == value:
+            return
+        self._clahe_clip_limit = value
+        self.clahe_config_changed.emit()
+
+    @property
+    def clahe_tile_size(self) -> int:
+        return self._clahe_tile_size
+
+    @clahe_tile_size.setter
+    def clahe_tile_size(self, value: int) -> None:
+        value = max(8, min(512, int(value)))
+        if self._clahe_tile_size == value:
+            return
+        self._clahe_tile_size = value
+        self.clahe_config_changed.emit()
+
+    @property
+    def clahe_channel_mode(self) -> str:
+        return self._clahe_channel_mode
+
+    @clahe_channel_mode.setter
+    def clahe_channel_mode(self, value: str) -> None:
+        if value not in ("luminance", "each", "grayscale"):
+            value = "luminance"
+        if self._clahe_channel_mode == value:
+            return
+        self._clahe_channel_mode = value
+        self.clahe_config_changed.emit()
+
     # -- stretch config properties --------------------------------------------
 
     @property
@@ -1670,6 +1726,10 @@ class PipelineModel(QObject):
         "_bg_neutralization_sample_mode",
         "_bg_neutralization_target",
         "_bg_neutralization_roi",
+        "_clahe_enabled",
+        "_clahe_clip_limit",
+        "_clahe_tile_size",
+        "_clahe_channel_mode",
     )
 
     def snapshot_processing_params(self) -> dict[str, object]:
