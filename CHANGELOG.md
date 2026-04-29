@@ -32,10 +32,16 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   - `astroai/ui/models.py` — `white_balance_enabled` + `wb_red/green/blue` Properties
   - `astroai/core/pipeline/builder.py` — `WhiteBalanceStep`-Integration nach `SaturationStep`
   - 43 Tests in `tests/unit/processing/test_white_balance.py` + 17 in `tests/unit/ui/test_white_balance_panel.py`
+- **F-AsinHStretch: Arcsinh-Stretch (Sternphotometrie-erhaltend) (VER-303)**
+  - `astroai/processing/stretch/asinh_stretcher.py` — `AsinHConfig` (stretch_factor, black_point, linked_channels), `AsinHStretcher` (arcsinh(β·x)/arcsinh(β), β<1e-9 → linearer Passthrough, linked/unlinked RGB), `AsinHStep` (PipelineStep)
+  - `astroai/ui/widgets/asinh_stretch_panel.py` — Qt-Panel mit stretch_factor (0.001–1000), black_point (0–0.5), linked Checkbox, Signal `asinh_stretch_changed(AsinHConfig)`
+  - `astroai/ui/models.py` — `asinh_enabled`, `asinh_stretch_factor`, `asinh_black_point`, `asinh_linked` Properties
+  - `astroai/core/pipeline/builder.py` — `AsinHStep`-Integration nach `WhiteBalanceStep`
+  - 49 Tests in `tests/unit/processing/test_asinh_stretcher.py` + 18 in `tests/unit/ui/test_asinh_stretch_panel.py`
 
 ### Stats
-- **+203 neue Tests** (40+ Saturation + 48 Core Noise + 7 AutoDetect + 34 AdaptiveDenoise + 10+4 Builder + 43+17 WhiteBalance)
-- **6 neue Dateien**, ~1880 Insertionen
+- **+270 neue Tests** (+67 AsinHStretch auf ~203 vorherige)
+- **8 neue Dateien**, ~2759 Insertionen
 
 ---
 
