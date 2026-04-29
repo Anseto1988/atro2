@@ -19,6 +19,7 @@ from astroai.processing.channels.pipeline_step import ChannelCombineStep, Combin
 from astroai.processing.color.pipeline_step import ColorCalibrationStep
 from astroai.processing.curves.pipeline_step import CurvesStep
 from astroai.processing.deconvolution.pipeline_step import DeconvolutionStep
+from astroai.core.pipeline.adaptive_denoise_step import AdaptiveDenoiseStep
 from astroai.processing.denoise.pipeline_step import DenoiseStep
 from astroai.processing.flat.pipeline_step import SyntheticFlatStep
 from astroai.processing.stars.pipeline_step import StarRemovalStep
@@ -514,3 +515,35 @@ class TestBuildProcessingPipelineOptional:
     ) -> None:
         pipeline = builder.build_processing_pipeline(model)
         assert not any(isinstance(s, CurvesStep) for s in pipeline._steps)
+
+    def test_adaptive_denoise_step_included_when_enabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.adaptive_denoise_enabled = True
+        pipeline = builder.build_processing_pipeline(model)
+        assert any(isinstance(s, AdaptiveDenoiseStep) for s in pipeline._steps)
+
+    def test_denoise_step_excluded_when_adaptive_enabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.adaptive_denoise_enabled = True
+        pipeline = builder.build_processing_pipeline(model)
+        assert not any(isinstance(s, DenoiseStep) for s in pipeline._steps)
+
+    def test_denoise_step_included_when_adaptive_disabled(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.adaptive_denoise_enabled = False
+        pipeline = builder.build_processing_pipeline(model)
+        assert any(isinstance(s, DenoiseStep) for s in pipeline._steps)
+
+    def test_adaptive_step_uses_model_tile_params(
+        self, builder: PipelineBuilder, model: PipelineModel
+    ) -> None:
+        model.adaptive_denoise_enabled = True
+        model.denoise_tile_size = 256
+        model.denoise_tile_overlap = 32
+        pipeline = builder.build_processing_pipeline(model)
+        step = next(s for s in pipeline._steps if isinstance(s, AdaptiveDenoiseStep))
+        assert step._tile_size == 256
+        assert step._tile_overlap == 32

@@ -111,3 +111,42 @@ class TestAutoDetect:
         est = NoiseEstimate(sky_sigma=0.0123, snr_db=22.5, noise_level_pct=12.3, suggested_strength=0.35)
         panel.apply_estimate(est)
         assert "0.0123" in panel._noise_label.text()
+
+
+class TestAdaptiveCheckbox:
+    def test_adaptive_cb_exists(self, panel):
+        assert hasattr(panel, "_adaptive_cb")
+
+    def test_adaptive_cb_unchecked_by_default(self, panel):
+        assert not panel._adaptive_cb.isChecked()
+
+    def test_adaptive_cb_reflects_model(self, model, panel):
+        model.adaptive_denoise_enabled = True
+        assert panel._adaptive_cb.isChecked()
+
+    def test_adaptive_cb_updates_model(self, model, panel):
+        panel._adaptive_cb.setChecked(True)
+        assert model.adaptive_denoise_enabled is True
+
+    def test_uncheck_disables_adaptive(self, model, panel):
+        panel._adaptive_cb.setChecked(True)
+        panel._adaptive_cb.setChecked(False)
+        assert model.adaptive_denoise_enabled is False
+
+    def test_strength_spin_disabled_when_adaptive(self, panel):
+        panel._adaptive_cb.setChecked(True)
+        assert not panel._strength_spin.isEnabled()
+
+    def test_strength_spin_enabled_when_not_adaptive(self, panel):
+        panel._adaptive_cb.setChecked(True)
+        panel._adaptive_cb.setChecked(False)
+        assert panel._strength_spin.isEnabled()
+
+    def test_on_adaptive_changed_slot_true(self, model, panel):
+        panel._on_adaptive_changed(2)  # Qt.Checked = 2
+        assert model.adaptive_denoise_enabled is True
+
+    def test_on_adaptive_changed_slot_false(self, model, panel):
+        model.adaptive_denoise_enabled = True
+        panel._on_adaptive_changed(0)  # Qt.Unchecked = 0
+        assert model.adaptive_denoise_enabled is False

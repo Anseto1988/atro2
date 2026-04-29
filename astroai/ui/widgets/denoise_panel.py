@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDoubleSpinBox,
     QGroupBox,
     QHBoxLayout,
@@ -79,6 +80,10 @@ class DenoisePanel(QWidget):
         overlap_row.addWidget(self._overlap_spin, stretch=1)
         group_layout.addLayout(overlap_row)
 
+        self._adaptive_cb = QCheckBox("Adaptive Stärke (automatisch per NoiseEstimator)")
+        self._adaptive_cb.setAccessibleName("Adaptive Entrauschungsstärke aktivieren")
+        group_layout.addWidget(self._adaptive_cb)
+
         auto_row = QHBoxLayout()
         self._auto_btn = QPushButton("Rauschen auto-ermitteln")
         self._auto_btn.setToolTip(
@@ -108,6 +113,7 @@ class DenoisePanel(QWidget):
         self._strength_spin.valueChanged.connect(self._on_strength_changed)
         self._tile_spin.valueChanged.connect(self._on_tile_size_changed)
         self._overlap_spin.valueChanged.connect(self._on_overlap_changed)
+        self._adaptive_cb.stateChanged.connect(self._on_adaptive_changed)
         self._auto_btn.clicked.connect(self.noise_detect_requested)
         self._model.denoise_config_changed.connect(self._sync_from_model)
         self._model.pipeline_reset.connect(self._sync_from_model)
@@ -125,6 +131,12 @@ class DenoisePanel(QWidget):
         self._overlap_spin.setValue(self._model.denoise_tile_overlap)
         self._overlap_spin.blockSignals(False)
 
+        self._adaptive_cb.blockSignals(True)
+        self._adaptive_cb.setChecked(self._model.adaptive_denoise_enabled)
+        self._adaptive_cb.blockSignals(False)
+
+        self._strength_spin.setEnabled(not self._model.adaptive_denoise_enabled)
+
     def _emit_preview(self) -> None:
         self.preview_requested.emit({
             "strength": self._model.denoise_strength,
@@ -136,6 +148,11 @@ class DenoisePanel(QWidget):
     def _on_strength_changed(self, value: float) -> None:
         self._model.denoise_strength = value
         self._emit_preview()
+
+    @Slot(int)
+    def _on_adaptive_changed(self, state: int) -> None:
+        self._model.adaptive_denoise_enabled = bool(state)
+        self._strength_spin.setEnabled(not bool(state))
 
     @Slot(int)
     def _on_tile_size_changed(self, value: int) -> None:
