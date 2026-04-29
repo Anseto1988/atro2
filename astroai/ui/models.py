@@ -50,6 +50,7 @@ class PipelineModel(QObject):
     denoise_config_changed = Signal()
     sharpening_config_changed = Signal()
     saturation_config_changed = Signal()
+    white_balance_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -133,6 +134,11 @@ class PipelineModel(QObject):
         self._sharpening_threshold: float = 0.02
         self._saturation_enabled: bool = False
         self._saturation_global: float = 1.0
+        # white balance
+        self._white_balance_enabled: bool = False
+        self._wb_red: float = 1.0
+        self._wb_green: float = 1.0
+        self._wb_blue: float = 1.0
         self._saturation_reds: float = 1.0
         self._saturation_oranges: float = 1.0
         self._saturation_yellows: float = 1.0
@@ -979,6 +985,55 @@ class PipelineModel(QObject):
             return
         self._saturation_purples = value
         self.saturation_config_changed.emit()
+
+    # -- white balance config properties --------------------------------------
+
+    @property
+    def white_balance_enabled(self) -> bool:
+        return self._white_balance_enabled
+
+    @white_balance_enabled.setter
+    def white_balance_enabled(self, value: bool) -> None:
+        if self._white_balance_enabled == value:
+            return
+        self._white_balance_enabled = value
+        self.white_balance_config_changed.emit()
+
+    @property
+    def wb_red(self) -> float:
+        return self._wb_red
+
+    @wb_red.setter
+    def wb_red(self, value: float) -> None:
+        value = max(0.1, min(5.0, value))
+        if self._wb_red == value:
+            return
+        self._wb_red = value
+        self.white_balance_config_changed.emit()
+
+    @property
+    def wb_green(self) -> float:
+        return self._wb_green
+
+    @wb_green.setter
+    def wb_green(self, value: float) -> None:
+        value = max(0.1, min(5.0, value))
+        if self._wb_green == value:
+            return
+        self._wb_green = value
+        self.white_balance_config_changed.emit()
+
+    @property
+    def wb_blue(self) -> float:
+        return self._wb_blue
+
+    @wb_blue.setter
+    def wb_blue(self, value: float) -> None:
+        value = max(0.1, min(5.0, value))
+        if self._wb_blue == value:
+            return
+        self._wb_blue = value
+        self.white_balance_config_changed.emit()
 
     # -- stretch config properties --------------------------------------------
 

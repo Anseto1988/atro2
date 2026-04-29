@@ -193,6 +193,16 @@ class PipelineBuilder:
                 purples=model.saturation_purples,
             )))
 
+        if model.white_balance_enabled:
+            from astroai.processing.color.white_balance import WhiteBalanceConfig, WhiteBalanceStep
+            steps.append(WhiteBalanceStep(
+                config=WhiteBalanceConfig(
+                    red_factor=model.wb_red,
+                    green_factor=model.wb_green,
+                    blue_factor=model.wb_blue,
+                )
+            ))
+
         if model.starless_enabled:
             steps.append(StarRemovalStep(
                 detection_sigma=model.star_detection_sigma,
