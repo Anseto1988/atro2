@@ -4,6 +4,22 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
+## [2.7.0-alpha] — 2026-04-29
+
+### Added
+- **F-NoiseEstimator: MAD-basierte Sky-Noise-Analyse mit Auto-Detect (VER-396)**
+  - `astroai/core/noise_estimator.py` — `NoiseEstimator` mit iterativem Sigma-Clipping (MAD-basiert), SNR-Schätzung (dB), Noise-Level-Prozentsatz und automatischem Stärke-Mapping [0.2 → 1.0]
+  - `NoiseEstimate` Frozen-Dataclass: `sky_sigma`, `snr_db`, `noise_level_pct`, `suggested_strength`
+  - `astroai/ui/widgets/denoise_panel.py` — Auto-Detect-Button, `apply_estimate()` Slot, Noise-Info-Label (`σ=… SNR=…dB`)
+  - Unterstützt Mono- (H×W) und Multi-Channel- (H×W×C) Bilder; BT.601 Luminanz-Konvertierung
+  - 48 Tests in `tests/unit/core/test_noise_estimator.py` + 7 AutoDetect-Tests in `tests/unit/ui/test_denoise_panel.py`
+
+### Stats
+- **+55 neue Tests** (48 Core + 7 UI)
+- **2 neue Dateien**, 496 Insertionen
+
+---
+
 ## [2.6.0-alpha] — 2026-04-29
 
 ### Added
