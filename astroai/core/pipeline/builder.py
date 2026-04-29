@@ -203,6 +203,14 @@ class PipelineBuilder:
                 )
             ))
 
+        if model.asinh_enabled:
+            from astroai.processing.stretch.asinh_stretcher import AsinHConfig, AsinHStep
+            steps.append(AsinHStep(config=AsinHConfig(
+                stretch_factor=model.asinh_stretch_factor,
+                black_point=model.asinh_black_point,
+                linked_channels=model.asinh_linked,
+            )))
+
         if model.starless_enabled:
             steps.append(StarRemovalStep(
                 detection_sigma=model.star_detection_sigma,

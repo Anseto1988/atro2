@@ -51,6 +51,7 @@ class PipelineModel(QObject):
     sharpening_config_changed = Signal()
     saturation_config_changed = Signal()
     white_balance_config_changed = Signal()
+    asinh_stretch_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -139,6 +140,11 @@ class PipelineModel(QObject):
         self._wb_red: float = 1.0
         self._wb_green: float = 1.0
         self._wb_blue: float = 1.0
+        # arcsinh stretch
+        self._asinh_enabled: bool = False
+        self._asinh_stretch_factor: float = 1.0
+        self._asinh_black_point: float = 0.0
+        self._asinh_linked: bool = True
         self._saturation_reds: float = 1.0
         self._saturation_oranges: float = 1.0
         self._saturation_yellows: float = 1.0
@@ -1035,6 +1041,54 @@ class PipelineModel(QObject):
         self._wb_blue = value
         self.white_balance_config_changed.emit()
 
+    # -- arcsinh stretch config properties ------------------------------------
+
+    @property
+    def asinh_enabled(self) -> bool:
+        return self._asinh_enabled
+
+    @asinh_enabled.setter
+    def asinh_enabled(self, value: bool) -> None:
+        if self._asinh_enabled == value:
+            return
+        self._asinh_enabled = value
+        self.asinh_stretch_config_changed.emit()
+
+    @property
+    def asinh_stretch_factor(self) -> float:
+        return self._asinh_stretch_factor
+
+    @asinh_stretch_factor.setter
+    def asinh_stretch_factor(self, value: float) -> None:
+        value = max(0.001, min(1000.0, value))
+        if self._asinh_stretch_factor == value:
+            return
+        self._asinh_stretch_factor = value
+        self.asinh_stretch_config_changed.emit()
+
+    @property
+    def asinh_black_point(self) -> float:
+        return self._asinh_black_point
+
+    @asinh_black_point.setter
+    def asinh_black_point(self, value: float) -> None:
+        value = max(0.0, min(0.5, value))
+        if self._asinh_black_point == value:
+            return
+        self._asinh_black_point = value
+        self.asinh_stretch_config_changed.emit()
+
+    @property
+    def asinh_linked(self) -> bool:
+        return self._asinh_linked
+
+    @asinh_linked.setter
+    def asinh_linked(self, value: bool) -> None:
+        if self._asinh_linked == value:
+            return
+        self._asinh_linked = value
+        self.asinh_stretch_config_changed.emit()
+
     # -- stretch config properties --------------------------------------------
 
     @property
@@ -1479,6 +1533,10 @@ class PipelineModel(QObject):
         "_color_calibration_enabled",
         "_color_calibration_catalog",
         "_color_calibration_sample_radius",
+        "_asinh_enabled",
+        "_asinh_stretch_factor",
+        "_asinh_black_point",
+        "_asinh_linked",
     )
 
     def snapshot_processing_params(self) -> dict[str, object]:
