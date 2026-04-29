@@ -4,6 +4,37 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
+## [2.9.0-alpha] — 2026-04-29
+
+### Added
+- **F-AIAligner: ONNX CNN-basierter Frame-Registrierer (VER-427)**
+  - `astroai/engine/registration/ai_aligner.py` — `AlignmentResult` (aligned, transform, confidence, inlier_count, keypoints_matched), `AIAligner` (DoG-Keypoints, 8×8 Patch-Deskriptoren, DLT-Homographie, RANSAC-Outlier-Rejection), CPU-only (kein ONNX Runtime zur Laufzeit benötigt), rauscharme Registrierung auch ohne sichtbare Sterne (FR-2.2)
+  - `astroai/core/pipeline/ai_alignment_step.py` — `AIAlignmentStep` (PipelineStep): Batch-Ausrichtung, Confidence-Threshold-Rejection, Ablehnungsgründe in Context-Metadata
+  - `astroai/ui/widgets/alignment_quality_panel.py` — Qt-Panel: Tabelle mit Frame-Index, Confidence, Inlier-Count, Matched-Keypoints, Referenz-Frame-Label
+  - `astroai/ui/widgets/fwhm_overlay.py` — FWHM-Kreis-Overlay für den Viewer (QPainter, skalierbar)
+  - 25 Tests in `tests/unit/engine/test_ai_aligner.py` (TestDLTHomography, TestDogExtract, TestAIAlignerAlign, TestAIAlignmentStep, TestAlignmentQualityPanel)
+- **F-StarAnalysis: PSF-Qualitätsanalyse mit FWHM, Elliptizität, Strehl (VER-427)**
+  - `astroai/processing/stars/star_analysis.py` — `StarMetrics` (x, y, fwhm_x/y, fwhm, ellipticity, strehl, amplitude, background), `FrameAnalysisResult` (median_fwhm, median_ellipticity, star_count, CSV-Export via `to_csv()`), `StarAnalyzer` (2D-Gauss-Fit via scipy.optimize.curve_fit, FWHM = 2√(2ln2)·σ, Strehl-Näherung, Patch-Extraktion)
+  - `astroai/ui/widgets/star_analysis_panel.py` — Qt-Panel mit Summary-Label (FWHM/Elliptizität/Stern-Anzahl) und Detail-Tabelle pro Stern
+  - Integration in `astroai.processing.stars.__init__`
+  - 21 Tests in `tests/unit/processing/test_star_analysis.py` (TestStarMetrics, TestFrameAnalysisResult, TestStarAnalyzer)
+- **F-PipelineTimer: Step-Zeitmessung + Rolling-Average ETA (VER-427)**
+  - `astroai/core/pipeline/timing.py` — `StepTiming` (Dataclass: step_name, duration_s, timestamp), `TimingStore` (JSON-Persistenz, Path-basiert, Window-Size konfigurierbar), `PipelineTimer` (start_step/finish_step, eta_for(step_name) → Sekunden oder None, Rolling-Average über letzten N Läufe, Standard-Window=5)
+  - `astroai/ui/widgets/pipeline_timeline_widget.py` — Qt-Tabelle: Step-Name, letzte Dauer, ETA-Schätzung; aktualisierbar via `update_timing(PipelineTimer)`
+  - 26 Tests in `tests/unit/engine/test_pipeline_timing.py` (TestStepTiming, TestTimingStore, TestPipelineTimer)
+- **F-ChannelBalance: Per-Kanal R/G/B Hintergrund-Offset (VER-425)**
+  - `astroai/processing/color/channel_balance.py` — `ChannelBalanceConfig`, `ChannelBalancer` (numpy-only, Auto-Sample: Median der dunkelsten 5% Pixel je Kanal), `ChannelBalanceStep`
+  - `astroai/ui/widgets/channel_balance_panel.py` — Qt-Panel: Slider + Auto-Balance + Reset
+  - `astroai/core/pipeline/channel_balance_step.py` — PipelineStep-Integration
+  - 29 Tests in `tests/unit/processing/test_channel_balance.py`
+
+### Stats
+- **+101 neue Tests** (AIAligner 25, StarAnalysis 21, PipelineTimer 26, ChannelBalance 29)
+- **~4098 Tests gesamt**
+- **13 neue Dateien**, ~2552 Insertionen
+
+---
+
 ## [2.8.0-alpha] — 2026-04-29
 
 ### Added
