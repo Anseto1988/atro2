@@ -22,9 +22,14 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   - Unterstützt Mono- (H×W) und Multi-Channel- (H×W×C) Bilder; BT.601 Luminanz-Konvertierung
   - 48 Tests in `tests/unit/core/test_noise_estimator.py` + 7 AutoDetect-Tests in `tests/unit/ui/test_denoise_panel.py`
 
+- **F-AdaptiveDenoise: Automatische Rauschstärke via NoiseEstimator (VER-303)**
+  - `astroai/core/pipeline/adaptive_denoise_step.py` — `AdaptiveDenoiseStep`: schätzt Rauschen per MAD-Sigma-Clipping, delegiert an `DenoiseStep` mit `suggested_strength`; speichert Schätzung in `context.metadata["estimated_denoise_strength"]`
+  - `astroai/ui/widgets/denoise_panel.py` — Adaptive-Checkbox aktiviert `AdaptiveDenoiseStep` statt manuellem Stärke-Slider; `strength_spin` deaktiviert bei aktiviertem Adaptive-Modus
+  - 34 Tests in `tests/unit/core/test_adaptive_denoise_step.py` + 10 in `tests/unit/ui/test_denoise_panel.py` + 4 in `tests/unit/core/test_pipeline_builder.py`
+
 ### Stats
-- **+95 neue Tests** (40+ Saturation + 48 Core + 7 UI)
-- **3 neue Dateien**, ~700 Insertionen
+- **+143 neue Tests** (40+ Saturation + 48 Core Noise + 7 AutoDetect + 34 AdaptiveDenoise + 10 UI + 4 Builder)
+- **4 neue Dateien**, ~1173 Insertionen
 
 ---
 
