@@ -26,10 +26,16 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   - `astroai/core/pipeline/adaptive_denoise_step.py` — `AdaptiveDenoiseStep`: schätzt Rauschen per MAD-Sigma-Clipping, delegiert an `DenoiseStep` mit `suggested_strength`; speichert Schätzung in `context.metadata["estimated_denoise_strength"]`
   - `astroai/ui/widgets/denoise_panel.py` — Adaptive-Checkbox aktiviert `AdaptiveDenoiseStep` statt manuellem Stärke-Slider; `strength_spin` deaktiviert bei aktiviertem Adaptive-Modus
   - 34 Tests in `tests/unit/core/test_adaptive_denoise_step.py` + 10 in `tests/unit/ui/test_denoise_panel.py` + 4 in `tests/unit/core/test_pipeline_builder.py`
+- **F-WhiteBalance: Manueller Per-Kanal R/G/B Weißabgleich (VER-303)**
+  - `astroai/processing/color/white_balance.py` — `WhiteBalanceConfig` (Validierung, `is_identity`, `as_dict`), `WhiteBalanceAdjustment` (Kanal-Multiplikation, Graustufen-Passthrough, Clipping), `WhiteBalanceStep` (PipelineStep)
+  - `astroai/ui/widgets/white_balance_panel.py` — Qt-Panel mit 3 Schiebereglern (0.1–5.0), Reset-Button, Signal `white_balance_changed(WhiteBalanceConfig)`
+  - `astroai/ui/models.py` — `white_balance_enabled` + `wb_red/green/blue` Properties
+  - `astroai/core/pipeline/builder.py` — `WhiteBalanceStep`-Integration nach `SaturationStep`
+  - 43 Tests in `tests/unit/processing/test_white_balance.py` + 17 in `tests/unit/ui/test_white_balance_panel.py`
 
 ### Stats
-- **+143 neue Tests** (40+ Saturation + 48 Core Noise + 7 AutoDetect + 34 AdaptiveDenoise + 10 UI + 4 Builder)
-- **4 neue Dateien**, ~1173 Insertionen
+- **+203 neue Tests** (40+ Saturation + 48 Core Noise + 7 AutoDetect + 34 AdaptiveDenoise + 10+4 Builder + 43+17 WhiteBalance)
+- **6 neue Dateien**, ~1880 Insertionen
 
 ---
 
