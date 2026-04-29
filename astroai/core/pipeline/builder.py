@@ -242,6 +242,14 @@ class PipelineBuilder:
                 channel_mode=model.clahe_channel_mode,
             )))
 
+        if model.star_reduction_enabled:
+            from astroai.processing.stars.star_reducer import StarReductionConfig, StarReductionStep
+            steps.append(StarReductionStep(config=StarReductionConfig(
+                amount=model.star_reduction_amount,
+                radius=model.star_reduction_radius,
+                threshold=model.star_reduction_threshold,
+            )))
+
         if model.starless_enabled:
             steps.append(StarRemovalStep(
                 detection_sigma=model.star_detection_sigma,

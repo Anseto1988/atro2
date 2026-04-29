@@ -55,6 +55,7 @@ class PipelineModel(QObject):
     asinh_stretch_config_changed = Signal()
     mtf_stretch_config_changed = Signal()
     clahe_config_changed = Signal()
+    star_reduction_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -164,6 +165,11 @@ class PipelineModel(QObject):
         self._clahe_clip_limit: float = 2.0
         self._clahe_tile_size: int = 64
         self._clahe_channel_mode: str = "luminance"
+        # star reduction
+        self._star_reduction_enabled: bool = False
+        self._star_reduction_amount: float = 0.5
+        self._star_reduction_radius: int = 2
+        self._star_reduction_threshold: float = 0.5
         self._saturation_reds: float = 1.0
         self._saturation_oranges: float = 1.0
         self._saturation_yellows: float = 1.0
@@ -1268,6 +1274,55 @@ class PipelineModel(QObject):
             return
         self._clahe_channel_mode = value
         self.clahe_config_changed.emit()
+
+    # -- star reduction config properties ------------------------------------
+
+    @property
+    def star_reduction_enabled(self) -> bool:
+        return self._star_reduction_enabled
+
+    @star_reduction_enabled.setter
+    def star_reduction_enabled(self, value: bool) -> None:
+        if self._star_reduction_enabled == value:
+            return
+        self._star_reduction_enabled = value
+        self.star_reduction_config_changed.emit()
+
+    @property
+    def star_reduction_amount(self) -> float:
+        return self._star_reduction_amount
+
+    @star_reduction_amount.setter
+    def star_reduction_amount(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._star_reduction_amount == value:
+            return
+        self._star_reduction_amount = value
+        self.star_reduction_config_changed.emit()
+
+    @property
+    def star_reduction_radius(self) -> int:
+        return self._star_reduction_radius
+
+    @star_reduction_radius.setter
+    def star_reduction_radius(self, value: int) -> None:
+        value = max(1, min(10, int(value)))
+        if self._star_reduction_radius == value:
+            return
+        self._star_reduction_radius = value
+        self.star_reduction_config_changed.emit()
+
+    @property
+    def star_reduction_threshold(self) -> float:
+        return self._star_reduction_threshold
+
+    @star_reduction_threshold.setter
+    def star_reduction_threshold(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._star_reduction_threshold == value:
+            return
+        self._star_reduction_threshold = value
+        self.star_reduction_config_changed.emit()
 
     # -- stretch config properties --------------------------------------------
 
