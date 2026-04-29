@@ -7,6 +7,12 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 ## [2.8.0-alpha] — 2026-04-29
 
 ### Added
+- **F-StarReduction: Morphologische Sternverkleinerung ohne Entfernung (VER-303)**
+  - `astroai/processing/stars/star_reducer.py` — `StarReductionConfig` (amount, radius, threshold), `StarReducer` (Minimum-Filter via scipy.ndimage, Gaussian-Sternmaske, Blend-Formel für weiche Übergänge), `StarReductionStep` (PipelineStep)
+  - `astroai/ui/widgets/star_reduction_panel.py` — Qt-Panel: amount (0.0–1.0), radius (1–10), threshold (0.0–1.0), Reset
+  - `astroai/ui/models.py` — `star_reduction_*` Properties + Signal
+  - `astroai/core/pipeline/builder.py` — `StarReductionStep`-Integration nach `CLAHEStep`
+  - 46 Tests in `tests/unit/processing/test_star_reducer.py` + 13 in `tests/unit/ui/test_star_reduction_panel.py`
 - **F-LocalContrastEnhancement: CLAHE-basierte lokale Kontrastverbesserung (VER-303)**
   - `astroai/processing/contrast/clahe.py` — `CLAHEConfig` (clip_limit, tile_size, n_bins, channel_mode: luminance/each/grayscale), `CLAHEEnhancer` (Kachel-Histogramm mit Clip+Umverteilung und bilinearer Interpolation, pure numpy), `CLAHEStep` (PipelineStep)
   - `astroai/ui/widgets/clahe_panel.py` — Qt-Panel: clip_limit (1.0–10.0), tile_size (8–512), channel_mode ComboBox, Reset-Button
