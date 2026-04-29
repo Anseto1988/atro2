@@ -20,6 +20,7 @@ from astroai.processing.color.pipeline_step import ColorCalibrationStep
 from astroai.processing.deconvolution.pipeline_step import DeconvolutionStep
 from astroai.processing.denoise.pipeline_step import DenoiseStep
 from astroai.processing.flat.pipeline_step import SyntheticFlatStep
+from astroai.processing.sharpening.pipeline_step import SharpeningStep
 from astroai.processing.stars.pipeline_step import StarRemovalStep
 from astroai.processing.curves.pipeline_step import CurvesStep
 from astroai.processing.stretch.pipeline_step import StretchStep
@@ -163,6 +164,13 @@ class PipelineBuilder:
             steps.append(DeconvolutionStep(
                 iterations=model.deconvolution_iterations,
                 psf_sigma=model.deconvolution_psf_sigma,
+            ))
+
+        if model.sharpening_enabled:
+            steps.append(SharpeningStep(
+                radius=model.sharpening_radius,
+                amount=model.sharpening_amount,
+                threshold=model.sharpening_threshold,
             ))
 
         if model.starless_enabled:

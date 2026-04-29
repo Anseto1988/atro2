@@ -48,6 +48,7 @@ class PipelineModel(QObject):
     frame_selection_config_changed = Signal()
     background_removal_config_changed = Signal()
     denoise_config_changed = Signal()
+    sharpening_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -73,6 +74,7 @@ class PipelineModel(QObject):
         ("color_calibration", "Farbkalibrierung", True),
         ("denoise", "Entrauschen", False),
         ("deconvolution", "Deconvolution", True),
+        ("sharpening", "Schärfung", True),
         ("starless", "Starless", True),
         ("export", "Export", False),
     ]
@@ -122,6 +124,10 @@ class PipelineModel(QObject):
         self._denoise_strength: float = 1.0
         self._denoise_tile_size: int = 512
         self._denoise_tile_overlap: int = 64
+        self._sharpening_enabled: bool = False
+        self._sharpening_radius: float = 1.0
+        self._sharpening_amount: float = 0.5
+        self._sharpening_threshold: float = 0.02
         self._stretch_target_background: float = 0.25
         self._stretch_shadow_clipping_sigmas: float = -2.8
         self._stretch_linked_channels: bool = True
@@ -783,6 +789,55 @@ class PipelineModel(QObject):
         self._denoise_tile_overlap = value
         self.denoise_config_changed.emit()
 
+    # -- sharpening config properties -----------------------------------------
+
+    @property
+    def sharpening_enabled(self) -> bool:
+        return self._sharpening_enabled
+
+    @sharpening_enabled.setter
+    def sharpening_enabled(self, value: bool) -> None:
+        if self._sharpening_enabled == value:
+            return
+        self._sharpening_enabled = value
+        self.sharpening_config_changed.emit()
+
+    @property
+    def sharpening_radius(self) -> float:
+        return self._sharpening_radius
+
+    @sharpening_radius.setter
+    def sharpening_radius(self, value: float) -> None:
+        value = max(0.1, min(10.0, value))
+        if self._sharpening_radius == value:
+            return
+        self._sharpening_radius = value
+        self.sharpening_config_changed.emit()
+
+    @property
+    def sharpening_amount(self) -> float:
+        return self._sharpening_amount
+
+    @sharpening_amount.setter
+    def sharpening_amount(self, value: float) -> None:
+        value = max(0.0, min(1.0, value))
+        if self._sharpening_amount == value:
+            return
+        self._sharpening_amount = value
+        self.sharpening_config_changed.emit()
+
+    @property
+    def sharpening_threshold(self) -> float:
+        return self._sharpening_threshold
+
+    @sharpening_threshold.setter
+    def sharpening_threshold(self, value: float) -> None:
+        value = max(0.0, min(0.5, value))
+        if self._sharpening_threshold == value:
+            return
+        self._sharpening_threshold = value
+        self.sharpening_config_changed.emit()
+
     # -- stretch config properties --------------------------------------------
 
     @property
@@ -1206,6 +1261,10 @@ class PipelineModel(QObject):
         "_denoise_strength",
         "_denoise_tile_size",
         "_denoise_tile_overlap",
+        "_sharpening_enabled",
+        "_sharpening_radius",
+        "_sharpening_amount",
+        "_sharpening_threshold",
         "_starless_enabled",
         "_starless_strength",
         "_starless_format",

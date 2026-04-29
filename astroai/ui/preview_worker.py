@@ -107,6 +107,16 @@ def _apply_step(
         )
         return remover.remove(thumbnail)
 
+    if step_name == "sharpening":
+        from astroai.processing.sharpening.unsharp_mask import UnsharpMask
+
+        sharpener = UnsharpMask(
+            radius=params.get("radius", 1.0),
+            amount=params.get("amount", 0.5),
+            threshold=params.get("threshold", 0.02),
+        )
+        return sharpener.apply(thumbnail)
+
     return thumbnail
 
 
