@@ -7,6 +7,12 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 ## [2.8.0-alpha] — 2026-04-29
 
 ### Added
+- **F-LocalContrastEnhancement: CLAHE-basierte lokale Kontrastverbesserung (VER-303)**
+  - `astroai/processing/contrast/clahe.py` — `CLAHEConfig` (clip_limit, tile_size, n_bins, channel_mode: luminance/each/grayscale), `CLAHEEnhancer` (Kachel-Histogramm mit Clip+Umverteilung und bilinearer Interpolation, pure numpy), `CLAHEStep` (PipelineStep)
+  - `astroai/ui/widgets/clahe_panel.py` — Qt-Panel: clip_limit (1.0–10.0), tile_size (8–512), channel_mode ComboBox, Reset-Button
+  - `astroai/ui/models.py` — `clahe_*` Properties + `clahe_config_changed` Signal
+  - `astroai/core/pipeline/builder.py` — `CLAHEStep`-Integration nach `MTFStep`
+  - 61 Tests in `tests/unit/processing/test_clahe.py` + 17 in `tests/unit/ui/test_clahe_panel.py`
 - **F-BackgroundNeutralization: Farbliche Hintergrundneutralisierung (VER-420)**
   - `astroai/processing/color/background_neutralizer.py` — `BackgroundNeutralizationConfig` (sample_mode auto/manual, target_background 0.0–0.3, roi, sample_percentile), `BackgroundNeutralizer` (Auto-Modus sampelt 2%-Perzentil je Kanal; manueller Modus nutzt ROI-Median; Shift auf Zielwert per Kanal, geclippt auf [0,1]), `BackgroundNeutralizationStep` (PipelineStep nach WhiteBalanceStep, vor AsinHStep; speichert Background-Schätzung in `context.metadata["background_neutralization_estimate"]`)
   - `astroai/ui/widgets/background_neutralization_panel.py` — Qt-Panel mit Modus-Combo (Auto/Manuell), Target-Spinner (0.0–0.3), ROI-Eingabe (nur im manuellen Modus aktiv), Reset-Button; Signal `bg_neutralization_changed(BackgroundNeutralizationConfig)`
