@@ -4,6 +4,48 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
+## [2.6.0-alpha] — 2026-04-29
+
+### Added
+- **F-OnnxRegistry: Zentrales ONNX-Modell-Registry mit Lazy Loading (VER-363)**
+  - `astroai/core/onnx_registry.py` — thread-safe Registry, Lazy-Loading, automatische Geräte-Auswahl (CUDA/MPS/CPU), TTL-basiertes Cache-Eviction
+  - Integration in `FrameScorer`, `Denoiser`, `StarManager` für einheitliche Modell-Verwaltung
+  - 513 neue Tests in `tests/unit/core/test_onnx_registry.py`
+- **F-StarNetTiling: StarNet++ Kachel-Verarbeitung für große Bilder (VER-364)**
+  - `astroai/processing/stars/star_manager.py` — überlappende Tile-Verarbeitung mit konfigurierbarer Tile-Größe und Overlap, Blend-Masken für nahtlose Übergänge
+  - Unterstützung für beliebig große Bilder ohne GPU-OOM; fallback auf Direktverarbeitung bei kleinen Bildern
+  - 101 neue Tests in `tests/unit/processing/test_stars.py`
+- **F-CatalogCache: SQLite-gestützter Stern-Katalog-Cache mit TTL (VER-365)**
+  - `astroai/core/catalog_cache.py` — persistenter SQLite-Cache für GAIA/2MASS-Katalogabfragen, TTL-Eviction, Geolookup-Deduplizierung
+  - Reduziert API-Requests bei wiederholten Abfragen in gleicher Himmelsgegend
+  - 222 neue Tests in `tests/unit/core/test_catalog_cache.py`
+- **F-LivePreview: Debounced Live-Preview-Engine mit Diff-Modus (VER-366)**
+  - `astroai/ui/preview_worker.py` — QThread-basierter Preview-Worker, konfigurierbares Debounce-Delay, Diff-Modus zeigt Vorher/Nachher-Vergleich
+  - Integration in StretchPanel, DenoisePanel, BackgroundRemovalPanel, CurvesPanel
+  - 559 neue Tests in `tests/unit/ui/test_preview_worker.py`
+- **F-ProcessingHistory: Undo/Redo für Processing-Schritte**
+  - `astroai/core/processing_history.py` — Stack-basierte Undo/Redo-History mit konfigurierbarer Tiefe (Standard: 20)
+  - Integriert in MainWindow (Ctrl+Z / Ctrl+Shift+Z)
+  - 191 neue Tests in `tests/unit/core/test_processing_history.py`
+- **F-Sharpening: Schärfungs-Modul mit UnsharpMask + Pipeline-Integration**
+  - `astroai/processing/sharpening/unsharp_mask.py` — Gaussian-basiertes UnsharpMask, radius/amount/threshold-Parameter mit Validierung [0, 0.5]
+  - `astroai/processing/sharpening/pipeline_step.py` — `SharpeningStep` für Pipeline-Integration
+  - `astroai/ui/widgets/sharpening_panel.py` — Qt-Widget mit Slidern und Live-Preview-Signalen
+  - PipelineBuilder + PipelineModel Sharpening-Support
+  - 39 Tests in `tests/unit/processing/test_sharpening.py` + `tests/unit/ui/test_sharpening_panel.py`
+
+### Fixed
+- **fix(test-suite): Qt teardown crash bei ~96% im vollen 3348-Test-Run (VER-361)**
+  - `conftest.py` session-scoped QApplication-Fixture verhindert vorzeitigen Teardown
+  - Alle 3348 Tests laufen jetzt sauber durch
+
+### Stats
+- **+168 neue Tests** (39 Sharpening + 129 Core/UI)
+- **Gesamt-Testanzahl:** ~3348+
+- **9 neue Dateien**, 3723+ Insertionen
+
+---
+
 ## [2.4.0-alpha] — 2026-04-28
 
 ### Added
