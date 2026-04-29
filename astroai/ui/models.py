@@ -49,6 +49,7 @@ class PipelineModel(QObject):
     background_removal_config_changed = Signal()
     denoise_config_changed = Signal()
     sharpening_config_changed = Signal()
+    saturation_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -75,6 +76,7 @@ class PipelineModel(QObject):
         ("denoise", "Entrauschen", False),
         ("deconvolution", "Deconvolution", True),
         ("sharpening", "Schärfung", True),
+        ("saturation", "Selektive Sättigung", True),
         ("starless", "Starless", True),
         ("export", "Export", False),
     ]
@@ -124,10 +126,20 @@ class PipelineModel(QObject):
         self._denoise_strength: float = 1.0
         self._denoise_tile_size: int = 512
         self._denoise_tile_overlap: int = 64
+        self._adaptive_denoise_enabled: bool = False
         self._sharpening_enabled: bool = False
         self._sharpening_radius: float = 1.0
         self._sharpening_amount: float = 0.5
         self._sharpening_threshold: float = 0.02
+        self._saturation_enabled: bool = False
+        self._saturation_global: float = 1.0
+        self._saturation_reds: float = 1.0
+        self._saturation_oranges: float = 1.0
+        self._saturation_yellows: float = 1.0
+        self._saturation_greens: float = 1.0
+        self._saturation_cyans: float = 1.0
+        self._saturation_blues: float = 1.0
+        self._saturation_purples: float = 1.0
         self._stretch_target_background: float = 0.25
         self._stretch_shadow_clipping_sigmas: float = -2.8
         self._stretch_linked_channels: bool = True
@@ -789,6 +801,17 @@ class PipelineModel(QObject):
         self._denoise_tile_overlap = value
         self.denoise_config_changed.emit()
 
+    @property
+    def adaptive_denoise_enabled(self) -> bool:
+        return self._adaptive_denoise_enabled
+
+    @adaptive_denoise_enabled.setter
+    def adaptive_denoise_enabled(self, value: bool) -> None:
+        if self._adaptive_denoise_enabled == value:
+            return
+        self._adaptive_denoise_enabled = value
+        self.denoise_config_changed.emit()
+
     # -- sharpening config properties -----------------------------------------
 
     @property
@@ -837,6 +860,125 @@ class PipelineModel(QObject):
             return
         self._sharpening_threshold = value
         self.sharpening_config_changed.emit()
+
+    # -- saturation config properties -----------------------------------------
+
+    @property
+    def saturation_enabled(self) -> bool:
+        return self._saturation_enabled
+
+    @saturation_enabled.setter
+    def saturation_enabled(self, value: bool) -> None:
+        if self._saturation_enabled == value:
+            return
+        self._saturation_enabled = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_global(self) -> float:
+        return self._saturation_global
+
+    @saturation_global.setter
+    def saturation_global(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_global == value:
+            return
+        self._saturation_global = value
+        self.saturation_config_changed.emit()
+
+    def _saturation_range_getter(self, attr: str) -> float:
+        return getattr(self, attr)
+
+    def _saturation_range_setter(self, attr: str, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if getattr(self, attr) == value:
+            return
+        setattr(self, attr, value)
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_reds(self) -> float:
+        return self._saturation_reds
+
+    @saturation_reds.setter
+    def saturation_reds(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_reds == value:
+            return
+        self._saturation_reds = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_oranges(self) -> float:
+        return self._saturation_oranges
+
+    @saturation_oranges.setter
+    def saturation_oranges(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_oranges == value:
+            return
+        self._saturation_oranges = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_yellows(self) -> float:
+        return self._saturation_yellows
+
+    @saturation_yellows.setter
+    def saturation_yellows(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_yellows == value:
+            return
+        self._saturation_yellows = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_greens(self) -> float:
+        return self._saturation_greens
+
+    @saturation_greens.setter
+    def saturation_greens(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_greens == value:
+            return
+        self._saturation_greens = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_cyans(self) -> float:
+        return self._saturation_cyans
+
+    @saturation_cyans.setter
+    def saturation_cyans(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_cyans == value:
+            return
+        self._saturation_cyans = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_blues(self) -> float:
+        return self._saturation_blues
+
+    @saturation_blues.setter
+    def saturation_blues(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_blues == value:
+            return
+        self._saturation_blues = value
+        self.saturation_config_changed.emit()
+
+    @property
+    def saturation_purples(self) -> float:
+        return self._saturation_purples
+
+    @saturation_purples.setter
+    def saturation_purples(self, value: float) -> None:
+        value = max(0.0, min(4.0, value))
+        if self._saturation_purples == value:
+            return
+        self._saturation_purples = value
+        self.saturation_config_changed.emit()
 
     # -- stretch config properties --------------------------------------------
 
@@ -1261,6 +1403,7 @@ class PipelineModel(QObject):
         "_denoise_strength",
         "_denoise_tile_size",
         "_denoise_tile_overlap",
+        "_adaptive_denoise_enabled",
         "_sharpening_enabled",
         "_sharpening_radius",
         "_sharpening_amount",

@@ -7,6 +7,14 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 ## [2.7.0-alpha] — 2026-04-29
 
 ### Added
+- **F-SelectiveColorSaturation: HSV-basierte selektive Farbsättigung (VER-400)**
+  - `astroai/processing/color/saturation.py` — `SaturationAdjustment` mit triangularer Hue-Gewichtung für 7 Farbbereiche (Reds, Oranges, Yellows, Greens, Cyans, Blues, Purples) + globalem Multiplikator
+  - `SaturationConfig` Dataclass mit `is_identity()`-Check und `as_dict()` für alle Hue-Ranges
+  - `SaturationStep` Pipeline-Integration (`PipelineStage.PROCESSING`)
+  - `astroai/ui/widgets/saturation_panel.py` — Qt-Panel mit 8 Schiebereglern und `saturation_changed(SaturationConfig)`-Signal
+  - `astroai/ui/models.py` — `saturation_*` Properties (enabled, global, 7 Hue-Ranges)
+  - `astroai/core/pipeline/builder.py` — `SaturationStep`-Integration bei `saturation_enabled`
+  - 40+ Tests in `tests/unit/processing/test_saturation.py` (Config, Identity, Global, PerRange, EdgeCases, HsvRoundtrip, Step)
 - **F-NoiseEstimator: MAD-basierte Sky-Noise-Analyse mit Auto-Detect (VER-396)**
   - `astroai/core/noise_estimator.py` — `NoiseEstimator` mit iterativem Sigma-Clipping (MAD-basiert), SNR-Schätzung (dB), Noise-Level-Prozentsatz und automatischem Stärke-Mapping [0.2 → 1.0]
   - `NoiseEstimate` Frozen-Dataclass: `sky_sigma`, `snr_db`, `noise_level_pct`, `suggested_strength`
@@ -15,8 +23,8 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
   - 48 Tests in `tests/unit/core/test_noise_estimator.py` + 7 AutoDetect-Tests in `tests/unit/ui/test_denoise_panel.py`
 
 ### Stats
-- **+55 neue Tests** (48 Core + 7 UI)
-- **2 neue Dateien**, 496 Insertionen
+- **+95 neue Tests** (40+ Saturation + 48 Core + 7 UI)
+- **3 neue Dateien**, ~700 Insertionen
 
 ---
 

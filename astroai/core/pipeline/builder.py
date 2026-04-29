@@ -21,6 +21,7 @@ from astroai.processing.deconvolution.pipeline_step import DeconvolutionStep
 from astroai.processing.denoise.pipeline_step import DenoiseStep
 from astroai.processing.flat.pipeline_step import SyntheticFlatStep
 from astroai.processing.sharpening.pipeline_step import SharpeningStep
+from astroai.processing.color.saturation import SaturationConfig, SaturationStep
 from astroai.processing.stars.pipeline_step import StarRemovalStep
 from astroai.processing.curves.pipeline_step import CurvesStep
 from astroai.processing.stretch.pipeline_step import StretchStep
@@ -154,11 +155,18 @@ class PipelineBuilder:
                 sample_radius_px=model.color_calibration_sample_radius,
             ))
 
-        steps.append(DenoiseStep(
-            strength=model.denoise_strength,
-            tile_size=model.denoise_tile_size,
-            tile_overlap=model.denoise_tile_overlap,
-        ))
+        if model.adaptive_denoise_enabled:
+            from astroai.core.pipeline.adaptive_denoise_step import AdaptiveDenoiseStep
+            steps.append(AdaptiveDenoiseStep(
+                tile_size=model.denoise_tile_size,
+                tile_overlap=model.denoise_tile_overlap,
+            ))
+        else:
+            steps.append(DenoiseStep(
+                strength=model.denoise_strength,
+                tile_size=model.denoise_tile_size,
+                tile_overlap=model.denoise_tile_overlap,
+            ))
 
         if model.deconvolution_enabled:
             steps.append(DeconvolutionStep(
@@ -172,6 +180,18 @@ class PipelineBuilder:
                 amount=model.sharpening_amount,
                 threshold=model.sharpening_threshold,
             ))
+
+        if model.saturation_enabled:
+            steps.append(SaturationStep(SaturationConfig(
+                global_saturation=model.saturation_global,
+                reds=model.saturation_reds,
+                oranges=model.saturation_oranges,
+                yellows=model.saturation_yellows,
+                greens=model.saturation_greens,
+                cyans=model.saturation_cyans,
+                blues=model.saturation_blues,
+                purples=model.saturation_purples,
+            )))
 
         if model.starless_enabled:
             steps.append(StarRemovalStep(
