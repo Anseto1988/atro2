@@ -44,6 +44,13 @@ test_out.txt
 test_err.txt
 test_exe_*.txt
 
+# Ad-hoc test artefakte (root-level Entwicklungsskripte)
+*_smoke_test.py
+*_test_result.txt
+check_env.ps1
+env_check.txt
+run_sat_*.ps1
+
 # PyInstaller
 *.manifest
 *.spec.bak
