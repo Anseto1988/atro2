@@ -57,6 +57,7 @@ class PipelineModel(QObject):
     clahe_config_changed = Signal()
     star_reduction_config_changed = Signal()
     color_grading_config_changed = Signal()
+    channel_balance_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -171,6 +172,11 @@ class PipelineModel(QObject):
         self._star_reduction_amount: float = 0.5
         self._star_reduction_radius: int = 2
         self._star_reduction_threshold: float = 0.5
+        # channel balance
+        self._channel_balance_enabled: bool = False
+        self._cb_r_offset: float = 0.0
+        self._cb_g_offset: float = 0.0
+        self._cb_b_offset: float = 0.0
         # color grading
         self._color_grading_enabled: bool = False
         self._cg_shadow_r: float = 0.0
@@ -1466,6 +1472,55 @@ class PipelineModel(QObject):
             return
         self._cg_highlight_b = value
         self.color_grading_config_changed.emit()
+
+    # -- channel balance config properties ------------------------------------
+
+    @property
+    def channel_balance_enabled(self) -> bool:
+        return self._channel_balance_enabled
+
+    @channel_balance_enabled.setter
+    def channel_balance_enabled(self, value: bool) -> None:
+        if self._channel_balance_enabled == value:
+            return
+        self._channel_balance_enabled = value
+        self.channel_balance_config_changed.emit()
+
+    @property
+    def cb_r_offset(self) -> float:
+        return self._cb_r_offset
+
+    @cb_r_offset.setter
+    def cb_r_offset(self, value: float) -> None:
+        value = max(-1.0, min(1.0, value))
+        if self._cb_r_offset == value:
+            return
+        self._cb_r_offset = value
+        self.channel_balance_config_changed.emit()
+
+    @property
+    def cb_g_offset(self) -> float:
+        return self._cb_g_offset
+
+    @cb_g_offset.setter
+    def cb_g_offset(self, value: float) -> None:
+        value = max(-1.0, min(1.0, value))
+        if self._cb_g_offset == value:
+            return
+        self._cb_g_offset = value
+        self.channel_balance_config_changed.emit()
+
+    @property
+    def cb_b_offset(self) -> float:
+        return self._cb_b_offset
+
+    @cb_b_offset.setter
+    def cb_b_offset(self, value: float) -> None:
+        value = max(-1.0, min(1.0, value))
+        if self._cb_b_offset == value:
+            return
+        self._cb_b_offset = value
+        self.channel_balance_config_changed.emit()
 
     # -- stretch config properties --------------------------------------------
 

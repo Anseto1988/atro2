@@ -15,9 +15,13 @@ from astroai.ui.widgets.mosaic_panel import MosaicPanel
 from astroai.ui.widgets.offline_banner import OfflineBanner
 from astroai.ui.widgets.photometry_panel import PhotometryPanel
 from astroai.ui.widgets.progress_widget import ProgressWidget
+from astroai.ui.widgets.fwhm_overlay import FWHMOverlay
+from astroai.ui.widgets.star_analysis_panel import StarAnalysisPanel
 from astroai.ui.widgets.starless_panel import StarlessPanel
 from astroai.ui.widgets.upgrade_dialog import UpgradeDialog
+from astroai.ui.widgets.pipeline_timeline_widget import PipelineTimelineWidget
 from astroai.ui.widgets.workflow_graph import WorkflowGraph
+from astroai.ui.widgets.channel_balance_panel import ChannelBalancePanel
 
 __all__ = [
     "CalibrationBenchmarkWidget",
@@ -35,8 +39,12 @@ __all__ = [
     "MosaicPanel",
     "OfflineBanner",
     "PhotometryPanel",
+    "FWHMOverlay",
+    "PipelineTimelineWidget",
     "ProgressWidget",
+    "StarAnalysisPanel",
     "StarlessPanel",
     "UpgradeDialog",
     "WorkflowGraph",
+    "ChannelBalancePanel",
 ]

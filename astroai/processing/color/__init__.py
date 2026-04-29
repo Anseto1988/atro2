@@ -19,6 +19,10 @@ from astroai.processing.color.color_grading import (
     ColorGrader,
     ColorGradingStep,
 )
+from astroai.processing.color.channel_balance import (
+    ChannelBalanceConfig,
+    ChannelBalancer,
+)
 
 __all__ = [
     "CalibrationResult",
@@ -33,4 +37,6 @@ __all__ = [
     "ColorGradingConfig",
     "ColorGrader",
     "ColorGradingStep",
+    "ChannelBalanceConfig",
+    "ChannelBalancer",
 ]
