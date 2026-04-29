@@ -7,11 +7,13 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from astroai.core.noise_estimator import NoiseEstimate
 from astroai.ui.models import PipelineModel
 
 __all__ = ["DenoisePanel"]
@@ -22,6 +24,7 @@ class DenoisePanel(QWidget):
 
     PREVIEW_STEP = "denoise"
     preview_requested = Signal(dict)
+    noise_detect_requested = Signal()
 
     def __init__(self, model: PipelineModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -76,6 +79,20 @@ class DenoisePanel(QWidget):
         overlap_row.addWidget(self._overlap_spin, stretch=1)
         group_layout.addLayout(overlap_row)
 
+        auto_row = QHBoxLayout()
+        self._auto_btn = QPushButton("Rauschen auto-ermitteln")
+        self._auto_btn.setToolTip(
+            "Analysiert das aktuelle Bild und schlägt optimale Entrauschungsstärke vor"
+        )
+        self._auto_btn.setAccessibleName("Rauschen automatisch ermitteln")
+        auto_row.addWidget(self._auto_btn)
+        group_layout.addLayout(auto_row)
+
+        self._noise_label = QLabel("")
+        self._noise_label.setWordWrap(True)
+        self._noise_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        group_layout.addWidget(self._noise_label)
+
         self._info_label = QLabel(
             "NAFNet KI-Modell entfernt thermisches Rauschen\n"
             "und Photonenrauschen bei minimaler Detailverlust."
@@ -91,6 +108,7 @@ class DenoisePanel(QWidget):
         self._strength_spin.valueChanged.connect(self._on_strength_changed)
         self._tile_spin.valueChanged.connect(self._on_tile_size_changed)
         self._overlap_spin.valueChanged.connect(self._on_overlap_changed)
+        self._auto_btn.clicked.connect(self.noise_detect_requested)
         self._model.denoise_config_changed.connect(self._sync_from_model)
         self._model.pipeline_reset.connect(self._sync_from_model)
 
@@ -128,3 +146,11 @@ class DenoisePanel(QWidget):
     def _on_overlap_changed(self, value: int) -> None:
         self._model.denoise_tile_overlap = value
         self._emit_preview()
+
+    def apply_estimate(self, estimate: NoiseEstimate) -> None:
+        """Apply a NoiseEstimate: set strength and update status label."""
+        self._strength_spin.setValue(estimate.suggested_strength)
+        self._noise_label.setText(
+            f"σ={estimate.sky_sigma:.4f}  SNR={estimate.snr_db:.1f} dB  "
+            f"Rauschen={estimate.noise_level_pct:.1f}%"
+        )

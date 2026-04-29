@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from astroai.core.noise_estimator import NoiseEstimate
 from astroai.ui.models import PipelineModel
 from astroai.ui.widgets.denoise_panel import DenoisePanel
 
@@ -76,3 +77,37 @@ class TestModelToUI:
         model.denoise_strength = 0.3
         model.reset()
         assert panel._strength_spin.value() == pytest.approx(model.denoise_strength)
+
+
+class TestAutoDetect:
+    def test_auto_btn_exists(self, panel):
+        assert panel._auto_btn is not None
+
+    def test_auto_btn_emits_signal(self, panel, qtbot):
+        with qtbot.waitSignal(panel.noise_detect_requested, timeout=500):
+            panel._auto_btn.click()
+
+    def test_apply_estimate_sets_strength(self, model, panel):
+        est = NoiseEstimate(sky_sigma=0.025, snr_db=15.0, noise_level_pct=25.0, suggested_strength=0.6)
+        panel.apply_estimate(est)
+        assert model.denoise_strength == pytest.approx(0.6)
+
+    def test_apply_estimate_updates_noise_label(self, panel):
+        est = NoiseEstimate(sky_sigma=0.025, snr_db=15.0, noise_level_pct=25.0, suggested_strength=0.6)
+        panel.apply_estimate(est)
+        text = panel._noise_label.text()
+        assert "σ=" in text
+        assert "SNR=" in text
+
+    def test_apply_estimate_low_strength(self, model, panel):
+        est = NoiseEstimate(sky_sigma=0.003, snr_db=30.0, noise_level_pct=3.0, suggested_strength=0.2)
+        panel.apply_estimate(est)
+        assert model.denoise_strength == pytest.approx(0.2)
+
+    def test_noise_label_initially_empty(self, panel):
+        assert panel._noise_label.text() == ""
+
+    def test_apply_estimate_shows_sigma_value(self, panel):
+        est = NoiseEstimate(sky_sigma=0.0123, snr_db=22.5, noise_level_pct=12.3, suggested_strength=0.35)
+        panel.apply_estimate(est)
+        assert "0.0123" in panel._noise_label.text()
