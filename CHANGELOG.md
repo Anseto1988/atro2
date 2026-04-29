@@ -7,6 +7,11 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 ## [2.8.0-alpha] — 2026-04-29
 
 ### Added
+- **F-ColorGrading: Shadow/Midtone/Highlight Farbkorrektur (VER-303)**
+  - `astroai/processing/color/color_grading.py` — `ColorGradingConfig` (9 Float-Shifts, Validierung [-0.5,0.5]), `ColorGrader` (luminanzbasierte Masken: shadow=(1-l)², highlight=l², midtone=4l(1-l)^1.5; additive Shifts, Clipping), `ColorGradingStep` (PipelineStep)
+  - `astroai/ui/widgets/color_grading_panel.py` — Qt-Panel mit QTabWidget (Schatten/Mitteltöne/Lichter), 9 Spinboxen (-0.5..+0.5), Reset-Button
+  - `astroai/ui/models.py` — 10 Properties (enabled + 9 cg_* Shifts) + Signal
+  - 43 Tests in `tests/unit/processing/test_color_grading.py` + 14 in `tests/unit/ui/test_color_grading_panel.py`
 - **F-StarReduction: Morphologische Sternverkleinerung ohne Entfernung (VER-303)**
   - `astroai/processing/stars/star_reducer.py` — `StarReductionConfig` (amount, radius, threshold), `StarReducer` (Minimum-Filter via scipy.ndimage, Gaussian-Sternmaske, Blend-Formel für weiche Übergänge), `StarReductionStep` (PipelineStep)
   - `astroai/ui/widgets/star_reduction_panel.py` — Qt-Panel: amount (0.0–1.0), radius (1–10), threshold (0.0–1.0), Reset
