@@ -4,6 +4,25 @@ All notable changes are documented here. Follows [Keep a Changelog](https://keep
 
 ---
 
+## [2.8.0-alpha] — 2026-04-29
+
+### Added
+- **F-BackgroundNeutralization: Farbliche Hintergrundneutralisierung (VER-420)**
+  - `astroai/processing/color/background_neutralizer.py` — `BackgroundNeutralizationConfig` (sample_mode auto/manual, target_background 0.0–0.3, roi, sample_percentile), `BackgroundNeutralizer` (Auto-Modus sampelt 2%-Perzentil je Kanal; manueller Modus nutzt ROI-Median; Shift auf Zielwert per Kanal, geclippt auf [0,1]), `BackgroundNeutralizationStep` (PipelineStep nach WhiteBalanceStep, vor AsinHStep; speichert Background-Schätzung in `context.metadata["background_neutralization_estimate"]`)
+  - `astroai/ui/widgets/background_neutralization_panel.py` — Qt-Panel mit Modus-Combo (Auto/Manuell), Target-Spinner (0.0–0.3), ROI-Eingabe (nur im manuellen Modus aktiv), Reset-Button; Signal `bg_neutralization_changed(BackgroundNeutralizationConfig)`
+  - `astroai/ui/models.py` — `bg_neutralization_enabled`, `bg_neutralization_sample_mode`, `bg_neutralization_target`, `bg_neutralization_roi` Properties + `background_neutralization_config_changed` Signal; Snapshot/Restore-Support; `bg_neutralization`-Step in DEFAULT_STEPS
+  - `astroai/core/pipeline/builder.py` — `BackgroundNeutralizationStep`-Integration zwischen `WhiteBalanceStep` und `AsinHStep` bei `bg_neutralization_enabled`
+  - 48 Tests in `tests/unit/processing/test_background_neutralization.py` (Config-Validation, Auto-Modus, Manueller-Modus, Estimate, PipelineStep)
+
+- **F-MTFStretch: Midtone Transfer Function / Histogram Transformation Stretch (VER-419)**
+  - `astroai/processing/stretch/mtf_stretch.py` — `MidtoneTransferConfig` (midpoint 0.001–0.499, shadows_clipping 0–0.1, highlights 0.98–1.0), `MidtoneTransferFunction` (MTF-Formel `f(x)=((m-1)x)/((2m-1)x-m)` mit x=0→0 / x=1→1 Edge-Cases, `apply()`, statisches `compute_midpoint_from_background()`, statisches `estimate_background()`), `MTFStep` (PipelineStep)
+  - `astroai/ui/widgets/mtf_stretch_panel.py` — Qt-Panel mit 3 Schiebereglern (Mittelpunkt, Schatten-Clipping, Lichter), Auto-BTF-Button (emittiert `auto_btf_requested`, `set_auto_btf_midpoint(float)` Slot), Signal `mtf_changed(MidtoneTransferConfig)`
+  - `astroai/ui/models.py` — `mtf_enabled`, `mtf_midpoint`, `mtf_shadows_clipping`, `mtf_highlights` Properties + `mtf_stretch_config_changed` Signal; Snapshot/Restore-Support
+  - `astroai/core/pipeline/builder.py` — `MTFStep`-Integration nach `AsinHStep`
+  - 62 Tests in `tests/unit/processing/test_mtf_stretch.py` + 17 in `tests/unit/ui/test_mtf_panel.py`
+
+---
+
 ## [2.7.0-alpha] — 2026-04-29
 
 ### Added

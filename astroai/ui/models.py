@@ -51,7 +51,9 @@ class PipelineModel(QObject):
     sharpening_config_changed = Signal()
     saturation_config_changed = Signal()
     white_balance_config_changed = Signal()
+    background_neutralization_config_changed = Signal()
     asinh_stretch_config_changed = Signal()
+    mtf_stretch_config_changed = Signal()
     stretch_config_changed = Signal()
     star_processing_config_changed = Signal()
     registration_config_changed = Signal()
@@ -79,6 +81,7 @@ class PipelineModel(QObject):
         ("deconvolution", "Deconvolution", True),
         ("sharpening", "Schärfung", True),
         ("saturation", "Selektive Sättigung", True),
+        ("bg_neutralization", "Hintergrundneutralisierung", True),
         ("starless", "Starless", True),
         ("export", "Export", False),
     ]
@@ -140,11 +143,21 @@ class PipelineModel(QObject):
         self._wb_red: float = 1.0
         self._wb_green: float = 1.0
         self._wb_blue: float = 1.0
+        # background neutralization
+        self._bg_neutralization_enabled: bool = False
+        self._bg_neutralization_sample_mode: str = "auto"
+        self._bg_neutralization_target: float = 0.1
+        self._bg_neutralization_roi: tuple[int, int, int, int] | None = None
         # arcsinh stretch
         self._asinh_enabled: bool = False
         self._asinh_stretch_factor: float = 1.0
         self._asinh_black_point: float = 0.0
         self._asinh_linked: bool = True
+        # MTF stretch
+        self._mtf_enabled: bool = False
+        self._mtf_midpoint: float = 0.25
+        self._mtf_shadows_clipping: float = 0.0
+        self._mtf_highlights: float = 1.0
         self._saturation_reds: float = 1.0
         self._saturation_oranges: float = 1.0
         self._saturation_yellows: float = 1.0
@@ -190,6 +203,7 @@ class PipelineModel(QObject):
         self._update_frame_selection_step_state()
         self._update_background_removal_step_state()
         self._update_curves_step_state()
+        self._update_bg_neutralization_step_state()
 
     # -- starless config properties --
 
@@ -1041,6 +1055,67 @@ class PipelineModel(QObject):
         self._wb_blue = value
         self.white_balance_config_changed.emit()
 
+    # -- background neutralization config properties --------------------------
+
+    @property
+    def bg_neutralization_enabled(self) -> bool:
+        return self._bg_neutralization_enabled
+
+    @bg_neutralization_enabled.setter
+    def bg_neutralization_enabled(self, value: bool) -> None:
+        if self._bg_neutralization_enabled == value:
+            return
+        self._bg_neutralization_enabled = value
+        self._update_bg_neutralization_step_state()
+        self.background_neutralization_config_changed.emit()
+
+    @property
+    def bg_neutralization_sample_mode(self) -> str:
+        return self._bg_neutralization_sample_mode
+
+    @bg_neutralization_sample_mode.setter
+    def bg_neutralization_sample_mode(self, value: str) -> None:
+        if value not in ("auto", "manual"):
+            value = "auto"
+        if self._bg_neutralization_sample_mode == value:
+            return
+        self._bg_neutralization_sample_mode = value
+        self.background_neutralization_config_changed.emit()
+
+    @property
+    def bg_neutralization_target(self) -> float:
+        return self._bg_neutralization_target
+
+    @bg_neutralization_target.setter
+    def bg_neutralization_target(self, value: float) -> None:
+        value = max(0.0, min(0.3, value))
+        if self._bg_neutralization_target == value:
+            return
+        self._bg_neutralization_target = value
+        self.background_neutralization_config_changed.emit()
+
+    @property
+    def bg_neutralization_roi(self) -> tuple[int, int, int, int] | None:
+        return self._bg_neutralization_roi
+
+    @bg_neutralization_roi.setter
+    def bg_neutralization_roi(self, value: tuple[int, int, int, int] | None) -> None:
+        if self._bg_neutralization_roi == value:
+            return
+        self._bg_neutralization_roi = value
+        self.background_neutralization_config_changed.emit()
+
+    def _update_bg_neutralization_step_state(self) -> None:
+        step = self.step_by_key("bg_neutralization")
+        if step is None:
+            return
+        if not self._bg_neutralization_enabled and step.state is StepState.PENDING:
+            step.state = StepState.DISABLED
+            self.step_changed.emit("bg_neutralization", StepState.DISABLED.value)
+        elif self._bg_neutralization_enabled and step.state is StepState.DISABLED:
+            step.state = StepState.PENDING
+            self.step_changed.emit("bg_neutralization", StepState.PENDING.value)
+
     # -- arcsinh stretch config properties ------------------------------------
 
     @property
@@ -1088,6 +1163,55 @@ class PipelineModel(QObject):
             return
         self._asinh_linked = value
         self.asinh_stretch_config_changed.emit()
+
+    # -- MTF stretch config properties ----------------------------------------
+
+    @property
+    def mtf_enabled(self) -> bool:
+        return self._mtf_enabled
+
+    @mtf_enabled.setter
+    def mtf_enabled(self, value: bool) -> None:
+        if self._mtf_enabled == value:
+            return
+        self._mtf_enabled = value
+        self.mtf_stretch_config_changed.emit()
+
+    @property
+    def mtf_midpoint(self) -> float:
+        return self._mtf_midpoint
+
+    @mtf_midpoint.setter
+    def mtf_midpoint(self, value: float) -> None:
+        value = max(0.001, min(0.499, value))
+        if self._mtf_midpoint == value:
+            return
+        self._mtf_midpoint = value
+        self.mtf_stretch_config_changed.emit()
+
+    @property
+    def mtf_shadows_clipping(self) -> float:
+        return self._mtf_shadows_clipping
+
+    @mtf_shadows_clipping.setter
+    def mtf_shadows_clipping(self, value: float) -> None:
+        value = max(0.0, min(0.1, value))
+        if self._mtf_shadows_clipping == value:
+            return
+        self._mtf_shadows_clipping = value
+        self.mtf_stretch_config_changed.emit()
+
+    @property
+    def mtf_highlights(self) -> float:
+        return self._mtf_highlights
+
+    @mtf_highlights.setter
+    def mtf_highlights(self, value: float) -> None:
+        value = max(0.98, min(1.0, value))
+        if self._mtf_highlights == value:
+            return
+        self._mtf_highlights = value
+        self.mtf_stretch_config_changed.emit()
 
     # -- stretch config properties --------------------------------------------
 
@@ -1470,6 +1594,7 @@ class PipelineModel(QObject):
             "frame_selection": self._frame_selection_enabled,
             "background_removal": self._background_removal_enabled,
             "curves": self._curves_enabled,
+            "bg_neutralization": self._bg_neutralization_enabled,
         }
         for step in self._steps:
             if step.optional and not optional_enabled.get(step.key, False):
@@ -1537,6 +1662,14 @@ class PipelineModel(QObject):
         "_asinh_stretch_factor",
         "_asinh_black_point",
         "_asinh_linked",
+        "_mtf_enabled",
+        "_mtf_midpoint",
+        "_mtf_shadows_clipping",
+        "_mtf_highlights",
+        "_bg_neutralization_enabled",
+        "_bg_neutralization_sample_mode",
+        "_bg_neutralization_target",
+        "_bg_neutralization_roi",
     )
 
     def snapshot_processing_params(self) -> dict[str, object]:

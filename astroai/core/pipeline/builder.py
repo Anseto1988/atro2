@@ -203,12 +203,35 @@ class PipelineBuilder:
                 )
             ))
 
+        if model.bg_neutralization_enabled:
+            from astroai.processing.color.background_neutralizer import (
+                BackgroundNeutralizationConfig,
+                BackgroundNeutralizationStep,
+                SampleMode,
+            )
+            roi = model.bg_neutralization_roi
+            steps.append(BackgroundNeutralizationStep(
+                config=BackgroundNeutralizationConfig(
+                    sample_mode=SampleMode(model.bg_neutralization_sample_mode),
+                    target_background=model.bg_neutralization_target,
+                    roi=roi,
+                )
+            ))
+
         if model.asinh_enabled:
             from astroai.processing.stretch.asinh_stretcher import AsinHConfig, AsinHStep
             steps.append(AsinHStep(config=AsinHConfig(
                 stretch_factor=model.asinh_stretch_factor,
                 black_point=model.asinh_black_point,
                 linked_channels=model.asinh_linked,
+            )))
+
+        if model.mtf_enabled:
+            from astroai.processing.stretch.mtf_stretch import MidtoneTransferConfig, MTFStep
+            steps.append(MTFStep(config=MidtoneTransferConfig(
+                midpoint=model.mtf_midpoint,
+                shadows_clipping=model.mtf_shadows_clipping,
+                highlights=model.mtf_highlights,
             )))
 
         if model.starless_enabled:
